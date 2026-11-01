@@ -194,6 +194,8 @@ data class IslandConfig(
 
         const val DESIGN_CAPSULE = 6
         const val STYLE_CAPSULE = 6
+        const val DESIGN_PIXEL = 7
+        const val STYLE_PIXEL = 7
 
         const val NOTIF_BANNER = 0
         const val NOTIF_COMPACT = 1
@@ -510,6 +512,13 @@ object Prefs {
                     .putBoolean(NOTIF_SHOW_APP, true).putBoolean(NOTIF_ICON_ROUND, true).putBoolean(NOTIF_APP_GLOW, true)
                     // Kapsel sitzt immer um die Kamera, Antippen öffnet das Kontrollzentrum
                     .putBoolean(ALWAYS, true).putBoolean(IDLE_TOUCH_THROUGH, false).putInt(IDLE_TAP, 1)
+            }
+            C.DESIGN_PIXEL -> {
+                // Pixel 11 / Material 3 Expressive: kräftige Status-Chips in der Systemfarbe, federnd
+                look(C.STYLE_PIXEL, C.ACCENT_SYSTEM, null, 36, 100, 38, 62,
+                    C.WAVE_LINE, C.PROGRESS_SQUIGGLE, C.CONTROL_FILLED, C.FONT_GOOGLE, C.LOOK_ANDROID, false, C.ANIM_ANDROID)
+                e.putInt(WIDTH, 104).putInt(HEIGHT, 32).putInt(NOTIF_STYLE, C.NOTIF_BANNER)
+                    .putBoolean(NOTIF_ICON_ROUND, true).putBoolean(NOTIF_SHOW_APP, true)
             }
             C.DESIGN_GLASS -> {
                 look(C.STYLE_GLASS, C.ACCENT_COVER, null, 40, 100, 40, 52,

@@ -1,7 +1,10 @@
 package de.myria.home
 
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.SearchManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -11,6 +14,8 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -23,12 +28,13 @@ import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.inputmethod.InputMethodManager
 import android.view.animation.PathInterpolator
+import android.view.inputmethod.InputMethodManager
 import android.widget.BaseAdapter
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.GridView
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
@@ -37,35 +43,51 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 class HomeActivity : Activity() {
 
     private lateinit var prefs: HomePrefs
     private lateinit var root: FrameLayout
     private lateinit var home: LinearLayout
+    private lateinit var pager: Pager
+    private lateinit var dots: LinearLayout
+    private lateinit var dockRow: LinearLayout
     private lateinit var drawer: FrameLayout
     private lateinit var drawerSearch: EditText
     private lateinit var drawerGrid: GridView
+    private lateinit var suggestRow: LinearLayout
+    private lateinit var webRow: TextView
+    private lateinit var doneButton: TextView
     private var clockView: ClockView? = null
     private val main = Handler(Looper.getMainLooper())
     private val ease = PathInterpolator(0.2f, 0.9f, 0.1f, 1f)
     private var drawerOpen = false
+    private var editMode = false
     private var insetTop = 0
     private var insetBottom = 0
     private var builtFor = ""
+    private val wiggles = ArrayList<ValueAnimator>()
+    private val homeIcons = ArrayList<FrameLayout>()
+
+    // Fix: GestureDetector braucht einen fertigen Context → erst in onCreate anlegen
+    // (vorher stürzte der Launcher direkt beim Start ab)
+    private lateinit var gestures: GestureDetector
 
     private fun dp(v: Float) = v * resources.displayMetrics.density
     private fun dpi(v: Float) = dp(v).toInt()
     private val look get() = prefs.look
+    private val textColor get() = if (prefs.darkText) 0xFF111114.toInt() else Color.WHITE
+    private val shadowColor get() = if (prefs.darkText) 0x33FFFFFF else 0x88000000.toInt()
 
     // ------------------------------------------------------------------
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = HomePrefs(this)
-        @Suppress("DEPRECATION")
-        window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        gestures = GestureDetector(this, gestureListener).apply { setIsLongpressEnabled(false) }
+        applySystemBars()
 
         root = FrameLayout(this)
         setContentView(root)
@@ -74,8 +96,9 @@ class HomeActivity : Activity() {
             insetTop = ins.systemWindowInsetTop
             @Suppress("DEPRECATION")
             insetBottom = ins.systemWindowInsetBottom
-            home.setPadding(dpi(14f), insetTop + dpi(12f), dpi(14f), insetBottom + dpi(10f))
-            drawer.setPadding(0, insetTop, 0, insetBottom)
+            if (::home.isInitialized) home.setPadding(0, insetTop + dpi(8f), 0, insetBottom + dpi(8f))
+            if (::drawer.isInitialized) drawer.setPadding(0, insetTop, 0, insetBottom)
+            if (::doneButton.isInitialized) (doneButton.layoutParams as? FrameLayout.LayoutParams)?.topMargin = insetTop + dpi(10f)
             ins
         }
         build()
@@ -88,91 +111,121 @@ class HomeActivity : Activity() {
             addDataScheme("package")
         }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(pkgReceiver, f, Context.RECEIVER_EXPORTED) else registerReceiver(pkgReceiver, f)
-        val t = IntentFilter(Intent.ACTION_TIME_TICK).apply { addAction(Intent.ACTION_TIME_CHANGED); addAction(Intent.ACTION_TIMEZONE_CHANGED) }
+        val t = IntentFilter(Intent.ACTION_TIME_TICK).apply {
+            addAction(Intent.ACTION_TIME_CHANGED); addAction(Intent.ACTION_TIMEZONE_CHANGED); addAction(Intent.ACTION_BATTERY_CHANGED)
+        }
         if (Build.VERSION.SDK_INT >= 33) registerReceiver(timeReceiver, t, Context.RECEIVER_EXPORTED) else registerReceiver(timeReceiver, t)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applySystemBars() {
+        var flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+        if (prefs.darkText) flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        window.decorView.systemUiVisibility = flags
     }
 
     override fun onResume() {
         super.onResume()
-        // Einstellungen könnten sich geändert haben → neu aufbauen, wenn nötig
         if (signature() != builtFor) {
             Looks.clearCache()
+            applySystemBars()
             build()
             fillHome()
         }
         clockView?.invalidate()
     }
 
+    override fun onPause() {
+        if (editMode) setEditMode(false)
+        super.onPause()
+    }
+
     override fun onDestroy() {
         try { unregisterReceiver(pkgReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(timeReceiver) } catch (_: Exception) {}
+        wiggles.forEach { it.cancel() }
         super.onDestroy()
     }
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
-        if (drawerOpen) closeDrawer()
-        // Ein Launcher wird nie mit „Zurück“ beendet
+        when {
+            drawerOpen -> closeDrawer()
+            editMode -> setEditMode(false)
+            else -> pager.toPage(0)
+        }
     }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        // Home-Taste: App-Übersicht schließen
+        // Home-Taste: alles schließen, zurück zur ersten Seite
         if (drawerOpen) closeDrawer()
+        if (editMode) setEditMode(false)
+        if (::pager.isInitialized) pager.toPage(0)
     }
 
     private val pkgReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) = loadApps()
     }
     private val timeReceiver = object : BroadcastReceiver() {
-        override fun onReceive(c: Context, i: Intent) { clockView?.invalidate() }
+        override fun onReceive(c: Context, i: Intent) {
+            if (i.action == Intent.ACTION_BATTERY_CHANGED) {
+                ClockView.battery = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) * 100 /
+                    i.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+                ClockView.charging = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+            }
+            clockView?.invalidate()
+        }
     }
 
     private fun signature() = listOf(prefs.look, prefs.columns, prefs.iconDp, prefs.labels, prefs.dock, prefs.clock,
-        prefs.search, prefs.monoIcons, prefs.favorites, prefs.dockApps).joinToString()
+        prefs.search, prefs.monoIcons, prefs.favorites, prefs.dockApps, prefs.darkText, prefs.allOnHome,
+        prefs.hidden, Apps.all.size).joinToString()
 
     private fun loadApps() {
         Thread {
             Apps.load(this)
             main.post {
-                if (isFinishing) return@post
+                if (isFinishing || isDestroyed) return@post
                 if (!prefs.initialized) {
                     val (fav, dock) = Apps.defaults(this)
                     prefs.favorites = fav
                     prefs.dockApps = dock
                 }
                 fillHome()
-                (drawerGrid.adapter as? DrawerAdapter)?.filter(drawerSearch.text?.toString().orEmpty())
+                builtFor = signature()
+                refreshDrawer()
             }
         }.start()
     }
+
+    private fun visibleApps() = Apps.all.filter { it.key !in prefs.hidden && it.component.packageName != packageName }
 
     // ------------------------------------------------------------------
     // Aufbau
     // ------------------------------------------------------------------
 
-    private lateinit var grid: LinearLayout
-    private lateinit var dockRow: LinearLayout
-
     private fun build() {
         root.removeAllViews()
         home = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dpi(14f), insetTop + dpi(12f), dpi(14f), insetBottom + dpi(10f))
+            setPadding(0, insetTop + dpi(8f), 0, insetBottom + dpi(8f))
         }
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
 
-        clockView = if (prefs.clock) ClockView(this, look).also {
-            home.addView(it, LinearLayout.LayoutParams(-1, dpi(ClockView.heightDp(look))))
-        } else null
+        pager = Pager(this) { updateDots(it) }
+        home.addView(pager, LinearLayout.LayoutParams(-1, 0, 1f))
 
-        grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        home.addView(grid, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(14f) })
-        home.addView(View(this), LinearLayout.LayoutParams(-1, 0, 1f))
+        dots = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
+        if (look == Look.APPLE && prefs.search) {
+            home.addView(searchPill(), LinearLayout.LayoutParams(-2, -2).apply {
+                gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dpi(12f); topMargin = dpi(4f)
+            })
+        } else {
+            home.addView(dots, LinearLayout.LayoutParams(-1, dpi(22f)))
+        }
 
-        if (prefs.search && look == Look.APPLE) home.addView(searchPill(), LinearLayout.LayoutParams(-2, -2).apply {
-            gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dpi(14f)
-        })
         dockRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -180,61 +233,91 @@ class HomeActivity : Activity() {
             val pv = if (background != null) dpi(12f) else dpi(4f)
             setPadding(dpi(8f), pv, dpi(8f), pv)
         }
-        if (prefs.dock) home.addView(dockRow, LinearLayout.LayoutParams(-1, -2))
+        if (prefs.dock) home.addView(dockRow, LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dpi(12f); rightMargin = dpi(12f)
+        })
         if (prefs.search && look in listOf(Look.ANDROID, Look.COLOROS)) {
-            home.addView(searchPill(), LinearLayout.LayoutParams(-1, dpi(52f)).apply { topMargin = dpi(12f) })
-        }
-
-        // Leere Fläche gedrückt halten → Einstellungen
-        home.setOnLongClickListener {
-            it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-            startActivity(Intent(this, SettingsActivity::class.java))
-            true
+            home.addView(searchPill(), LinearLayout.LayoutParams(-1, dpi(52f)).apply {
+                topMargin = dpi(12f); leftMargin = dpi(16f); rightMargin = dpi(16f)
+            })
         }
 
         buildDrawer()
+
+        // „Fertig“-Knopf für den Bearbeiten-Modus
+        doneButton = TextView(this).apply {
+            text = "Fertig"
+            textSize = 15f
+            typeface = Looks.font(this@HomeActivity, look, 600)
+            setTextColor(Color.BLACK)
+            setPadding(dpi(18f), dpi(8f), dpi(18f), dpi(8f))
+            background = GradientDrawable().apply { cornerRadius = dp(20f); setColor(0xF2FFFFFF.toInt()) }
+            visibility = View.GONE
+            setOnClickListener { setEditMode(false) }
+        }
+        root.addView(doneButton, FrameLayout.LayoutParams(-2, -2, Gravity.TOP or Gravity.END).apply {
+            topMargin = insetTop + dpi(10f); rightMargin = dpi(16f)
+        })
         builtFor = signature()
     }
 
     private fun dockBackground(): android.graphics.drawable.Drawable? = when (look) {
-        Look.APPLE -> GradientDrawable().apply { cornerRadius = dp(32f); setColor(0x38FFFFFF); setStroke(dpi(1f), 0x2EFFFFFF) }
+        Look.APPLE -> GradientDrawable().apply { cornerRadius = dp(34f); setColor(0x40FFFFFF); setStroke(dpi(1f), 0x33FFFFFF) }
         Look.GALAXY -> GradientDrawable().apply { cornerRadius = dp(22f); setColor(0x26FFFFFF) }
         Look.COLOROS -> GradientDrawable().apply { cornerRadius = dp(30f); setColor(0x30FFFFFF) }
+        Look.ONEUI -> GradientDrawable().apply { cornerRadius = dp(28f); setColor(0x1AFFFFFF) }
         else -> null
     }
 
-    private fun searchPill(): View {
-        val tv = TextView(this).apply {
-            text = if (look == Look.APPLE) "⌕  Suchen" else "⌕   Apps & Einstellungen suchen"
-            typeface = Looks.font(this@HomeActivity, look, 500)
-            textSize = if (look == Look.APPLE) 14f else 16f
-            gravity = if (look == Look.APPLE) Gravity.CENTER else Gravity.CENTER_VERTICAL or Gravity.START
-            val dark = look == Look.ANDROID
-            setTextColor(if (dark) 0xFF3C3C43.toInt() else Color.WHITE)
-            setPadding(dpi(if (look == Look.APPLE) 16f else 22f), dpi(7f), dpi(16f), dpi(7f))
-            background = GradientDrawable().apply {
-                cornerRadius = dp(28f)
-                setColor(when (look) {
-                    Look.ANDROID -> 0xEBF1F0F6.toInt()
-                    Look.APPLE -> 0x40FFFFFF
-                    else -> 0x33FFFFFF
-                })
-            }
-            setOnClickListener { openDrawer(focusSearch = true) }
+    private fun searchPill(): View = TextView(this).apply {
+        text = if (look == Look.APPLE) "⌕  Suchen" else "⌕   Apps & Web durchsuchen"
+        typeface = Looks.font(this@HomeActivity, look, 500)
+        textSize = if (look == Look.APPLE) 14f else 16f
+        gravity = if (look == Look.APPLE) Gravity.CENTER else Gravity.CENTER_VERTICAL or Gravity.START
+        val darkPill = look == Look.ANDROID
+        setTextColor(if (darkPill) 0xFF3C3C43.toInt() else Color.WHITE)
+        setPadding(dpi(if (look == Look.APPLE) 16f else 22f), dpi(7f), dpi(16f), dpi(7f))
+        background = GradientDrawable().apply {
+            cornerRadius = dp(28f)
+            setColor(when (look) {
+                Look.ANDROID -> 0xEBF1F0F6.toInt()
+                Look.APPLE -> 0x40FFFFFF
+                else -> 0x33FFFFFF
+            })
         }
-        return tv
+        setOnClickListener { openDrawer(focusSearch = true) }
+    }
+
+    private fun updateDots(page: Int) {
+        if (!::dots.isInitialized) return
+        val n = pager.pageCount
+        dots.removeAllViews()
+        if (n <= 1) return
+        for (i in 0 until n) {
+            dots.addView(View(this).apply {
+                background = GradientDrawable().apply {
+                    shape = if (look == Look.NOTHING) GradientDrawable.RECTANGLE else GradientDrawable.OVAL
+                    if (look == Look.ANDROID) cornerRadius = dp(4f)
+                    setColor(if (i == page) textColor else (textColor and 0x00FFFFFF) or 0x66000000)
+                }
+            }, LinearLayout.LayoutParams(dpi(if (i == page && look == Look.ANDROID) 16f else 7f), dpi(7f)).apply {
+                leftMargin = dpi(4f); rightMargin = dpi(4f)
+            })
+        }
     }
 
     // ------------------------------------------------------------------
     // Icons
     // ------------------------------------------------------------------
 
-    private fun iconView(app: AppInfo, sizeDp: Int, showLabel: Boolean, inDock: Boolean): View {
+    private fun iconView(app: AppInfo, sizeDp: Int, showLabel: Boolean, inDock: Boolean, onHome: Boolean): FrameLayout {
+        val frame = FrameLayout(this)
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(0, dpi(6f), 0, dpi(6f))
         }
+        frame.addView(col, FrameLayout.LayoutParams(-1, -2))
         val px = dpi(sizeDp.toFloat())
         val iv = ImageView(this).apply {
             setImageBitmap(Looks.icon(app.key, app.icon, px, look, prefs.monoIcons || look == Look.NOTHING))
@@ -243,16 +326,41 @@ class HomeActivity : Activity() {
         col.addView(iv, LinearLayout.LayoutParams(px, px))
         if (showLabel) col.addView(TextView(this).apply {
             text = app.label
-            setTextColor(Color.WHITE)
+            setTextColor(if (inDock || !onHome) Color.WHITE else textColor)
             textSize = if (look == Look.NOTHING) 11f else 12f
             typeface = Looks.font(this@HomeActivity, look, if (look == Look.ONEUI || look == Look.GALAXY) 500 else 400)
             if (look == Look.NOTHING) letterSpacing = 0.04f
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
             gravity = Gravity.CENTER
-            setShadowLayer(dp(3f), 0f, dp(1f), 0x88000000.toInt())
+            setShadowLayer(dp(3f), 0f, dp(1f), if (onHome) shadowColor else 0x88000000.toInt())
             setPadding(dpi(2f), dpi(5f), dpi(2f), 0)
         }, LinearLayout.LayoutParams(-1, -2))
+
+        // „−“-Abzeichen für den Bearbeiten-Modus
+        if (onHome) {
+            val badge = TextView(this).apply {
+                text = "−"
+                textSize = 16f
+                gravity = Gravity.CENTER
+                setTextColor(Color.BLACK)
+                background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(0xF2E5E5EA.toInt()) }
+                visibility = View.GONE
+                tag = "badge"
+                setOnClickListener {
+                    it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                    if (app.key in prefs.favorites) prefs.favorites = prefs.favorites - app.key
+                    else prefs.hidden = prefs.hidden + app.key
+                    fillHome()
+                    builtFor = signature()
+                    setEditMode(true)
+                }
+            }
+            frame.addView(badge, FrameLayout.LayoutParams(dpi(22f), dpi(22f), Gravity.TOP or Gravity.CENTER_HORIZONTAL).apply {
+                leftMargin = -px / 2
+            })
+            homeIcons.add(frame)
+        }
 
         col.setOnTouchListener { v, e ->
             when (e.actionMasked) {
@@ -262,23 +370,28 @@ class HomeActivity : Activity() {
             }
             false
         }
-        col.setOnClickListener { Apps.launch(this, app, iv) }
+        col.setOnClickListener {
+            if (editMode) { setEditMode(false); return@setOnClickListener }
+            Apps.launch(this, app, iv)
+        }
         col.setOnLongClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             appMenu(it, app)
             true
         }
-        return col
+        return frame
     }
 
     private fun appMenu(anchor: View, app: AppInfo) {
         val pm = PopupMenu(this, anchor)
         val fav = prefs.favorites
         val dock = prefs.dockApps
-        if (app.key in fav) pm.menu.add(0, 1, 0, "Vom Startbildschirm entfernen") else pm.menu.add(0, 2, 0, "Zum Startbildschirm")
+        if (app.key in fav) pm.menu.add(0, 1, 0, "Von der ersten Seite entfernen") else pm.menu.add(0, 2, 0, "Auf die erste Seite")
         if (app.key in dock) pm.menu.add(0, 3, 1, "Aus dem Dock entfernen") else pm.menu.add(0, 4, 1, "Ins Dock")
-        pm.menu.add(0, 5, 2, "App-Info")
-        pm.menu.add(0, 6, 3, "Deinstallieren")
+        pm.menu.add(0, 7, 2, "Startbildschirm bearbeiten")
+        pm.menu.add(0, 8, 3, "App ausblenden")
+        pm.menu.add(0, 5, 4, "App-Info")
+        pm.menu.add(0, 6, 5, "Deinstallieren")
         pm.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> prefs.favorites = fav - app.key
@@ -287,9 +400,12 @@ class HomeActivity : Activity() {
                 4 -> prefs.dockApps = (dock + app.key).takeLast(prefs.columns.coerceAtMost(5))
                 5 -> Apps.appInfo(this, app)
                 6 -> Apps.uninstall(this, app)
+                7 -> setEditMode(true)
+                8 -> prefs.hidden = prefs.hidden + app.key
             }
-            if (item.itemId in 1..4) {
+            if (item.itemId in listOf(1, 2, 3, 4, 8)) {
                 fillHome()
+                refreshDrawer()
                 builtFor = signature()
             }
             true
@@ -297,20 +413,114 @@ class HomeActivity : Activity() {
         pm.show()
     }
 
-    private fun fillHome() {
-        if (!::grid.isInitialized) return
-        grid.removeAllViews()
+    /** Wie viele Icon-Reihen passen auf eine Seite? */
+    private fun rowsPerPage(): Int {
+        val hDp = resources.displayMetrics.heightPixels / resources.displayMetrics.density
+        val cell = prefs.iconDp + (if (prefs.labels) 30 else 16)
+        val reserved = 70 + (if (prefs.dock) prefs.iconDp + 40 else 0) + (if (prefs.search) 60 else 24)
+        return ((hDp - reserved) / cell).toInt().coerceIn(3, 7)
+    }
+
+    private fun gridOf(apps: List<AppInfo>, rows: Int): LinearLayout {
         val cols = prefs.columns
-        val apps = prefs.favorites.mapNotNull { Apps.byKey(it) }
-        apps.chunked(cols).forEach { rowApps ->
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            rowApps.forEach { a -> row.addView(iconView(a, prefs.iconDp, prefs.labels, false), LinearLayout.LayoutParams(0, -2, 1f)) }
-            repeat(cols - rowApps.size) { row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
-            grid.addView(row)
+        val g = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpi(12f), 0, dpi(12f), 0)
         }
+        apps.chunked(cols).take(rows).forEach { rowApps ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            rowApps.forEach { a -> row.addView(iconView(a, prefs.iconDp, prefs.labels, false, true), LinearLayout.LayoutParams(0, -2, 1f)) }
+            repeat(cols - rowApps.size) { row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
+            g.addView(row)
+        }
+        return g
+    }
+
+    private fun fillHome() {
+        if (!::pager.isInitialized) return
+        homeIcons.clear()
+        val pages = ArrayList<View>()
+        val rows = rowsPerPage()
+        val cols = prefs.columns
+        val hidden = prefs.hidden
+        val favApps = prefs.favorites.mapNotNull { Apps.byKey(it) }.filter { it.key !in hidden }
+
+        // Seite 1: Widget + Favoriten
+        val first = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        clockView = if (prefs.clock) ClockView(this, look, prefs.darkText).also {
+            first.addView(it, LinearLayout.LayoutParams(-1, dpi(ClockView.heightDp(look))).apply {
+                leftMargin = dpi(14f); rightMargin = dpi(14f)
+            })
+        } else null
+        val widgetRows = if (prefs.clock) ((ClockView.heightDp(look) + 10) / (prefs.iconDp + if (prefs.labels) 30 else 16)).roundToInt() else 0
+        val firstRows = (rows - widgetRows).coerceAtLeast(1)
+        first.addView(gridOf(favApps, firstRows), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(10f) })
+        pages.add(first)
+
+        // weitere Seiten: übrige Favoriten + (optional) alle anderen Apps
+        val rest = ArrayList<AppInfo>()
+        rest.addAll(favApps.drop(firstRows * cols))
+        if (prefs.allOnHome) {
+            val shown = prefs.favorites.toSet() + prefs.dockApps.toSet()
+            rest.addAll(visibleApps().filter { it.key !in shown })
+        }
+        rest.chunked(rows * cols).forEach { chunk -> pages.add(gridOf(chunk, rows)) }
+
+        // Long-Press auf freie Fläche → Menü
+        pages.forEach { p ->
+            p.setOnLongClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                homeMenu(it)
+                true
+            }
+            p.setOnClickListener { if (editMode) setEditMode(false) }
+        }
+        pager.setPages(pages)
+        updateDots(pager.current)
+
         dockRow.removeAllViews()
-        prefs.dockApps.mapNotNull { Apps.byKey(it) }.forEach { a ->
-            dockRow.addView(iconView(a, prefs.iconDp, false, true), LinearLayout.LayoutParams(0, -2, 1f))
+        prefs.dockApps.mapNotNull { Apps.byKey(it) }.filter { it.key !in hidden }.forEach { a ->
+            dockRow.addView(iconView(a, prefs.iconDp, false, true, false), LinearLayout.LayoutParams(0, -2, 1f))
+        }
+        if (editMode) setEditMode(true)
+    }
+
+    private fun homeMenu(anchor: View) {
+        val pm = PopupMenu(this, anchor, Gravity.CENTER)
+        pm.menu.add(0, 1, 0, "Startbildschirm bearbeiten")
+        pm.menu.add(0, 2, 1, "Hintergrundbild")
+        pm.menu.add(0, 3, 2, "Lumora Home Einstellungen")
+        pm.setOnMenuItemClickListener {
+            when (it.itemId) {
+                1 -> setEditMode(true)
+                2 -> try { startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Hintergrundbild")) } catch (_: Exception) {}
+                3 -> startActivity(Intent(this, SettingsActivity::class.java))
+            }
+            true
+        }
+        pm.show()
+    }
+
+    /** Wackel-Modus wie beim iPhone: Icons wackeln, „−“ entfernt sie. */
+    private fun setEditMode(on: Boolean) {
+        editMode = on
+        wiggles.forEach { it.cancel() }
+        wiggles.clear()
+        doneButton.visibility = if (on) View.VISIBLE else View.GONE
+        homeIcons.forEachIndexed { i, f ->
+            f.findViewWithTag<View>("badge")?.visibility = if (on) View.VISIBLE else View.GONE
+            if (on) {
+                val a = ObjectAnimator.ofFloat(f, View.ROTATION, -1.8f, 1.8f).apply {
+                    duration = 130L + (i % 3) * 12L
+                    repeatCount = ValueAnimator.INFINITE
+                    repeatMode = ValueAnimator.REVERSE
+                    startDelay = (i % 5) * 20L
+                    start()
+                }
+                wiggles.add(a)
+            } else {
+                f.rotation = 0f
+            }
         }
     }
 
@@ -320,7 +530,9 @@ class HomeActivity : Activity() {
 
     private fun drawerColor() = when (look) {
         Look.APPLE -> 0xE6101014.toInt()
-        Look.ANDROID -> 0xF21B1B1F.toInt()
+        Look.ANDROID -> if (Build.VERSION.SDK_INT >= 31) try {
+            (getColor(android.R.color.system_neutral1_900) and 0x00FFFFFF) or 0xF5000000.toInt()
+        } catch (_: Exception) { 0xF21B1B1F.toInt() } else 0xF21B1B1F.toInt()
         Look.ONEUI -> 0xEB000000.toInt()
         Look.GALAXY -> 0xD9000000.toInt()
         Look.NOTHING -> 0xF5000000.toInt()
@@ -332,22 +544,19 @@ class HomeActivity : Activity() {
             setBackgroundColor(drawerColor())
             visibility = View.GONE
             isClickable = true
+            setPadding(0, insetTop, 0, insetBottom)
         }
         val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         drawer.addView(col, FrameLayout.LayoutParams(-1, -1))
         col.addView(TextView(this).apply {
-            text = when (look) {
-                Look.APPLE -> "App-Mediathek"
-                Look.NOTHING -> "APPS"
-                else -> "Apps"
-            }
+            text = when (look) { Look.APPLE -> "App-Mediathek"; Look.NOTHING -> "APPS"; else -> "Apps" }
             textSize = if (look == Look.NOTHING) 30f else 28f
             typeface = Looks.font(this@HomeActivity, look, 700, display = true)
             setTextColor(Color.WHITE)
             setPadding(dpi(22f), dpi(18f), dpi(22f), dpi(8f))
         })
         drawerSearch = EditText(this).apply {
-            hint = "Suchen"
+            hint = if (look == Look.APPLE) "Suchen" else "Apps & Web durchsuchen"
             setSingleLine()
             textSize = 16f
             setTextColor(Color.WHITE)
@@ -358,18 +567,42 @@ class HomeActivity : Activity() {
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun afterTextChanged(s: Editable?) {
-                    (drawerGrid.adapter as? DrawerAdapter)?.filter(s?.toString().orEmpty())
-                }
+                override fun afterTextChanged(s: Editable?) = refreshDrawer()
             })
             setOnEditorActionListener { _, _, _ ->
-                (drawerGrid.adapter as? DrawerAdapter)?.first()?.let { Apps.launch(this@HomeActivity, it, null) }
+                val first = (drawerGrid.adapter as? DrawerAdapter)?.first()
+                if (first != null) Apps.launch(this@HomeActivity, first, null) else webSearch(text.toString())
                 true
             }
         }
         col.addView(drawerSearch, LinearLayout.LayoutParams(-1, -2).apply {
             leftMargin = dpi(18f); rightMargin = dpi(18f); bottomMargin = dpi(8f)
         })
+        // Websuche
+        webRow = TextView(this).apply {
+            textSize = 15f
+            setTextColor(Color.WHITE)
+            typeface = Looks.font(this@HomeActivity, look, 500)
+            setPadding(dpi(18f), dpi(12f), dpi(18f), dpi(12f))
+            background = GradientDrawable().apply { cornerRadius = dp(14f); setColor(0x1AFFFFFF) }
+            visibility = View.GONE
+            setOnClickListener { webSearch(drawerSearch.text.toString()) }
+        }
+        col.addView(webRow, LinearLayout.LayoutParams(-1, -2).apply {
+            leftMargin = dpi(18f); rightMargin = dpi(18f); bottomMargin = dpi(8f)
+        })
+        // Vorschläge (meistgenutzt)
+        col.addView(TextView(this).apply {
+            text = if (look == Look.NOTHING) "VORSCHLÄGE" else "Vorschläge"
+            textSize = 13f
+            setTextColor(0x99FFFFFF.toInt())
+            typeface = Looks.font(this@HomeActivity, look, 600)
+            setPadding(dpi(22f), dpi(4f), 0, 0)
+            tag = "suggestTitle"
+            visibility = View.GONE
+        })
+        suggestRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dpi(8f), 0, dpi(8f), dpi(6f)) }
+        col.addView(suggestRow)
         drawerGrid = GridView(this).apply {
             numColumns = prefs.columns
             verticalSpacing = dpi(4f)
@@ -377,20 +610,55 @@ class HomeActivity : Activity() {
             setPadding(dpi(8f), 0, dpi(8f), dpi(20f))
             clipToPadding = false
             isVerticalScrollBarEnabled = false
+            isFastScrollEnabled = true
             selector = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
             adapter = DrawerAdapter()
         }
         col.addView(drawerGrid, LinearLayout.LayoutParams(-1, 0, 1f))
         root.addView(drawer, FrameLayout.LayoutParams(-1, -1))
-        drawer.setPadding(0, insetTop, 0, insetBottom)
+    }
+
+    private fun refreshDrawer() {
+        if (!::drawerGrid.isInitialized) return
+        val q = drawerSearch.text?.toString().orEmpty()
+        (drawerGrid.adapter as? DrawerAdapter)?.filter(q)
+        webRow.visibility = if (q.isBlank()) View.GONE else View.VISIBLE
+        webRow.text = "⌕   „$q“ im Web suchen"
+        // Vorschläge nur ohne Suchbegriff
+        suggestRow.removeAllViews()
+        val title = (suggestRow.parent as ViewGroup).findViewWithTag<View>("suggestTitle")
+        val top = visibleApps().filter { prefs.launches(it.key) > 0 }.sortedByDescending { prefs.launches(it.key) }.take(prefs.columns)
+        val show = q.isBlank() && top.isNotEmpty()
+        title?.visibility = if (show) View.VISIBLE else View.GONE
+        suggestRow.visibility = if (show) View.VISIBLE else View.GONE
+        if (show) {
+            top.forEach { a ->
+                suggestRow.addView(iconView(a, (prefs.iconDp * 0.9f).toInt(), true, false, false).apply {
+                    getChildAt(0).setOnClickListener { Apps.launch(this@HomeActivity, a, this); main.postDelayed({ closeDrawer(false) }, 300) }
+                }, LinearLayout.LayoutParams(0, -2, 1f))
+            }
+            repeat(prefs.columns - top.size) { suggestRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
+        }
+    }
+
+    private fun webSearch(q: String) {
+        if (q.isBlank()) return
+        try {
+            startActivity(Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, q))
+        } catch (_: Exception) {
+            try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://duckduckgo.com/?q=" + Uri.encode(q)))) } catch (_: Exception) {}
+        }
+        main.postDelayed({ closeDrawer(false) }, 300)
     }
 
     private inner class DrawerAdapter : BaseAdapter() {
-        private var items: List<AppInfo> = Apps.all
+        private var items: List<AppInfo> = visibleApps()
 
         fun filter(q: String) {
             val qq = q.trim().lowercase()
-            items = if (qq.isEmpty()) Apps.all else Apps.all.filter { it.label.lowercase().contains(qq) }
+            val all = visibleApps()
+            items = if (qq.isEmpty()) all else all.filter { it.label.lowercase().contains(qq) }
+                .sortedBy { if (it.label.lowercase().startsWith(qq)) 0 else 1 }
             notifyDataSetChanged()
         }
 
@@ -401,8 +669,8 @@ class HomeActivity : Activity() {
         override fun getItemId(position: Int) = position.toLong()
         override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
             val a = items[position]
-            return iconView(a, (prefs.iconDp * 0.92f).toInt(), true, false).apply {
-                setOnClickListener {
+            return iconView(a, (prefs.iconDp * 0.92f).toInt(), true, false, false).apply {
+                getChildAt(0).setOnClickListener {
                     Apps.launch(this@HomeActivity, a, this)
                     main.postDelayed({ closeDrawer(animate = false) }, 300)
                 }
@@ -412,12 +680,14 @@ class HomeActivity : Activity() {
 
     private fun openDrawer(focusSearch: Boolean = false) {
         if (drawerOpen) return
+        if (editMode) setEditMode(false)
         drawerOpen = true
         drawer.visibility = View.VISIBLE
         drawerSearch.setText("")
+        refreshDrawer()
         when (look) {
-            Look.APPLE -> { drawer.alpha = 0f; drawer.scaleX = 0.94f; drawer.scaleY = 0.94f }
-            Look.NOTHING -> { drawer.alpha = 0f }
+            Look.APPLE -> { drawer.alpha = 0f; drawer.scaleX = 0.94f; drawer.scaleY = 0.94f; drawer.translationY = 0f }
+            Look.NOTHING -> { drawer.alpha = 0f; drawer.translationY = 0f }
             else -> { drawer.alpha = 0f; drawer.translationY = dp(80f) }
         }
         drawer.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f).setDuration(320).setInterpolator(ease).start()
@@ -446,23 +716,26 @@ class HomeActivity : Activity() {
     }
 
     // ------------------------------------------------------------------
-    // Gesten: hoch = Apps, runter = Benachrichtigungen
+    // Gesten: hoch = Apps, runter = Suche oder Benachrichtigungen
     // ------------------------------------------------------------------
 
-    private val gestures = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+    private val gestureListener = object : GestureDetector.SimpleOnGestureListener() {
         override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
             val dy = e2.y - (e1?.y ?: e2.y)
-            if (abs(vy) < abs(vx) || abs(dy) < dp(60f)) return false
+            if (abs(vy) < abs(vx) * 1.2f || abs(dy) < dp(60f) || editMode) return false
             if (!drawerOpen && vy < 0) { openDrawer(); return true }
-            if (!drawerOpen && vy > 0) { expandNotifications(); return true }
+            if (!drawerOpen && vy > 0) {
+                if (prefs.swipeDownSearch) openDrawer(focusSearch = true) else expandNotifications()
+                return true
+            }
             if (drawerOpen && vy > 0 && !drawerGrid.canScrollVertically(-1)) { closeDrawer(); return true }
             return false
         }
-    }).apply { setIsLongpressEnabled(false) }
+    }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
-        gestures.onTouchEvent(ev)
+        if (::gestures.isInitialized) gestures.onTouchEvent(ev)
         return super.dispatchTouchEvent(ev)
     }
 
@@ -475,12 +748,79 @@ class HomeActivity : Activity() {
     }
 }
 
-/** Uhr-Widget im Stil des jeweiligen Looks. */
+/** Seitenweise blättern (mit Einrasten). */
+@SuppressLint("ViewConstructor", "ClickableViewAccessibility")
+class Pager(ctx: Context, private val onPage: (Int) -> Unit) : HorizontalScrollView(ctx) {
+    private val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+    var current = 0
+        private set
+    val pageCount get() = row.childCount
+    private var downScroll = 0
+
+    init {
+        isHorizontalScrollBarEnabled = false
+        overScrollMode = OVER_SCROLL_NEVER
+        isFillViewport = true
+        addView(row, LayoutParams(-2, -1))
+    }
+
+    private fun pageWidth() = width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
+
+    fun setPages(pages: List<View>) {
+        row.removeAllViews()
+        val w = pageWidth()
+        pages.forEach { row.addView(it, LinearLayout.LayoutParams(w, -1)) }
+        current = current.coerceIn(0, max(0, pages.size - 1))
+        post { scrollTo(current * pageWidth(), 0) }
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        for (i in 0 until row.childCount) {
+            val c = row.getChildAt(i)
+            c.layoutParams = (c.layoutParams as LinearLayout.LayoutParams).apply { width = w }
+        }
+        post { scrollTo(current * w, 0) }
+    }
+
+    fun toPage(i: Int) {
+        current = i.coerceIn(0, max(0, pageCount - 1))
+        smoothScrollTo(current * pageWidth(), 0)
+        onPage(current)
+    }
+
+    /** Eigenes Einrasten statt freiem Schwung */
+    override fun fling(velocityX: Int) {}
+
+    override fun onTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> downScroll = scrollX
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                val r = super.onTouchEvent(ev)
+                val w = pageWidth()
+                val moved = scrollX - downScroll
+                val target = when {
+                    moved > w * 0.15f -> current + 1
+                    moved < -w * 0.15f -> current - 1
+                    else -> current
+                }
+                if (target != current) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                toPage(target)
+                return r
+            }
+        }
+        return super.onTouchEvent(ev)
+    }
+}
+
+/** Uhr-Widgets im Stil des jeweiligen Looks. */
 @SuppressLint("ViewConstructor")
-class ClockView(ctx: Context, private val look: Look) : View(ctx) {
+class ClockView(ctx: Context, private val look: Look, private val darkText: Boolean) : View(ctx) {
     companion object {
+        var battery = -1
+        var charging = false
         fun heightDp(look: Look) = when (look) {
-            Look.APPLE -> 156f
+            Look.APPLE -> 170f
             Look.ANDROID -> 96f
             Look.ONEUI -> 150f
             Look.GALAXY -> 200f
@@ -492,51 +832,74 @@ class ClockView(ctx: Context, private val look: Look) : View(ctx) {
     private val d = resources.displayMetrics.density
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val r = RectF()
+    private var cv: Canvas? = null
+    private val fg get() = if (darkText) 0xFF111114.toInt() else Color.WHITE
 
-    private fun text(t: String, x: Float, y: Float, size: Float, weight: Int, color: Int = Color.WHITE,
-                     align: Paint.Align = Paint.Align.LEFT, display: Boolean = false) {
+    private fun text(t: String, x: Float, y: Float, size: Float, weight: Int, color: Int = fg,
+                     align: Paint.Align = Paint.Align.LEFT, display: Boolean = false, shadow: Boolean = true) {
         p.textSize = size * d
         p.typeface = Looks.font(context, look, weight, display)
         p.color = color
         p.textAlign = align
-        p.setShadowLayer(4 * d, 0f, d, 0x66000000)
-        canvasRef?.drawText(t, x, y, p)
+        if (shadow && !darkText) p.setShadowLayer(4 * d, 0f, d, 0x66000000) else p.clearShadowLayer()
+        cv?.drawText(t, x, y, p)
     }
 
-    private var canvasRef: Canvas? = null
-
     override fun onDraw(c: Canvas) {
-        canvasRef = c
+        cv = c
+        if (battery < 0) {
+            val i = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            if (i != null) {
+                battery = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) * 100 / i.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
+                charging = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+            }
+        }
         val now = Date()
         val de = Locale.GERMANY
         val w = width.toFloat()
-        val h = height.toFloat()
         val time = SimpleDateFormat("HH:mm", de).format(now)
         when (look) {
             Look.APPLE -> {
-                // iOS-Widget: Glas-Karte, Wochentag rot, großer Tag, Uhrzeit
-                r.set(4 * d, 8 * d, w - 4 * d, h - 8 * d)
+                // Zwei kleine iOS-Widgets: Kalender + Batterien
+                val gap = 14 * d
+                val s = minOf((w - gap) / 2, height - 12 * d)
+                val left = (w - (2 * s + gap)) / 2
+                r.set(left, 6 * d, left + s, 6 * d + s)
                 p.clearShadowLayer()
-                p.color = 0x38FFFFFF
-                c.drawRoundRect(r, 24 * d, 24 * d, p)
-                text(SimpleDateFormat("EEEE", de).format(now).uppercase(), r.left + 20 * d, r.top + 34 * d, 13f, 700, 0xFFFF453A.toInt())
-                text(SimpleDateFormat("d", de).format(now), r.left + 18 * d, r.top + 92 * d, 54f, 300)
-                text(time, r.right - 20 * d, r.top + 92 * d, 48f, 600, align = Paint.Align.RIGHT)
-                text(SimpleDateFormat("MMMM", de).format(now), r.left + 20 * d, r.bottom - 16 * d, 14f, 500, 0xCCFFFFFF.toInt())
+                p.color = 0xF5FFFFFF.toInt()
+                c.drawRoundRect(r, 22 * d, 22 * d, p)
+                text(SimpleDateFormat("EEEE", de).format(now).uppercase(), r.left + 16 * d, r.top + 28 * d, 12f, 700, 0xFFFF3B30.toInt(), shadow = false)
+                text(SimpleDateFormat("d", de).format(now), r.left + 14 * d, r.top + 82 * d, 50f, 400, 0xFF111114.toInt(), shadow = false)
+                text("Keine Termine", r.left + 16 * d, r.bottom - 18 * d, 12f, 500, 0xFF8E8E93.toInt(), shadow = false)
+                r.set(left + s + gap, 6 * d, left + 2 * s + gap, 6 * d + s)
+                p.color = 0x40FFFFFF
+                c.drawRoundRect(r, 22 * d, 22 * d, p)
+                val cx = r.centerX()
+                val cy = r.centerY() - 8 * d
+                val rr = s * 0.28f
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = 6 * d
+                p.strokeCap = Paint.Cap.ROUND
+                p.color = 0x33FFFFFF
+                c.drawCircle(cx, cy, rr, p)
+                p.color = if (battery in 0..20) 0xFFFF453A.toInt() else 0xFF30D158.toInt()
+                val lvl = battery.coerceIn(0, 100)
+                c.drawArc(cx - rr, cy - rr, cx + rr, cy + rr, -90f, 360f * lvl / 100f, false, p)
+                p.style = Paint.Style.FILL
+                text(if (charging) "⚡" else "▯", cx, cy + 7 * d, 18f, 600, Color.WHITE, align = Paint.Align.CENTER)
+                text("$lvl %", cx, r.bottom - 16 * d, 15f, 600, Color.WHITE, align = Paint.Align.CENTER)
             }
             Look.ANDROID -> {
                 text(SimpleDateFormat("EEE., d. MMM.", de).format(now), 10 * d, 44 * d, 24f, 400)
-                text(time, 10 * d, 78 * d, 16f, 500, 0xDDFFFFFF.toInt())
+                text(time + (if (battery >= 0) "  ·  $battery %" else ""), 10 * d, 78 * d, 16f, 500)
             }
             Look.ONEUI -> {
                 text(time, w / 2, 96 * d, 76f, 250, align = Paint.Align.CENTER)
                 text(SimpleDateFormat("EEE., d. MMMM", de).format(now), w / 2, 128 * d, 16f, 500, align = Paint.Align.CENTER)
             }
             Look.GALAXY -> {
-                val hh = SimpleDateFormat("HH", de).format(now)
-                val mm = SimpleDateFormat("mm", de).format(now)
-                text(hh, 12 * d, 86 * d, 84f, 800)
-                text(mm, 12 * d, 166 * d, 84f, 300)
+                text(SimpleDateFormat("HH", de).format(now), 12 * d, 86 * d, 84f, 800)
+                text(SimpleDateFormat("mm", de).format(now), 12 * d, 166 * d, 84f, 300)
                 text(SimpleDateFormat("EEEE d. MMM", de).format(now), w - 14 * d, 160 * d, 15f, 500, align = Paint.Align.RIGHT)
             }
             Look.NOTHING -> {
@@ -544,14 +907,14 @@ class ClockView(ctx: Context, private val look: Look) : View(ctx) {
                 p.clearShadowLayer()
                 p.color = 0xFFD71921.toInt()
                 c.drawCircle(w / 2 + 128 * d, 34 * d, 5 * d, p)
-                text(SimpleDateFormat("EEE d MMM", de).format(now).uppercase(), w / 2, 130 * d, 14f, 500,
-                    align = Paint.Align.CENTER)
+                text(SimpleDateFormat("EEE d MMM", de).format(now).uppercase() + if (battery >= 0) "  ·  $battery%" else "",
+                    w / 2, 130 * d, 14f, 500, align = Paint.Align.CENTER)
             }
             Look.COLOROS -> {
                 text(time, 10 * d, 84 * d, 72f, 200)
-                text(SimpleDateFormat("EEEE, d. MMMM", de).format(now), 12 * d, 116 * d, 16f, 400, 0xE6FFFFFF.toInt())
+                text(SimpleDateFormat("EEEE, d. MMMM", de).format(now), 12 * d, 116 * d, 16f, 400)
             }
         }
-        canvasRef = null
+        cv = null
     }
 }

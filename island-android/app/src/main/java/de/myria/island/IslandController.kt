@@ -33,6 +33,7 @@ class IslandController(
         fun canBrightness(): Boolean = false
         fun setBrightness(v: Float) {}
         fun openCamera() {}
+        fun openShortcut(index: Int) {}
     }
 
     /** Kalibrier-Modus: leere Island bleibt sichtbar (beim Einstellen von Größe & Position) */
@@ -123,12 +124,9 @@ class IslandController(
         view.queueCount = 0
         refresh()
     }
-    private val autoCollapse = Runnable {
-        if (expandedKey != null) {
-            expandedKey = null
-            refresh()
-        }
-    }
+    // Fix: Auto-Einklappen nutzt dieselbe Logik wie manuelles Einklappen →
+    // groß gezogene Mitteilungen / Laden / Kontrollzentrum verschwinden danach wieder
+    private val autoCollapse = Runnable { collapse() }
     private val lingerEnd = Runnable { refresh() }
 
     init {
@@ -367,7 +365,8 @@ class IslandController(
             0 -> host.toggleTorch()
             1 -> host.startTimer()
             2 -> host.startStopwatch()
-            else -> host.openCamera()
+            3 -> host.openCamera()
+            else -> host.openShortcut(index)
         }
         dismissTransient()
     }

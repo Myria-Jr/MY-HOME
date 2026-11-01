@@ -390,6 +390,19 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         } catch (_: Exception) {}
     }
 
+    /** 4 = WLAN, 5 = Bluetooth, 6 = Rechner, 7 = Einstellungen */
+    override fun openShortcut(index: Int) {
+        val i = when (index) {
+            4 -> Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)
+            5 -> Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)
+            6 -> Intent.makeMainSelectorActivity(Intent.ACTION_MAIN, Intent.CATEGORY_APP_CALCULATOR)
+            else -> Intent(android.provider.Settings.ACTION_SETTINGS)
+        }
+        try { startActivity(i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {
+            try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } catch (_: Exception) {}
+        }
+    }
+
     override fun onCalibrate(on: Boolean) {
         controller?.calibrating = on
     }

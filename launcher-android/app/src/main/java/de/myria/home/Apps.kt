@@ -34,6 +34,7 @@ object Apps {
     fun byKey(key: String) = all.firstOrNull { it.key == key }
 
     fun launch(ctx: Context, app: AppInfo, view: android.view.View?) {
+        HomePrefs(ctx).countLaunch(app.key)
         val la = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
         try {
             val bounds = view?.let {

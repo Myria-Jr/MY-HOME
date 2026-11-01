@@ -586,7 +586,7 @@ fun hRow(ctx: Context): LinearLayout = LinearLayout(ctx).apply {
     gravity = Gravity.CENTER_VERTICAL
 }
 
-enum class Glyph { GEAR, PAINT, RULER, SPARKLE, ISLAND, NOTE, BELL, GRID, HAND, INFO, LOCK, LOCATION, BOLT, DROP, SPEAKER, SEARCH, APPICON, FONT, TIMER, CLOCK, EYE }
+enum class Glyph { GEAR, PAINT, RULER, SPARKLE, ISLAND, NOTE, BELL, GRID, HAND, INFO, LOCK, LOCATION, BOLT, DROP, SPEAKER, SEARCH, APPICON, FONT, TIMER, CLOCK, EYE, PHONE, TORCH }
 
 /** Einstellungs-Icon im jeweiligen Look. */
 @SuppressLint("ViewConstructor")
@@ -757,6 +757,8 @@ class GlyphIcon(ctx: Context, private val color: Int, private val glyph: Glyph, 
                 c.drawText("Aa", cx, cy + tp.textSize * 0.35f, tp)
             }
             Glyph.TIMER -> Icons.timer(c, cx, cy, g * 0.95f, p)
+            Glyph.PHONE -> Icons.phone(c, cx, cy, g * 0.9f, p)
+            Glyph.TORCH -> Icons.flashlight(c, cx, cy, g * 0.95f, p)
             Glyph.CLOCK -> {
                 p.style = Paint.Style.STROKE
                 p.strokeWidth = s * 0.07f
@@ -831,6 +833,7 @@ class DesignTile(ctx: Context, private val pal: Palette, private val design: Int
             IslandConfig.DESIGN_CUSTOM -> 0xFF7B3FA0.toInt() to 0xFFF7A86B.toInt()
             IslandConfig.DESIGN_GLASS -> 0xFF4A3AA8.toInt() to 0xFF16B5C9.toInt()
             IslandConfig.DESIGN_CAPSULE -> 0xFF3B2A6E.toInt() to 0xFFC9B6FF.toInt()
+            IslandConfig.DESIGN_PIXEL -> 0xFF1E3A2F.toInt() to 0xFF9ED8B8.toInt()
             else -> 0xFF2B1B5E.toInt() to 0xFFE0688F.toInt()
         }
         p.shader = LinearGradient(0f, 0f, w, h, c1, c2, Shader.TileMode.CLAMP)
@@ -852,6 +855,9 @@ class DesignTile(ctx: Context, private val pal: Palette, private val design: Int
                 p.color = Color.BLACK; c.drawRoundRect(r, rad, rad, p)
                 p.style = Paint.Style.STROKE; p.strokeWidth = 1.2f * dp1; p.color = 0x55FFFFFF
                 c.drawRoundRect(r, rad, rad, p); p.style = Paint.Style.FILL
+            }
+            IslandConfig.DESIGN_PIXEL -> {
+                p.color = 0xFF3F4BB5.toInt(); c.drawRoundRect(r, rad, rad, p)
             }
             IslandConfig.DESIGN_CAPSULE -> {
                 p.color = 0xFF2A2140.toInt(); c.drawRoundRect(r, rad, rad, p)

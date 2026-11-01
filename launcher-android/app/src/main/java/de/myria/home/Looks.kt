@@ -66,6 +66,24 @@ class HomePrefs(ctx: Context) {
     var dockApps: List<String>
         get() = sp.getString("dock_apps", null)?.split('|')?.filter { it.isNotBlank() } ?: emptyList()
         set(v) = sp.edit().putString("dock_apps", v.joinToString("|")).apply()
+    var darkText: Boolean
+        get() = sp.getBoolean("dark_text", false)
+        set(v) = sp.edit().putBoolean("dark_text", v).apply()
+    /** Alle Apps auf Startseiten verteilen (wie iOS) */
+    var allOnHome: Boolean
+        get() = sp.getBoolean("all_on_home", look == Look.APPLE)
+        set(v) = sp.edit().putBoolean("all_on_home", v).apply()
+    /** Nach unten wischen: Suche statt Benachrichtigungen */
+    var swipeDownSearch: Boolean
+        get() = sp.getBoolean("swipe_down_search", look == Look.APPLE)
+        set(v) = sp.edit().putBoolean("swipe_down_search", v).apply()
+    var hidden: Set<String>
+        get() = sp.getStringSet("hidden", null)?.toSet() ?: emptySet()
+        set(v) = sp.edit().putStringSet("hidden", v).apply()
+
+    fun countLaunch(key: String) = sp.edit().putInt("cnt_$key", sp.getInt("cnt_$key", 0) + 1).apply()
+    fun launches(key: String) = sp.getInt("cnt_$key", 0)
+
     val initialized get() = sp.contains("favorites")
 }
 

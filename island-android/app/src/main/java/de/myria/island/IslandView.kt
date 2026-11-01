@@ -371,7 +371,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is Content.Progress -> exp(96 * d)
                 is Content.Charging -> exp(104 * d)
                 is TorchContent -> exp(156 * d)
-                is PanelContent -> exp(186 * d)
+                is PanelContent -> exp(246 * d)
                 else -> sizeFor(Mode.COMPACT, c)
             }
         }
@@ -636,6 +636,16 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 bgPaint.color = col
                 canvas.drawRoundRect(rect, r, r, bgPaint)
                 gapPaint.color = col
+            }
+            IslandConfig.STYLE_PIXEL -> {
+                // Pixel 11: kräftiger Chip in der Primärfarbe, oben leicht heller (Expressive)
+                val prim = systemColor(android.R.color.system_accent1_700, 0xFF3F4BB5.toInt())
+                bgPaint.shader = LinearGradient(0f, rect.top, 0f, rect.bottom,
+                    intArrayOf(mix(prim, Color.WHITE, 0.08f), prim), null, Shader.TileMode.CLAMP)
+                bgPaint.color = Color.WHITE
+                canvas.drawRoundRect(rect, r, r, bgPaint)
+                bgPaint.shader = null
+                gapPaint.color = prim
             }
             IslandConfig.STYLE_CAPSULE -> {
                 // Material-You-Kapsel: tonale Fläche in der Systemfarbe + feiner Akzent-Rand
@@ -1822,19 +1832,20 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             numPaint.color = withAlpha(Color.WHITE, a * 0.85f)
             val txt = "$label  ${(v * 100).toInt()} %"
             canvas.drawText(txt, tmp.right - 14 * d - numPaint.measureText(txt), tmp.centerY() + numPaint.textSize * 0.36f, numPaint)
-            if (interactive) sliderHits.add(SliderHit(RectF(tmp), value, onChange))
+            // Fix: beim Ziehen keine neuen Treffer-Flächen anhäufen
+            if (interactive && sliderIndex < 0) sliderHits.add(SliderHit(RectF(tmp), value, onChange))
             y += sh + 10 * d
         }
         slider(0, c.volume, { x, yy, s, pp -> Icons.speaker(canvas, x, yy, s, 2, false, pp) }, "Lautstärke") { listener?.onPanelVolume(it) }
         slider(1, c.brightness, { x, yy, s, pp -> Icons.sun(canvas, x, yy, s, pp) }, if (c.canBrightness) "Helligkeit" else "Helligkeit 🔒") { listener?.onPanelBrightness(it) }
 
-        // Schnellzugriffe
-        val by = y + 26 * d
-        val n = 4
-        val step = (island.width() - pad * 2) / n
+        // Schnellzugriffe (2 Reihen à 4)
+        val n = 8
+        val step = (island.width() - pad * 2) / 4
         val br = 22 * d
         for (i in 0 until n) {
-            val cx = island.left + pad + step * i + step / 2
+            val by = y + 26 * d + (i / 4) * 56 * d
+            val cx = island.left + pad + step * (i % 4) + step / 2
             p.color = withAlpha(Color.WHITE, a * 0.14f)
             canvas.drawCircle(cx, by, br, p)
             p.color = withAlpha(Color.WHITE, a)
@@ -1842,7 +1853,24 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 0 -> Icons.flashlight(canvas, cx, by, br * 1.0f, p)
                 1 -> Icons.timer(canvas, cx, by, br * 1.0f, p)
                 2 -> Icons.alarm(canvas, cx, by, br * 1.0f, p)
-                else -> Icons.camera(canvas, cx, by, br * 1.1f, p, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(0xFF2A2A2E.toInt(), a) })
+                3 -> Icons.camera(canvas, cx, by, br * 1.1f, p, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(0xFF2A2A2E.toInt(), a) })
+                4 -> Icons.wifi(canvas, cx, by, br * 1.0f, p, true)
+                5 -> Icons.headphones(canvas, cx, by, br * 0.95f, p)
+                6 -> {
+                    numPaint.textSize = br * 0.9f
+                    numPaint.color = withAlpha(Color.WHITE, a)
+                    canvas.drawText("±", cx - numPaint.measureText("±") / 2, by + numPaint.textSize * 0.36f, numPaint)
+                }
+                else -> {
+                    ringPaint.strokeWidth = 2 * d
+                    ringPaint.color = withAlpha(Color.WHITE, a)
+                    canvas.drawCircle(cx, by, br * 0.32f, ringPaint)
+                    for (k in 0 until 8) {
+                        val ang = Math.toRadians(k * 45.0)
+                        canvas.drawLine(cx + (br * 0.42f * Math.cos(ang)).toFloat(), by + (br * 0.42f * Math.sin(ang)).toFloat(),
+                            cx + (br * 0.55f * Math.cos(ang)).toFloat(), by + (br * 0.55f * Math.sin(ang)).toFloat(), ringPaint)
+                    }
+                }
             }
             if (interactive) {
                 val idx = i

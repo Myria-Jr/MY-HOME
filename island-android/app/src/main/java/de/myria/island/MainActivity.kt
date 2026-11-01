@@ -217,6 +217,8 @@ class MainActivity : Activity() {
         "history" -> historyPage()
         "hidein" -> appsPage(hideMode = true)
         "welcome" -> welcomePage()
+        "style" -> stylePage()
+        "appshub" -> appsHubPage()
         else -> null
     }
 
@@ -404,6 +406,7 @@ class MainActivity : Activity() {
         IslandConfig.DESIGN_CUSTOM -> "Custom"
         IslandConfig.DESIGN_GLASS -> "Liquid Glass"
         IslandConfig.DESIGN_CAPSULE -> "Kapsel"
+        IslandConfig.DESIGN_PIXEL -> "Pixel 11"
         else -> "Apple"
     }
 
@@ -460,33 +463,52 @@ class MainActivity : Activity() {
         normal.addView(sectionHeader("Design"))
         normal.addView(designStrip())
 
+        // Schnellschalter (wie Kontrollzentrum) – das Wichtigste auf einen Blick
+        normal.addView(sectionHeader("Schnellschalter"))
+        normal.addView(quickTiles(listOf(
+            Triple("Musik", Prefs.MUSIC, Glyph.NOTE) to 0xFFFF375F.toInt(),
+            Triple("Mitteilungen", Prefs.NOTIFS, Glyph.BELL) to 0xFFFF453A.toInt(),
+            Triple("Anrufe", Prefs.CALLS, Glyph.PHONE) to 0xFF30D158.toInt(),
+            Triple("Laden", Prefs.CHARGING, Glyph.BOLT) to 0xFF34C759.toInt(),
+            Triple("Timer", Prefs.TIMER, Glyph.TIMER) to 0xFFFF9F0A.toInt(),
+            Triple("Navi", Prefs.NAV, Glyph.LOCATION) to 0xFF0A84FF.toInt(),
+            Triple("Lampe", Prefs.TORCH, Glyph.TORCH) to 0xFFFFCC00.toInt(),
+            Triple("Lautstärke", Prefs.VOLUME, Glyph.SPEAKER) to 0xFF5E5CE6.toInt(),
+        )))
+
         normal.addView(section("Aussehen", listOf(
-            navRow("Design", GlyphIcon(this, 0xFFFF2D55.toInt(), Glyph.ISLAND, pal),
-                value = designName(prefs.getInt(Prefs.DESIGN, D.design))) { open("design") },
-            navRow("Erscheinungsbild", GlyphIcon(this, 0xFF0A84FF.toInt(), Glyph.PAINT, pal)) { open("appearance") },
-            navRow("Liquid Glass", GlyphIcon(this, 0xFF32ADE6.toInt(), Glyph.DROP, pal)) { open("glass") },
-            navRow("App-Symbol", GlyphIcon(this, 0xFF1C1C1E.toInt(), Glyph.APPICON, pal),
-                value = iconName(prefs.getString(PREF_ICON, "classic") ?: "classic")) { open("icons") },
-            navRow("Größe & Position", GlyphIcon(this, 0xFF30B0C7.toInt(), Glyph.RULER, pal)) { open("geometry") },
-            navRow("Schriften", GlyphIcon(this, 0xFFFF9500.toInt(), Glyph.FONT, pal)) { open("fonts") },
-            navRow("Animation", GlyphIcon(this, 0xFFBF5AF2.toInt(), Glyph.SPARKLE, pal)) { open("animation") },
+            navRow("Design & Stil", GlyphIcon(this, 0xFFFF2D55.toInt(), Glyph.PAINT, pal),
+                sub = "Vorlage, Farben, Glas, Schrift, Animation, App-Symbol") { open("style") },
+            navRow("Größe & Position", GlyphIcon(this, 0xFF30B0C7.toInt(), Glyph.RULER, pal),
+                sub = "Smart-Anpassung an deine Kamera") { open("geometry") },
         )))
         normal.addView(section("Inhalte", listOf(
-            navRow("Live-Aktivitäten", GlyphIcon(this, 0xFFFF9F0A.toInt(), Glyph.ISLAND, pal)) { open("live") },
-            navRow("Musik", GlyphIcon(this, 0xFFFF375F.toInt(), Glyph.NOTE, pal)) { open("music") },
-            navRow("Mitteilungen", GlyphIcon(this, 0xFFFF453A.toInt(), Glyph.BELL, pal)) { open("notif") },
-            navRow("System-Anzeigen", GlyphIcon(this, 0xFF5E5CE6.toInt(), Glyph.SPEAKER, pal)) { open("system") },
-            navRow("Timer & Stoppuhr", GlyphIcon(this, 0xFFFF9F0A.toInt(), Glyph.TIMER, pal)) { open("timer") },
-            navRow("Mitteilungs-Verlauf", GlyphIcon(this, 0xFF8E8E93.toInt(), Glyph.CLOCK, pal)) { open("history") },
+            navRow("Live-Aktivitäten", GlyphIcon(this, 0xFFFF9F0A.toInt(), Glyph.ISLAND, pal),
+                sub = "Anrufe, Timer, Navi, Downloads, Akku") { open("live") },
+            navRow("Musik", GlyphIcon(this, 0xFFFF375F.toInt(), Glyph.NOTE, pal),
+                sub = "Player, Wellenform, Vinyl, Spulen") { open("music") },
+            navRow("Mitteilungen", GlyphIcon(this, 0xFFFF453A.toInt(), Glyph.BELL, pal),
+                sub = "Aussehen, Größe, Ruhezeiten, Verlauf") { open("notif") },
+            navRow("System-Anzeigen", GlyphIcon(this, 0xFF5E5CE6.toInt(), Glyph.SPEAKER, pal),
+                sub = "Lautstärke, Fokus, WLAN, Wecker, Punkte") { open("system") },
+        )))
+        normal.addView(section("Extras", listOf(
+            navRow("Timer & Stoppuhr", GlyphIcon(this, 0xFFFF9F0A.toInt(), Glyph.TIMER, pal),
+                sub = "Direkt in der Island starten") { open("timer") },
+            navRow("Mitteilungs-Verlauf", GlyphIcon(this, 0xFF8E8E93.toInt(), Glyph.CLOCK, pal),
+                sub = "Was zuletzt reinkam") { open("history") },
         )))
         normal.addView(section("Bedienung", listOf(
-            navRow("Gesten & Haptik", GlyphIcon(this, 0xFF32D74B.toInt(), Glyph.HAND, pal)) { open("behavior") },
-            navRow("Apps für Mitteilungen", GlyphIcon(this, 0xFF5856D6.toInt(), Glyph.GRID, pal)) { open("apps") },
-            navRow("In Apps ausblenden", GlyphIcon(this, 0xFF636366.toInt(), Glyph.EYE, pal)) { open("hidein") },
+            navRow("Gesten & Haptik", GlyphIcon(this, 0xFF32D74B.toInt(), Glyph.HAND, pal),
+                sub = "Tippen, Wischen, Doppeltipp, Kontrollzentrum") { open("behavior") },
+            navRow("Apps", GlyphIcon(this, 0xFF5856D6.toInt(), Glyph.GRID, pal),
+                sub = "Welche Apps, wo ausblenden") { open("appshub") },
         )))
         normal.addView(section("App", listOf(
-            navRow("Berechtigungen", GlyphIcon(this, 0xFF8E8E93.toInt(), Glyph.GEAR, pal)) { open("permissions") },
-            navRow("Info & Fehlerbericht", GlyphIcon(this, 0xFF636366.toInt(), Glyph.INFO, pal)) { open("info") },
+            navRow("Berechtigungen", GlyphIcon(this, 0xFF8E8E93.toInt(), Glyph.GEAR, pal),
+                sub = "Was Lumora braucht – und warum") { open("permissions") },
+            navRow("Info & Fehlerbericht", GlyphIcon(this, 0xFF636366.toInt(), Glyph.INFO, pal),
+                sub = "Version, Export, Absturz-Bericht") { open("info") },
         )))
         normal.addView(TextView(this).apply {
             text = "$APP_NAME · made for Myria ✦ Ahoj! 🇨🇿"
@@ -516,6 +538,8 @@ class MainActivity : Activity() {
         "timer" -> "Timer & Stoppuhr"
         "history" -> "Mitteilungs-Verlauf"
         "hidein" -> "In Apps ausblenden"
+        "style" -> "Design & Stil"
+        "appshub" -> "Apps"
         else -> ""
     }
 
@@ -575,7 +599,8 @@ class MainActivity : Activity() {
     }
 
     private val designList = listOf(
-        IslandConfig.DESIGN_APPLE to "Apple", IslandConfig.DESIGN_ANDROID to "Android",
+        IslandConfig.DESIGN_APPLE to "Apple", IslandConfig.DESIGN_PIXEL to "Pixel 11",
+        IslandConfig.DESIGN_ANDROID to "Android",
         IslandConfig.DESIGN_GLASS to "Liquid Glass", IslandConfig.DESIGN_CAPSULE to "Kapsel",
         IslandConfig.DESIGN_ONEUI to "One UI",
         IslandConfig.DESIGN_NOTHING to "Nothing", IslandConfig.DESIGN_CUSTOM to "Custom",
@@ -652,6 +677,7 @@ class MainActivity : Activity() {
             "Graphit" to "Dunkelgrau mit feinem Rand",
             "Umriss" to "Schwarz mit hellem Rand",
             "Kapsel" to "Tonal in deinen Material-You-Farben",
+            "Pixel 11" to "Kräftiger Chip in der Systemfarbe (Material 3 Expressive)",
         )) {
             if (it == IslandConfig.STYLE_GLASS) {
                 Toast.makeText(this, "Tipp: Unter „Liquid Glass“ kannst du das Glas fein einstellen 💧", Toast.LENGTH_SHORT).show()
@@ -1720,10 +1746,10 @@ class MainActivity : Activity() {
             }
         }
 
-    private fun navRow(label: String, icon: View?, value: String? = null, onClick: () -> Unit): View {
+    private fun navRow(label: String, icon: View?, value: String? = null, sub: String? = null, onClick: () -> Unit): View {
         val row = baseRow()
         withIcon(row, icon)
-        row.addView(rowTitle(label), LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(if (sub != null) labelBlock(label, sub) else rowTitle(label), LinearLayout.LayoutParams(0, -2, 1f))
         if (value != null) row.addView(TextView(this).apply {
             text = value
             textSize = 15f
@@ -1777,6 +1803,92 @@ class MainActivity : Activity() {
     }
 
     private fun signed(v: Int) = if (v > 0) "+$v dp" else "$v dp"
+
+    // ==================================================================
+    // Übersichts-Seiten
+    // ==================================================================
+
+    private fun stylePage() = page("Design & Stil", true) { c ->
+        c.addView(previewCard(big = false, root = c))
+        c.addView(sectionHeader("Vorlage"))
+        c.addView(designStrip())
+        c.addView(section("Anpassen", listOf(
+            navRow("Design-Vorlagen", GlyphIcon(this, 0xFFFF2D55.toInt(), Glyph.ISLAND, pal),
+                value = designName(prefs.getInt(Prefs.DESIGN, D.design))) { open("design") },
+            navRow("Erscheinungsbild", GlyphIcon(this, 0xFF0A84FF.toInt(), Glyph.PAINT, pal),
+                sub = "Form, Akzentfarbe, Musik-Elemente, Leuchten") { open("appearance") },
+            navRow("Liquid Glass", GlyphIcon(this, 0xFF32ADE6.toInt(), Glyph.DROP, pal),
+                sub = "Milchigkeit, Glanz, Kante, Farbsaum") { open("glass") },
+            navRow("Schriften", GlyphIcon(this, 0xFFFF9500.toInt(), Glyph.FONT, pal),
+                value = Fonts.ALL[prefs.getInt(Prefs.FONT_STYLE, D.fontStyle).coerceIn(0, Fonts.ALL.size - 1)].name) { open("fonts") },
+            navRow("Animation", GlyphIcon(this, 0xFFBF5AF2.toInt(), Glyph.SPARKLE, pal),
+                sub = "Apple, Android, One UI, Nothing, Jelly") { open("animation") },
+            navRow("App-Symbol", GlyphIcon(this, 0xFF1C1C1E.toInt(), Glyph.APPICON, pal),
+                value = iconName(prefs.getString(PREF_ICON, "classic") ?: "classic")) { open("icons") },
+        )))
+    }
+
+    private fun appsHubPage() = page("Apps", true) { c ->
+        c.addView(section(null, listOf(
+            navRow("Apps für Mitteilungen", GlyphIcon(this, 0xFF5856D6.toInt(), Glyph.GRID, pal),
+                sub = "Welche Apps in der Island auftauchen dürfen") { open("apps") },
+            navRow("In Apps ausblenden", GlyphIcon(this, 0xFF636366.toInt(), Glyph.EYE, pal),
+                sub = "Island verschwindet z.B. in Spielen oder Videos") { open("hidein") },
+        )))
+    }
+
+    /** Kontrollzentrum-artige Schnellschalter (4 pro Reihe). */
+    private fun quickTiles(items: List<Pair<Triple<String, String, Glyph>, Int>>): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        items.chunked(4).forEach { row ->
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            row.forEach { (t, color) ->
+                val (label, key, glyph) = t
+                val def = when (key) { Prefs.VOLUME -> D.showVolume; else -> true }
+                val tile = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER
+                    setPadding(dpi(4f), dpi(12f), dpi(4f), dpi(10f))
+                }
+                val icon = GlyphIcon(this, color, glyph, pal)
+                tile.addView(icon)
+                val tv = TextView(this).apply {
+                    text = label
+                    textSize = 12f
+                    typeface = pal.font(500)
+                    gravity = Gravity.CENTER
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                    setPadding(0, dpi(6f), 0, 0)
+                }
+                tile.addView(tv)
+                fun paint() {
+                    val on = prefs.getBoolean(key, def)
+                    tile.background = if (pal.isGlass) GlassDrawable(pal, dp(18f), dp(1f), strong = on)
+                    else GradientDrawable().apply {
+                        cornerRadius = dp(18f)
+                        setColor(if (on) Palette.mixC(pal.card, color, if (pal.dark) 0.28f else 0.16f) else pal.card)
+                        if (pal.isNothing) setStroke(dpi(1f), if (on) pal.accent else pal.separator)
+                    }
+                    tv.setTextColor(if (on) pal.label else pal.secondary)
+                    icon.alpha = if (on) 1f else 0.35f
+                }
+                paint()
+                tile.setOnClickListener {
+                    it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                    prefs.edit().putBoolean(key, !prefs.getBoolean(key, def)).apply()
+                    paint()
+                    it.animate().scaleX(0.92f).scaleY(0.92f).setDuration(70).withEndAction {
+                        it.animate().scaleX(1f).scaleY(1f).setDuration(200)
+                            .setInterpolator(android.view.animation.OvershootInterpolator(2.5f)).start()
+                    }.start()
+                }
+                r.addView(tile, LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dpi(4f); rightMargin = dpi(4f) })
+            }
+            box.addView(r, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dpi(8f) })
+        }
+        return box
+    }
 
     // ==================================================================
     // Schriften, Timer, Verlauf, Begrüßung
@@ -1996,6 +2108,7 @@ class MainActivity : Activity() {
             "classic" to "Klassisch", "light" to "Hell", "lagoon" to "Lagune", "sunset" to "Sunset",
             "midnight" to "Mitternacht", "glass" to "Glas", "neon" to "Neon", "dots" to "Punkte",
             "aurora" to "Aurora", "rose" to "Rosé", "gold" to "Gold", "rainbow" to "Regenbogen", "trans" to "Trans Pride",
+            "pride" to "Pride", "bi" to "Bi Pride", "enby" to "Nonbinary",
         )
         private const val STATE_PAGES = "pages"
         /** Eigene Tag-Keys (müssen wie Resource-IDs aussehen → 0x7f…) */
@@ -2040,9 +2153,11 @@ class MainActivity : Activity() {
             "Internet WLAN Wecker Energiesparmodus Datum" to "system",
             "Export Import Sichern Backup" to "info",
             "Smart-Anpassung KI automatisch Kamera kalibrieren erkennen" to "geometry",
+            "Design Stil Übersicht" to "style",
             "Mitteilungen Größe Stil Banner Kompakt Zeilen Breite App-Name runde Icons" to "notif",
             "Kontrollzentrum Regler Helligkeit Lautstärke Kapsel" to "behavior",
             "Kapsel MT Capsule Material You" to "design",
+            "Pixel 11 Google Expressive" to "design",
         )
     }
 }

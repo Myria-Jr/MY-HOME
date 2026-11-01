@@ -114,11 +114,43 @@ class SettingsActivity : Activity() {
             switch("Dock", prefs.dock) { prefs.dock = it },
             switch("Suchleiste", prefs.search) { prefs.search = it },
             switch("Monochrome Icons", prefs.monoIcons) { prefs.monoIcons = it; Looks.clearCache() },
+            switch("Alle Apps auf Startseiten (wie iOS)", prefs.allOnHome) { prefs.allOnHome = it },
+            switch("Dunkle Schrift (für helle Hintergründe)", prefs.darkText) { prefs.darkText = it },
+            switch("Nach unten wischen = Suche", prefs.swipeDownSearch) { prefs.swipeDownSearch = it },
         )))
+
+        header(col, "Ausgeblendete Apps")
+        val hiddenBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun fillHidden() {
+            hiddenBox.removeAllViews()
+            val pm = packageManager
+            val keys = prefs.hidden.toList()
+            if (keys.isEmpty()) {
+                hiddenBox.addView(TextView(this).apply {
+                    text = "Keine. Apps blendest du aus, indem du sie gedrückt hältst → „App ausblenden“."
+                    textSize = 14f
+                    setTextColor(secondary)
+                    setPadding(dpi(4f), 0, 0, 0)
+                })
+                return
+            }
+            hiddenBox.addView(card(keys.map { k ->
+                val label = try {
+                    val cn = android.content.ComponentName.unflattenFromString(k)
+                    pm.getApplicationLabel(pm.getApplicationInfo(cn!!.packageName, 0)).toString()
+                } catch (_: Exception) { k }
+                action("$label  –  wieder zeigen", accent) {
+                    prefs.hidden = prefs.hidden - k
+                    fillHidden()
+                }
+            }))
+        }
+        fillHidden()
+        col.addView(hiddenBox)
 
         header(col, "Bedienung")
         col.addView(TextView(this).apply {
-            text = "• Nach oben wischen: alle Apps\n• Nach unten wischen: Benachrichtigungen\n• App gedrückt halten: zum Startbildschirm / ins Dock / Info / Deinstallieren\n• Freie Fläche gedrückt halten: diese Einstellungen"
+            text = "• Nach oben wischen: alle Apps\n• Nach unten wischen: Suche oder Benachrichtigungen\n• Seitlich wischen: nächste Startseite\n• App gedrückt halten: Startseite / Dock / Ausblenden / Info / Deinstallieren\n• Freie Fläche gedrückt halten: Bearbeiten (Wackel-Modus), Hintergrund, Einstellungen"
             textSize = 14f
             setLineSpacing(0f, 1.3f)
             setTextColor(secondary)
