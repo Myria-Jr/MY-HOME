@@ -163,6 +163,7 @@ class SettingsActivity : Activity() {
             slider("Apps im Dock", 3, 6, prefs.dockCount, "") { prefs.dockCount = it },
             switch("Suchleiste", prefs.search) { prefs.search = it },
             switch("Alle Apps auf Startseiten (wie iOS)", prefs.allOnHome) { prefs.allOnHome = it },
+            switch("„Heute“-Seite links (wie iOS)", prefs.todayPage) { prefs.todayPage = it },
             labeled("Blätter-Effekt", chips(listOf("Schieben", "Zoom", "Würfel", "Stapel"), prefs.pageEffect) { prefs.pageEffect = it }),
         )))
 

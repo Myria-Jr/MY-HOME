@@ -26,6 +26,8 @@ import android.os.Handler
 import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.Gravity
+import android.view.MotionEvent
+import android.view.View
 import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
@@ -43,6 +45,9 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     private var view: IslandView? = null
     private var controller: IslandController? = null
     private val lp = WindowManager.LayoutParams()
+    /** Unsichtbares Touch-Fenster: nur es ändert seine Größe → kein Ruckeln beim Zeichnen. */
+    private val tlp = WindowManager.LayoutParams()
+    private var touchView: View? = null
     private var cfg = IslandConfig()
     private var touchable = true
     private val handler = Handler(Looper.getMainLooper())
@@ -89,10 +94,33 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
         v.onWindowNeed = { w, h, settled -> resizeWindow(w, h, settled) }
 
+        // Zeichen-Fenster: immer bildschirmbreit und durchlässig – seine Breite ändert sich nie,
+        // daher kann Android beim Verkleinern kein abgeschnittenes altes Bild zeigen (Ruck nach links).
+        tlp.copyFrom(lp)
+        tlp.title = "IslandTouch"
+        tlp.flags = baseFlags()
+        lp.width = screenWidth()
+        lp.flags = drawFlags()
+        val tv = object : View(this) {
+            @android.annotation.SuppressLint("ClickableViewAccessibility")
+            override fun onTouchEvent(e: MotionEvent): Boolean {
+                val iv = view ?: return false
+                val ev = MotionEvent.obtain(e)
+                ev.offsetLocation((iv.width - width) / 2f, 0f)
+                val r = iv.dispatchTouchEvent(ev)
+                ev.recycle()
+                return r
+            }
+        }
+        touchView = tv
+
         try {
             wm.addView(v, lp)
+            wm.addView(tv, tlp)
         } catch (e: Exception) {
+            try { wm.removeView(v) } catch (_: Exception) {}
             view = null
+            touchView = null
             return
         }
 
@@ -176,6 +204,8 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         controller = null
         view?.let { try { wm.removeView(it) } catch (_: Exception) {} }
         view = null
+        touchView?.let { try { wm.removeView(it) } catch (_: Exception) {} }
+        touchView = null
         handler.removeCallbacksAndMessages(null)
     }
 
@@ -211,6 +241,13 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         return f
     }
 
+    private fun drawFlags(): Int =
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+            WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+            WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS or
+            WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED
+
     private var pendingShrink: Runnable? = null
 
     /**
@@ -222,8 +259,8 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
      *  3. Verkleinern erst, wenn die Island 250 ms ruhig ist – kein Hin-und-Her.
      */
     private fun resizeWindow(w: Int, h: Int, settled: Boolean) {
-        val cw = lp.width
-        val ch = lp.height
+        val cw = tlp.width
+        val ch = tlp.height
         val sw = screenWidth()
         fun parity(x: Int): Int {
             var v = x.coerceAtMost(sw)
@@ -257,15 +294,22 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     }
 
     private fun apply(nw: Int, nh: Int) {
-        if (nw == lp.width && nh == lp.height) return
-        lp.width = nw
+        if (nw == tlp.width && nh == tlp.height) return
+        tlp.width = nw
+        tlp.height = nh
+        // Höhe des Zeichen-Fensters folgt nur beim Wachsen sofort; Verkleinern schneidet unten ab,
+        // die Island hängt oben → kein sichtbarer Sprung.
         lp.height = nh
         updateWindow()
     }
 
     private fun updateWindow() {
         val v = view ?: return
+        lp.width = screenWidth()
+        tlp.x = lp.x
+        tlp.y = lp.y
         try { wm.updateViewLayout(v, lp) } catch (_: Exception) {}
+        touchView?.let { try { wm.updateViewLayout(it, tlp) } catch (_: Exception) {} }
     }
 
     private fun applyPosition() {
@@ -331,7 +375,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
             (mode == IslandView.Mode.IDLE && cfg.idleTouchThrough))
         if (t != touchable) {
             touchable = t
-            lp.flags = baseFlags()
+            tlp.flags = baseFlags()
             updateWindow()
         }
     }

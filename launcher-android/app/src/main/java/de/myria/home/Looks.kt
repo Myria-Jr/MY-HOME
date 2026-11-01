@@ -152,6 +152,10 @@ class HomePrefs(ctx: Context) {
     var swipeDownSearch: Boolean
         get() = b("swipe_down_search", look == Look.APPLE)
         set(v) = pb("swipe_down_search", v)
+    /** „Heute“-Seite links neben dem Startbildschirm (wie iOS) */
+    var todayPage: Boolean
+        get() = b("today_page", true)
+        set(v) = pb("today_page", v)
     var hidden: Set<String>
         get() = sp.getStringSet("hidden", null)?.toSet() ?: emptySet()
         set(v) = sp.edit().putStringSet("hidden", v).apply()

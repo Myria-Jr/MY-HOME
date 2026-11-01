@@ -57,7 +57,8 @@ class MainActivity : Activity() {
     /** Werden in onResume / nach Berechtigungen aufgerufen */
     private val refreshers = ArrayList<() -> Unit>()
 
-    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
+        if (k != Prefs.CUSTOM_SNAPSHOT && (k in Prefs.LOOK_INT_KEYS || k in Prefs.LOOK_BOOL_KEYS)) Prefs.rememberCustom(this)
         val c = previewCfg()
         previews.forEach { it.cfg = c }
     }
@@ -625,12 +626,9 @@ class MainActivity : Activity() {
     }
 
     private fun chooseDesign(d: Int) {
-        if (d == IslandConfig.DESIGN_CUSTOM) {
-            prefs.edit().putInt(Prefs.DESIGN, d).apply()
-            Toast.makeText(this, "Custom: alles frei einstellbar ✨", Toast.LENGTH_SHORT).show()
-        } else {
-            Prefs.applyDesign(this, d)
-        }
+        Prefs.applyDesign(this, d)
+        if (d == IslandConfig.DESIGN_CUSTOM)
+            Toast.makeText(this, "Custom: dein eigener Look – alles frei einstellbar ✨", Toast.LENGTH_SHORT).show()
         main.postDelayed({ recreate() }, 120)
     }
 
@@ -657,7 +655,7 @@ class MainActivity : Activity() {
         }
         c.addView(sectionHeader("Vorlage"))
         c.addView(grid)
-        c.addView(footerText("Eine Vorlage setzt Form, Farben, Schrift, Animation, Wellenform, Tasten und den Look dieser App. Danach kannst du trotzdem alles einzeln ändern – dann wird's automatisch „Custom“."))
+        c.addView(footerText("Eine Vorlage setzt Form, Farben, Schrift, Animation, Wellenform, Tasten und den Look dieser App. Danach kannst du trotzdem alles einzeln ändern. „Custom“ ist dein eigener Look und merkt sich deine Werte."))
 
         c.addView(section("Look dieser App", listOf(
             segmentRow(listOf("iOS", "Material", "One UI", "Nothing", "Glas"), prefs.getInt(Prefs.UI_LOOK, D.uiLook)) {
@@ -723,7 +721,7 @@ class MainActivity : Activity() {
             val holder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             holder.addView(section(null, listOf(
                 actionRow("Liquid Glass einschalten") {
-                    prefs.edit().putInt(Prefs.STYLE, IslandConfig.STYLE_GLASS).putInt(Prefs.DESIGN, IslandConfig.DESIGN_CUSTOM).apply()
+                    prefs.edit().putInt(Prefs.STYLE, IslandConfig.STYLE_GLASS).apply()
                     holder.visibility = View.GONE
                 },
             ), footer = "Gerade ist ein anderer Stil aktiv."))
@@ -1624,14 +1622,9 @@ class MainActivity : Activity() {
         return col
     }
 
-    /** Ändert man einen Look-Wert, wird das Design zu „Custom“. */
-    private fun customIfLook(key: String): Int {
-        val lookKeys = setOf(Prefs.STYLE, Prefs.ACCENT_MODE, Prefs.EXPANDED_RADIUS, Prefs.COMPACT_ROUND,
-            Prefs.BOUNCE, Prefs.SPEED, Prefs.WAVE_STYLE, Prefs.PROGRESS_STYLE, Prefs.CONTROL_STYLE,
-            Prefs.FONT_STYLE, Prefs.GLOW)
-        val cur = prefs.getInt(Prefs.DESIGN, D.design)
-        return if (key in lookKeys) IslandConfig.DESIGN_CUSTOM else cur
-    }
+    /** Design bleibt, wie es ist (Nothing bleibt Nothing). Custom merkt sich Änderungen selbst. */
+    @Suppress("UNUSED_PARAMETER")
+    private fun customIfLook(key: String): Int = prefs.getInt(Prefs.DESIGN, D.design)
 
     private fun setLook(key: String, v: Int) {
         prefs.edit().putInt(key, v).putInt(Prefs.DESIGN, customIfLook(key)).apply()
@@ -1714,8 +1707,7 @@ class MainActivity : Activity() {
                 }
                 setOnClickListener {
                     performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
-                    prefs.edit().putInt(Prefs.ACCENT_COLOR, col).putInt(Prefs.ACCENT_MODE, IslandConfig.ACCENT_CUSTOM)
-                        .putInt(Prefs.DESIGN, IslandConfig.DESIGN_CUSTOM).apply()
+                    prefs.edit().putInt(Prefs.ACCENT_COLOR, col).putInt(Prefs.ACCENT_MODE, IslandConfig.ACCENT_CUSTOM).apply()
                     refresh()
                 }
             }

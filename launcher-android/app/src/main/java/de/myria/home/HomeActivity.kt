@@ -38,6 +38,7 @@ import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupMenu
+import android.widget.ScrollView
 import android.widget.TextView
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -168,7 +169,7 @@ class HomeActivity : Activity() {
         when {
             drawerOpen -> closeDrawer()
             editMode -> setEditMode(false)
-            else -> pager.toPage(0)
+            else -> pager.toPage(pager.home)
         }
     }
 
@@ -177,7 +178,7 @@ class HomeActivity : Activity() {
         // Home-Taste: alles schließen, zurück zur ersten Seite
         if (drawerOpen) closeDrawer()
         if (editMode) setEditMode(false)
-        if (::pager.isInitialized) pager.toPage(0)
+        if (::pager.isInitialized) pager.toPage(pager.home)
     }
 
     private val pkgReceiver = object : BroadcastReceiver() {
@@ -461,6 +462,79 @@ class HomeActivity : Activity() {
         return ((hDp - reserved) / cell).toInt().coerceIn(3, 7)
     }
 
+    /** Heute-Ansicht: Datum, Akku, meistgenutzte Apps, Suche */
+    private fun todayPage(): View {
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpi(18f), dpi(8f), dpi(18f), dpi(16f))
+        }
+        val now = java.util.Calendar.getInstance()
+        val h = now.get(java.util.Calendar.HOUR_OF_DAY)
+        val greet = when (h) { in 5..10 -> "Guten Morgen"; in 11..17 -> "Hallo"; in 18..22 -> "Guten Abend"; else -> "Gute Nacht" }
+        col.addView(TextView(this).apply {
+            text = java.text.SimpleDateFormat("EEEE, d. MMMM", java.util.Locale.GERMAN).format(now.time).uppercase()
+            textSize = 13f
+            letterSpacing = 0.06f
+            setTextColor((textColor and 0x00FFFFFF) or 0xB3000000.toInt())
+            typeface = Looks.font(this@HomeActivity, look, 600)
+        })
+        col.addView(TextView(this).apply {
+            text = greet
+            textSize = 34f
+            setTextColor(textColor)
+            typeface = Looks.font(this@HomeActivity, look, 800, display = true)
+            setPadding(0, 0, 0, dpi(14f))
+        })
+        fun glass(): GradientDrawable = GradientDrawable().apply {
+            cornerRadius = dp(24f)
+            setColor(if (prefs.darkText) 0x59FFFFFF else 0x33FFFFFF)
+            setStroke(maxOf(1, dpi(0.8f)), 0x33FFFFFF)
+        }
+        // Suche
+        col.addView(TextView(this).apply {
+            text = "  🔍  Suchen"
+            textSize = 16f
+            gravity = Gravity.CENTER_VERTICAL
+            setTextColor((textColor and 0x00FFFFFF) or 0xCC000000.toInt())
+            background = glass().apply { cornerRadius = dp(16f) }
+            setPadding(dpi(12f), 0, dpi(12f), 0)
+            setOnClickListener { openDrawer(focusSearch = true) }
+        }, LinearLayout.LayoutParams(-1, dpi(46f)).apply { bottomMargin = dpi(12f) })
+        // Akku + Uhr nebeneinander
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val wLook = Look.values().getOrNull(prefs.widgetStyle) ?: look
+        row.addView(ClockView(this, wLook, prefs.darkText), LinearLayout.LayoutParams(-1, dpi(ClockView.heightDp(wLook))))
+        col.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dpi(12f) })
+        // Meistgenutzt
+        val top = visibleApps().sortedByDescending { prefs.launches(it.key) }.take(8)
+        if (top.isNotEmpty()) {
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = glass()
+                setPadding(dpi(6f), dpi(12f), dpi(6f), dpi(10f))
+            }
+            card.addView(TextView(this).apply {
+                text = "Meistgenutzt"
+                textSize = 14f
+                setTextColor(textColor)
+                typeface = Looks.font(this@HomeActivity, look, 700)
+                setPadding(dpi(12f), 0, 0, dpi(8f))
+            })
+            top.chunked(4).forEach { r ->
+                val rr = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                r.forEach { a -> rr.addView(iconView(a, (prefs.iconDp * 0.85f).toInt(), prefs.labels, false, false), LinearLayout.LayoutParams(0, -2, 1f)) }
+                repeat(4 - r.size) { rr.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
+                card.addView(rr)
+            }
+            col.addView(card)
+        }
+        return ScrollView(this).apply {
+            isVerticalScrollBarEnabled = false
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(col)
+        }
+    }
+
     private fun gridOf(apps: List<AppInfo>, rows: Int): LinearLayout {
         val cols = prefs.columns
         val g = LinearLayout(this).apply {
@@ -506,6 +580,14 @@ class HomeActivity : Activity() {
             rest.addAll(visibleApps().filter { it.key !in shown })
         }
         rest.chunked(rows * cols).forEach { chunk -> pages.add(gridOf(chunk, rows)) }
+
+        // „Heute“-Seite links (wie iOS): nach rechts wischen auf der ersten Seite
+        val hadToday = pager.home == 1
+        if (prefs.todayPage) {
+            pages.add(0, todayPage())
+            pager.home = 1
+        } else pager.home = 0
+        if (hadToday != (pager.home == 1) || pager.pageCount == 0) pager.toPageSilently(pager.home)
 
         // Long-Press auf freie Fläche → Menü
         pages.forEach { p ->
@@ -822,8 +904,9 @@ class Pager(ctx: Context, private val effect: Int, private val onPage: (Int) -> 
     private val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
     var current = 0
         private set
+    /** Index der eigentlichen Startseite (1, wenn links die „Heute“-Seite liegt) */
+    var home = 0
     val pageCount get() = row.childCount
-    private var downScroll = 0
 
     init {
         isHorizontalScrollBarEnabled = false
@@ -839,7 +922,7 @@ class Pager(ctx: Context, private val effect: Int, private val onPage: (Int) -> 
         val w = pageWidth()
         pages.forEach { row.addView(it, LinearLayout.LayoutParams(w, -1)) }
         current = current.coerceIn(0, max(0, pages.size - 1))
-        post { scrollTo(current * pageWidth(), 0) }
+        post { scrollTo(current * pageWidth(), 0); onPage(current) }
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -849,6 +932,10 @@ class Pager(ctx: Context, private val effect: Int, private val onPage: (Int) -> 
             c.layoutParams = (c.layoutParams as LinearLayout.LayoutParams).apply { width = w }
         }
         post { scrollTo(current * w, 0) }
+    }
+
+    fun toPageSilently(i: Int) {
+        current = i.coerceAtLeast(0)
     }
 
     fun toPage(i: Int) {
@@ -897,11 +984,12 @@ class Pager(ctx: Context, private val effect: Int, private val onPage: (Int) -> 
 
     override fun onTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> downScroll = scrollX
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 val r = super.onTouchEvent(ev)
                 val w = pageWidth()
-                val moved = scrollX - downScroll
+                // Fix: relativ zur aktuellen Seite messen. Vorher kam ACTION_DOWN oft gar nicht an
+                // (Finger startete auf einem Icon) → Zurückblättern nach links ging nicht.
+                val moved = scrollX - current * w
                 val target = when {
                     moved > w * 0.15f -> current + 1
                     moved < -w * 0.15f -> current - 1

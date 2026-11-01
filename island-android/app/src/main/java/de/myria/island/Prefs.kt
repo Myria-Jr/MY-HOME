@@ -543,10 +543,42 @@ object Prefs {
                     C.WAVE_BARS, C.PROGRESS_LINE, C.CONTROL_PLAIN, Fonts.INTER, C.LOOK_GLASS, true, C.ANIM_APPLE)
                 e.putInt(GLASS_OPACITY, 45).putInt(GLASS_SHINE, 80).putBoolean(GLASS_BORDER, true).putBoolean(GLASS_RAINBOW, true)
             }
+            C.DESIGN_CUSTOM -> {
+                // Eigener Custom-Look: deine gespeicherten Werte – oder beim ersten Mal ein eigener Startlook
+                val snap = sp(c).getString(CUSTOM_SNAPSHOT, null)
+                if (snap != null && restoreCustom(e, snap)) Unit
+                else look(C.STYLE_TINT, C.ACCENT_CUSTOM, 0xFFFF6AA2.toInt(), 38, 100, 35, 55,
+                    C.WAVE_BARS, C.PROGRESS_LINE, C.CONTROL_CIRCLE, Fonts.INTER, C.LOOK_APPLE, true, C.ANIM_APPLE)
+            }
             else -> {}
         }
         e.apply()
     }
+
+    const val CUSTOM_SNAPSHOT = "custom_snapshot"
+
+    /** Werte, die einen Look ausmachen (für Custom gemerkt). */
+    val LOOK_INT_KEYS = listOf(STYLE, ACCENT_MODE, ACCENT_COLOR, EXPANDED_RADIUS, COMPACT_ROUND, BOUNCE, SPEED,
+        WAVE_STYLE, PROGRESS_STYLE, CONTROL_STYLE, FONT_STYLE, UI_LOOK, ANIM_STYLE)
+    val LOOK_BOOL_KEYS = listOf(GLOW)
+
+    /** Merkt sich den aktuellen Look als „Custom“ – nur wenn Custom gerade aktiv ist. */
+    fun rememberCustom(c: Context) {
+        val p = sp(c)
+        if (p.getInt(DESIGN, -1) != IslandConfig.DESIGN_CUSTOM) return
+        val o = org.json.JSONObject()
+        for (k in LOOK_INT_KEYS) if (p.contains(k)) o.put(k, p.getInt(k, 0))
+        for (k in LOOK_BOOL_KEYS) if (p.contains(k)) o.put(k, p.getBoolean(k, false))
+        val str = o.toString()
+        if (p.getString(CUSTOM_SNAPSHOT, null) != str) p.edit().putString(CUSTOM_SNAPSHOT, str).apply()
+    }
+
+    private fun restoreCustom(e: SharedPreferences.Editor, json: String): Boolean = try {
+        val o = org.json.JSONObject(json)
+        for (k in LOOK_INT_KEYS) if (o.has(k)) e.putInt(k, o.getInt(k))
+        for (k in LOOK_BOOL_KEYS) if (o.has(k)) e.putBoolean(k, o.getBoolean(k))
+        o.length() > 0
+    } catch (_: Exception) { false }
 
     fun setExcluded(c: Context, pkg: String, excluded: Boolean) = setInSet(c, EXCLUDED, pkg, excluded)
 
