@@ -339,7 +339,8 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             Mode.IDLE -> Size(if (cfg.idleContent != IslandConfig.IDLE_NONE) w + 58 * d else w, h, h / 2)
             Mode.COMPACT -> when (c) {
                 is Content.Notif -> if (cfg.notifStyle == IslandConfig.NOTIF_COMPACT) compact(150f) else {
-                    val base = when (cfg.notifSize) { 0 -> 60f; 2 -> 88f; else -> 72f } * d
+                    val base = (if (cfg.notifHeightDp > 50) cfg.notifHeightDp.toFloat()
+                        else when (cfg.notifSize) { 0 -> 60f; 2 -> 88f; else -> 72f }) * d
                     val extraH = (cfg.notifLines - 1).coerceIn(0, 2) * 18 * d * cfg.textScale +
                         (if (cfg.notifShowApp) 15 * d else 0f)
                     val nh = max(base + extraH, h + 28 * d)
@@ -365,7 +366,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             Mode.EXPANDED -> when (c) {
                 is Content.Music -> exp(202 * d)
                 is Content.Notif -> exp(notifExpandedHeight(c, full))
-                is Content.Call -> if (c.incoming) sizeFor(Mode.COMPACT, c) else exp(92 * d)
+                is Content.Call -> if (c.incoming) sizeFor(Mode.COMPACT, c) else exp(146 * d)
                 is Content.Timer -> exp(92 * d)
                 is Content.Nav -> exp(112 * d)
                 is Content.Progress -> exp(96 * d)
@@ -493,7 +494,8 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val w = sW.value
         val h = max(sH.value, 1f)
         val r = min(sR.value, h / 2).coerceAtLeast(0f)
-        val cx = width / 2f
+        // ganze Pixel → scharfe, ruhige Kanten (kein Flimmern um die Kamera)
+        val cx = (width / 2).toFloat()
         val top = topInset
         island.set(cx - w / 2, top, cx + w / 2, top + h)
 
@@ -512,8 +514,15 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         // --- Glow / Schatten ---
         bgPaint.clearShadowLayer()
         if (Build.VERSION.SDK_INT >= 28) {
-            if (cfg.notifAppGlow && c is Content.Notif && c.accent != null) {
-                bgPaint.setShadowLayer(16 * d, 0f, 3 * d, withAlpha(c.accent, 0.6f * ca))
+            val notifGlow: Int? = if (c is Content.Notif) when (cfg.notifGlowMode) {
+                1 -> c.accent ?: accentOf(null)
+                2 -> accentOf(null)
+                3 -> Color.WHITE
+                else -> null
+            } else null
+            if (notifGlow != null) {
+                val gs = cfg.notifGlowStrength.coerceIn(0, 100) / 100f
+                bgPaint.setShadowLayer((6 + 22 * gs) * d, 0f, 3 * d, withAlpha(notifGlow, (0.2f + 0.7f * gs) * ca))
             } else if (cfg.glow && c is Content.Music && c.info.playing) {
                 val s = cfg.glowStrength / 100f
                 bgPaint.setShadowLayer((8 + 18 * s) * d, 0f, 3 * d, withAlpha(accentOf(c), (0.25f + 0.6f * s) * ca))
@@ -1343,7 +1352,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
     private fun drawCallExpanded(canvas: Canvas, c: Content.Call, a: Float, interactive: Boolean) {
         val pad = 20 * d
-        val cy = island.centerY()
+        val cy = island.top + 50 * d
         val s = 52 * d
         avatar(canvas, c.avatar, island.left + pad + s / 2, cy, s, c.name, a)
         val br = 25 * d
@@ -1359,6 +1368,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         circleButton(canvas, hx, cy, br, RED, a, interactive, c.decline) { x, y, r ->
             Icons.phone(canvas, x, y, r, p, 135f)
         }
+        // Untere Reihe: Knöpfe der Telefon-App + „App öffnen“
+        val extra = ArrayList(c.actions)
+        c.open?.let { extra.add(NotifAction("App öffnen", it)) }
+        if (extra.isNotEmpty()) pillRow(canvas, extra, island.left + pad, island.right - pad, island.bottom - pad - 18 * d, a, interactive)
     }
 
     // ---- Navigation ----
@@ -1513,7 +1526,8 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val cx = island.centerX()
         val top = island.top + cfg.heightDp * d * 0.5f
         val bottom = island.bottom - 8 * d
-        val flicker = 1f + 0.03f * sin(t * 13f) + 0.02f * sin(t * 7.3f)
+        // sanftes „Atmen“ statt Flackern (wirkte wie Zittern)
+        val flicker = 1f + 0.012f * sin(t * 2.2f)
         val halfW = (island.width() * (0.16f + 0.3f * lvl)) * flicker
         val warm = 0xFFFFF4D6.toInt()
 
@@ -1731,7 +1745,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
     private fun drawNotif(canvas: Canvas, n: Content.Notif, a: Float) {
         val h = island.height()
-        val sc = when (cfg.notifSize) { 0 -> 0.88f; 2 -> 1.12f; else -> 1f }
+        val sc = when (cfg.notifSize) { 0 -> 0.88f; 2 -> 1.12f; else -> 1f } * (cfg.notifTextPct.coerceIn(70, 150) / 100f)
         val icon = min(46 * d * sc, min(h - 22 * d, 58 * d))
         val left = island.left + (min(h, 76 * d * sc) - icon) / 2 + 2 * d
         val iconRect = RectF(left, island.centerY() - icon / 2, left + icon, island.centerY() + icon / 2)
@@ -1888,7 +1902,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val l = StaticLayout.Builder.obtain(text, 0, text.length, tp, w)
             .setAlignment(Layout.Alignment.ALIGN_NORMAL)
             .setLineSpacing(1.5f * d, 1f)
-            .setMaxLines(6)
+            .setMaxLines(cfg.notifExpandedLines.coerceIn(2, 12))
             .setEllipsize(TextUtils.TruncateAt.END)
             .build()
         notifLayout = l

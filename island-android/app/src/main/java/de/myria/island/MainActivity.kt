@@ -892,8 +892,20 @@ class MainActivity : Activity() {
             switchRow("App-Name zeigen", Prefs.NOTIF_SHOW_APP, D.notifShowApp),
             switchRow("Uhrzeit zeigen", Prefs.NOTIF_SHOW_TIME, D.notifShowTime),
             switchRow("Runde Icons", Prefs.NOTIF_ICON_ROUND, D.notifIconRound),
-            switchRow("Leuchten in App-Farbe", Prefs.NOTIF_APP_GLOW, D.notifAppGlow, "Glow in der Farbe des App-Icons"),
         ), footer = "Tippe in der Vorschau auf „Nachricht“, um's direkt zu sehen."))
+        c.addView(section("Größe im Detail", listOf(
+            sliderRow("Höhe", Prefs.NOTIF_HEIGHT, D.notifHeightDp, 50, 130) { if (it <= 50) "Auto" else "$it dp" },
+            sliderRow("Textgröße", Prefs.NOTIF_TEXT, D.notifTextPct, 70, 150) { "$it %" },
+            sliderRow("Zeilen im großen Modus", Prefs.NOTIF_EXP_LINES, D.notifExpandedLines, 2, 12) { "$it" },
+        ), footer = "Höhe ganz links = automatisch passend zur gewählten Größe."))
+        c.addView(section("Leuchten", choiceRows(Prefs.NOTIF_GLOW_MODE, if (prefs.getBoolean(Prefs.NOTIF_APP_GLOW, false)) 1 else D.notifGlowMode, listOf(
+            "Aus" to null,
+            "App-Farbe" to "Glow in der Farbe des App-Icons",
+            "Akzentfarbe" to "Deine Akzentfarbe aus „Erscheinungsbild“",
+            "Weiß" to "Dezenter heller Schein",
+        )) + listOf(
+            sliderRow("Stärke", Prefs.NOTIF_GLOW_STRENGTH, D.notifGlowStrength, 0, 100) { "$it %" },
+        )))
         c.addView(section(null, listOf(
             switchRow("Mitteilungen in der Island", Prefs.NOTIFS, D.showNotifications),
             sliderRow("Anzeigedauer", Prefs.NOTIF_SECONDS, D.notifSeconds, 2, 12) { "$it s" },

@@ -310,6 +310,10 @@ class NotificationService : NotificationListenerService() {
                 decline = decline?.let { pi -> { sendPending(this, pi) } },
                 open = open,
                 pkg = pkg,
+                // Lautsprecher, Stumm … (ohne Annehmen/Ablehnen/Auflegen)
+                actions = actionsOf(n, sbn.key, false)
+                    .filter { !ANSWER.containsMatchIn(it.title) && !DECLINE.containsMatchIn(it.title) }
+                    .take(2),
             )
         }
 

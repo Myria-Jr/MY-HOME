@@ -124,6 +124,13 @@ data class IslandConfig(
     val notifShowTime: Boolean = true,
     val notifIconRound: Boolean = false,
     val notifAppGlow: Boolean = false,
+    /** 0 = Aus, 1 = App-Farbe, 2 = Akzentfarbe, 3 = Weiß */
+    val notifGlowMode: Int = 0,
+    val notifGlowStrength: Int = 60,
+    /** Banner-Höhe in dp, ≤ 50 = automatisch (nach „Größe“) */
+    val notifHeightDp: Int = 50,
+    val notifTextPct: Int = 100,
+    val notifExpandedLines: Int = 6,
     val idleTap: Int = 1,
     val hideInOwnerApp: Boolean = true,
 
@@ -342,6 +349,11 @@ object Prefs {
     const val NOTIF_ICON_ROUND = "notif_icon_round"
     const val NOTIF_APP_GLOW = "notif_app_glow"
     const val IDLE_TAP = "idle_tap"
+    const val NOTIF_GLOW_MODE = "notif_glow_mode"
+    const val NOTIF_GLOW_STRENGTH = "notif_glow_strength"
+    const val NOTIF_HEIGHT = "notif_height"
+    const val NOTIF_TEXT = "notif_text"
+    const val NOTIF_EXP_LINES = "notif_exp_lines"
     const val HIDE_OWNER = "hide_in_owner_app"
 
     const val TAP_EXPANDS = "tap_expands_v2"
@@ -466,6 +478,12 @@ object Prefs {
             notifShowTime = b(NOTIF_SHOW_TIME, d.notifShowTime),
             notifIconRound = b(NOTIF_ICON_ROUND, d.notifIconRound),
             notifAppGlow = b(NOTIF_APP_GLOW, d.notifAppGlow),
+            // alte Einstellung „Leuchten in App-Farbe“ übernehmen
+            notifGlowMode = i(NOTIF_GLOW_MODE, if (b(NOTIF_APP_GLOW, d.notifAppGlow)) 1 else d.notifGlowMode),
+            notifGlowStrength = i(NOTIF_GLOW_STRENGTH, d.notifGlowStrength),
+            notifHeightDp = i(NOTIF_HEIGHT, d.notifHeightDp),
+            notifTextPct = i(NOTIF_TEXT, d.notifTextPct),
+            notifExpandedLines = i(NOTIF_EXP_LINES, d.notifExpandedLines),
             idleTap = i(IDLE_TAP, d.idleTap),
             hideInOwnerApp = b(HIDE_OWNER, d.hideInOwnerApp),
 
@@ -509,7 +527,7 @@ object Prefs {
                 look(C.STYLE_CAPSULE, C.ACCENT_SYSTEM, null, 30, 100, 22, 58,
                     C.WAVE_LINE, C.PROGRESS_SQUIGGLE, C.CONTROL_FILLED, C.FONT_GOOGLE, C.LOOK_ANDROID, false, C.ANIM_ANDROID)
                 e.putInt(WIDTH, 96).putInt(HEIGHT, 30).putInt(NOTIF_STYLE, C.NOTIF_COMPACT)
-                    .putBoolean(NOTIF_SHOW_APP, true).putBoolean(NOTIF_ICON_ROUND, true).putBoolean(NOTIF_APP_GLOW, true)
+                    .putBoolean(NOTIF_SHOW_APP, true).putBoolean(NOTIF_ICON_ROUND, true).putInt(NOTIF_GLOW_MODE, 1)
                     // Kapsel sitzt immer um die Kamera, Antippen öffnet das Kontrollzentrum
                     .putBoolean(ALWAYS, true).putBoolean(IDLE_TOUCH_THROUGH, false).putInt(IDLE_TAP, 1)
             }

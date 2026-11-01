@@ -124,6 +124,8 @@ sealed class Content {
         val open: (() -> Unit)?,
         /** App, die den Anruf zeigt (zum Ausblenden, wenn sie offen ist) */
         val pkg: String = "",
+        /** Weitere Knöpfe der Telefon-App (Lautsprecher, Stumm …) */
+        val actions: List<NotifAction> = emptyList(),
     ) : Content() {
         override val priority get() = if (incoming) 100 else 90
     }

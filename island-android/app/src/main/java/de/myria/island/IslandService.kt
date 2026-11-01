@@ -211,25 +211,56 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         return f
     }
 
+    private var pendingShrink: Runnable? = null
+
+    /**
+     * Fix Zittern:
+     *  1. Breite hat immer dieselbe Gerade/Ungerade-Parität wie der Bildschirm → das Fenster
+     *     sitzt pixelgenau mittig, die Island springt nicht mehr um einen halben Pixel.
+     *  2. Beim Animieren nur EINMAL großzügig wachsen (Platz für den ganzen Bounce),
+     *     nicht bei jedem Nachfedern erneut.
+     *  3. Verkleinern erst, wenn die Island 250 ms ruhig ist – kein Hin-und-Her.
+     */
     private fun resizeWindow(w: Int, h: Int, settled: Boolean) {
         val cw = lp.width
         val ch = lp.height
-        val nw: Int
-        val nh: Int
-        if (settled) {
-            nw = w; nh = h
-        } else {
-            // Beim Animieren nur wachsen (mit etwas Luft für den Bounce) → kein Flackern
-            val slackW = (w * 0.08f + 12 * density).toInt()
-            val slackH = (h * 0.08f + 12 * density).toInt()
-            nw = if (w > cw) w + slackW else cw
-            nh = if (h > ch) h + slackH else ch
+        val sw = screenWidth()
+        fun parity(x: Int): Int {
+            var v = x.coerceAtMost(sw)
+            if ((sw - v) % 2 != 0) v += 1
+            return v.coerceAtMost(sw)
         }
-        if (abs(nw - cw) > 1 || abs(nh - ch) > 1) {
-            lp.width = nw
-            lp.height = nh
-            updateWindow()
+        if (!settled) {
+            pendingShrink?.let { handler.removeCallbacks(it) }
+            pendingShrink = null
+            val grow = w > cw || h > ch
+            if (!grow) return
+            val nw = if (w > cw) parity(w + (w * 0.22f + 24 * density).toInt()) else cw
+            val nh = if (h > ch) h + (h * 0.22f + 24 * density).toInt() else ch
+            apply(nw, nh)
+            return
         }
+        val nw = parity(w)
+        val nh = h
+        if (nw > cw || nh > ch) {
+            apply(maxOf(nw, cw), maxOf(nh, ch))
+            return
+        }
+        if (cw - nw <= 2 && ch - nh <= 2) return
+        if (pendingShrink != null) return
+        val r = Runnable {
+            pendingShrink = null
+            apply(nw, nh)
+        }
+        pendingShrink = r
+        handler.postDelayed(r, 250)
+    }
+
+    private fun apply(nw: Int, nh: Int) {
+        if (nw == lp.width && nh == lp.height) return
+        lp.width = nw
+        lp.height = nh
+        updateWindow()
     }
 
     private fun updateWindow() {

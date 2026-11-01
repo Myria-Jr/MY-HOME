@@ -385,6 +385,16 @@ class IslandController(
             c.off?.invoke()
             return
         }
+        // Anrufe: Antippen öffnet NICHT die Telefon-App, sondern die Steuerung in der Island
+        if (c is Content.Call) {
+            if (cfg.haptics) host.haptic(false)
+            when {
+                c.incoming -> {} // Annehmen / Ablehnen über die Knöpfe
+                view.mode == Mode.EXPANDED -> collapse()
+                else -> expand(c)
+            }
+            return
+        }
         if (view.mode == Mode.EXPANDED) {
             if (cfg.haptics) host.haptic(false)
             open(c)
@@ -419,6 +429,14 @@ class IslandController(
     }
 
     override fun onIslandLongPress() {
+        val call = view.target as? Content.Call
+        if (call != null) {
+            // Gedrückt halten → Telefon-App
+            if (cfg.haptics) host.haptic(true)
+            call.open?.invoke()
+            collapse()
+            return
+        }
         val c = view.target
         if (c == null) {
             // Leere Pille gedrückt halten
