@@ -556,7 +556,7 @@ fun hRow(ctx: Context): LinearLayout = LinearLayout(ctx).apply {
     gravity = Gravity.CENTER_VERTICAL
 }
 
-enum class Glyph { GEAR, PAINT, RULER, SPARKLE, ISLAND, NOTE, BELL, GRID, HAND, INFO, LOCK, LOCATION, BOLT, DROP, SPEAKER, SEARCH }
+enum class Glyph { GEAR, PAINT, RULER, SPARKLE, ISLAND, NOTE, BELL, GRID, HAND, INFO, LOCK, LOCATION, BOLT, DROP, SPEAKER, SEARCH, APPICON }
 
 /** Einstellungs-Icon im jeweiligen Look. */
 @SuppressLint("ViewConstructor")
@@ -696,6 +696,16 @@ class GlyphIcon(ctx: Context, private val color: Int, private val glyph: Glyph, 
                 path.cubicTo(cx - g * 0.38f, cy - g * 0.02f, cx - g * 0.12f, cy - g * 0.25f, cx, cy - g * 0.48f)
                 path.close()
                 c.drawPath(path, p)
+            }
+            Glyph.APPICON -> {
+                // App-Symbol: abgerundetes Quadrat mit Kapsel
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = s * 0.07f
+                r.set(cx - g * 0.42f, cy - g * 0.42f, cx + g * 0.42f, cy + g * 0.42f)
+                c.drawRoundRect(r, g * 0.18f, g * 0.18f, p)
+                p.style = Paint.Style.FILL
+                r.set(cx - g * 0.24f, cy - g * 0.09f, cx + g * 0.24f, cy + g * 0.09f)
+                c.drawRoundRect(r, g * 0.09f, g * 0.09f, p)
             }
             Glyph.SEARCH -> {
                 p.style = Paint.Style.STROKE

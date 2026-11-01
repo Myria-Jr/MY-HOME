@@ -152,6 +152,7 @@ class MainActivity : Activity() {
         "behavior" -> behaviorPage()
         "permissions" -> permissionsPage()
         "info" -> infoPage()
+        "icons" -> iconsPage()
         else -> null
     }
 
@@ -373,6 +374,8 @@ class MainActivity : Activity() {
                 value = designName(prefs.getInt(Prefs.DESIGN, D.design))) { open("design") },
             navRow("Erscheinungsbild", GlyphIcon(this, 0xFF0A84FF.toInt(), Glyph.PAINT, pal)) { open("appearance") },
             navRow("Liquid Glass", GlyphIcon(this, 0xFF32ADE6.toInt(), Glyph.DROP, pal)) { open("glass") },
+            navRow("App-Symbol", GlyphIcon(this, 0xFF1C1C1E.toInt(), Glyph.APPICON, pal),
+                value = iconName(prefs.getString(PREF_ICON, "classic") ?: "classic")) { open("icons") },
             navRow("Größe & Position", GlyphIcon(this, 0xFF30B0C7.toInt(), Glyph.RULER, pal)) { open("geometry") },
             navRow("Animation", GlyphIcon(this, 0xFFBF5AF2.toInt(), Glyph.SPARKLE, pal)) { open("animation") },
         )))
@@ -413,6 +416,7 @@ class MainActivity : Activity() {
         "behavior" -> "Gesten & Haptik"
         "permissions" -> "Berechtigungen"
         "info" -> "Info"
+        "icons" -> "App-Symbol"
         else -> ""
     }
 
@@ -1535,8 +1539,97 @@ class MainActivity : Activity() {
 
     private fun signed(v: Int) = if (v > 0) "+$v dp" else "$v dp"
 
+    // ==================================================================
+    // App-Symbol
+    // ==================================================================
+
+    private fun iconName(id: String) = ICONS.firstOrNull { it.first == id }?.second ?: "Klassisch"
+
+    private fun iconsPage() = page("App-Symbol", true) { c ->
+        val tiles = ArrayList<Pair<String, View>>()
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        fun mark() {
+            val now = prefs.getString(PREF_ICON, "classic") ?: "classic"
+            tiles.forEach { (id, v) ->
+                (v.background as GradientDrawable).setStroke(dpi(3f), if (id == now) pal.accent else Color.TRANSPARENT)
+            }
+        }
+        ICONS.chunked(4).forEach { row ->
+            val r = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            row.forEach { (id, name) ->
+                val col = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    gravity = Gravity.CENTER_HORIZONTAL
+                }
+                val frame = FrameLayout(this).apply {
+                    background = GradientDrawable().apply { cornerRadius = dp(22f); setColor(Color.TRANSPARENT) }
+                    setPadding(dpi(4f), dpi(4f), dpi(4f), dpi(4f))
+                }
+                val iv = ImageView(this).apply {
+                    val res = resources.getIdentifier("ic_launcher_$id", "mipmap", packageName)
+                    if (res != 0) try { setImageDrawable(getDrawable(res)) } catch (_: Exception) {}
+                    background = GradientDrawable().apply { cornerRadius = dp(18f); setColor(Color.TRANSPARENT) }
+                    clipToOutline = true
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                }
+                frame.addView(iv, FrameLayout.LayoutParams(dpi(64f), dpi(64f)))
+                col.addView(frame)
+                col.addView(TextView(this).apply {
+                    text = name
+                    textSize = 12f
+                    typeface = pal.font(500)
+                    setTextColor(pal.label)
+                    gravity = Gravity.CENTER
+                    setPadding(0, dpi(6f), 0, 0)
+                })
+                col.setOnClickListener {
+                    it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                    setAppIcon(id)
+                    mark()
+                }
+                tiles.add(id to frame)
+                r.addView(col, LinearLayout.LayoutParams(0, -2, 1f))
+            }
+            repeat(4 - row.size) { r.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
+            grid.addView(r, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(16f) })
+        }
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply { cornerRadius = dp(pal.cardRadius); setColor(pal.card) }
+            setPadding(dpi(8f), dpi(2f), dpi(8f), dpi(18f))
+            addView(grid)
+        }
+        c.addView(sectionHeader("Wähle dein Symbol"))
+        c.addView(card)
+        c.addView(footerText("Das Symbol auf dem Homescreen ändert sich nach ein paar Sekunden. Manche Launcher brauchen einen Neustart dafür. Mit „Themen-Symbolen“ (Android 13+) passt sich jedes Symbol deinen Farben an."))
+        mark()
+    }
+
+    private fun setAppIcon(id: String) {
+        if ((prefs.getString(PREF_ICON, "classic") ?: "classic") == id) return
+        val pm = packageManager
+        // Erst das neue einschalten, dann die anderen aus – so ist nie gar keins aktiv
+        for ((iid, _) in ICONS.sortedBy { if (it.first == id) 0 else 1 }) {
+            val cn = android.content.ComponentName(this, "$packageName.Icon" + iid.replaceFirstChar { it.uppercase() })
+            try {
+                pm.setComponentEnabledSetting(
+                    cn,
+                    if (iid == id) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP,
+                )
+            } catch (_: Exception) {}
+        }
+        prefs.edit().putString(PREF_ICON, id).apply()
+        Toast.makeText(this, "Symbol geändert ✨ – kann ein paar Sekunden dauern", Toast.LENGTH_SHORT).show()
+    }
+
     companion object {
         const val APP_NAME = "Atoll"
+        private const val PREF_ICON = "app_icon"
+        private val ICONS = listOf(
+            "classic" to "Klassisch", "light" to "Hell", "lagoon" to "Lagune", "sunset" to "Sunset",
+            "midnight" to "Mitternacht", "glass" to "Glas", "neon" to "Neon", "dots" to "Punkte",
+        )
         private const val STATE_PAGES = "pages"
         /** Eigene Tag-Keys (müssen wie Resource-IDs aussehen → 0x7f…) */
         private const val TAG_PREVIEW = 0x7f0f0001
@@ -1567,6 +1660,7 @@ class MainActivity : Activity() {
             "Sperrbildschirm Querformat durchklickbar Sichtbarkeit" to "behavior",
             "Berechtigungen Bedienungshilfe Bluetooth Standort" to "permissions",
             "Info Version Fehlerbericht Absturz zurücksetzen" to "info",
+            "App-Symbol Icon Logo Symbol Homescreen" to "icons",
         )
     }
 }
