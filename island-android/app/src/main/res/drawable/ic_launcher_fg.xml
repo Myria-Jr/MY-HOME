@@ -1,47 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Atoll: leuchtender Ring (das Atoll) um eine schwarze Kapsel (die Island) -->
+<!-- Atoll: weiße Kapsel (die Island) in einem feinen Ring (das Atoll) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Glow hinter dem Ring -->
     <path
-        android:pathData="M38,36h32a18,18 0 0 1 0,36h-32a18,18 0 0 1 0,-36z"
-        android:strokeWidth="9"
-        android:strokeAlpha="0.25"
-        android:fillColor="#00000000">
-        <aapt:attr name="android:strokeColor">
-            <gradient android:type="linear"
-                android:startX="20" android:startY="36" android:endX="88" android:endY="72"
-                android:startColor="#FF6CF5E1" android:endColor="#FFFF6EC7" />
-        </aapt:attr>
-    </path>
-    <!-- Ring -->
+        android:pathData="M41,42h26a12,12 0 0 1 0,24h-26a12,12 0 0 1 0,-24z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeAlpha="0.35"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000" />
     <path
-        android:pathData="M38,36h32a18,18 0 0 1 0,36h-32a18,18 0 0 1 0,-36z"
-        android:strokeWidth="4"
-        android:fillColor="#00000000">
-        <aapt:attr name="android:strokeColor">
-            <gradient android:type="linear"
-                android:startX="20" android:startY="36" android:endX="88" android:endY="72"
-                android:startColor="#FF7CF7E4" android:centerColor="#FF8FA8FF" android:endColor="#FFFF7AC6" />
-        </aapt:attr>
-    </path>
-    <!-- Kapsel -->
-    <path
-        android:fillColor="#FF000000"
-        android:pathData="M41,45h26a9,9 0 0 1 0,18h-26a9,9 0 0 1 0,-18z" />
-    <!-- Glanz auf der Kapsel -->
-    <path
-        android:fillColor="#16FFFFFF"
-        android:pathData="M42,46.5h24a7,4 0 0 1 0,5h-24a7,4 0 0 1 0,-5z" />
-    <!-- Cover-Punkt + Kamera -->
-    <path
-        android:fillColor="#FFFF7AC6"
-        android:pathData="M40.5,51h5a2,2 0 0 1 2,2v2a2,2 0 0 1 -2,2h-5a2,2 0 0 1 -2,-2v-2a2,2 0 0 1 2,-2z" />
-    <path
-        android:fillColor="#FF26345C"
-        android:pathData="M66,54m-2.6,0a2.6,2.6 0 1 1 5.2,0a2.6,2.6 0 1 1 -5.2,0" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M41,48h26a6,6 0 0 1 0,12h-26a6,6 0 0 1 0,-12z" />
 </vector>
