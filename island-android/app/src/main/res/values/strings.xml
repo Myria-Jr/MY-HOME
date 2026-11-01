@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lumora</string>
+    <string name="a11y_desc">Zeigt die Lumora-Island oben am Bildschirm an. Lumora liest dafür keine Bildschirminhalte – der Dienst wird nur gebraucht, um über der Statusleiste zeichnen zu dürfen.</string>
+</resources>
