@@ -848,6 +848,12 @@ class MainActivity : Activity() {
             switchRow("Internet", Prefs.NETWORK, D.showNetwork, "WLAN verbunden / offline"),
             switchRow("Wecker gestellt", Prefs.ALARM, D.showAlarm, "Zeigt kurz die Weckzeit"),
         )))
+        c.addView(section("Noch mehr Meldungen", StatusKinds.all.map { k ->
+            switchRow(k.label, "st_" + k.id, k.def, k.sub.takeIf { it.isNotEmpty() })
+        }, footer = "Jede Meldung erscheint kurz in der Island – mit Symbol im Stil deines Designs."))
+        c.addView(section(null, listOf(
+            permRow("Kalender-Zugriff", "Für Termin-Erinnerungen", Manifest.permission.READ_CALENDAR),
+        )))
         c.addView(section("Akku sparen", listOf(
             switchRow("Im Energiesparmodus reduzieren", Prefs.POWER_SAVE, D.powerSaveReduce,
                 "Keine Wellenform, kein Glow, ruhige Animationen"),
@@ -1210,6 +1216,10 @@ class MainActivity : Activity() {
         chip("🎧  AirPods") { demoTransient(Content.Device("AirPods Pro", true, 82)) }
         chip("🌙  Fokus") { demoFocus() }
         chip("✈  Flugmodus") { demoTransient(AirplaneContent(true)) }
+        chip("🍃  Energiesparen") { demoTransient(StatusContent("powersave", "Energiesparen an", SGlyph.LEAF, 0xFFFFD60A.toInt(), widthDp = 190f)) }
+        chip("📶  Hotspot") { demoTransient(StatusContent("hotspot", "Hotspot an", SGlyph.HOTSPOT, 0xFF30D158.toInt())) }
+        chip("📅  Termin") { demoTransient(StatusContent("calendar", "Zahnarzt · in 10 min", SGlyph.CALENDAR, 0xFFFF453A.toInt(), widthDp = 230f)) }
+        chip("ᛒ  Bluetooth") { demoTransient(StatusContent("bluetooth", "Bluetooth an", SGlyph.BLUETOOTH, 0xFF0A84FF.toInt(), widthDp = 160f)) }
         chip("🔓  Entsperren") { demoTransient(UnlockContent()) }
         chip("🔕  Lautlos") { demoRinger() }
         chip("📍  Punkte") { demoPrivacy() }

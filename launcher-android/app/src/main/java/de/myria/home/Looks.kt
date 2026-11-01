@@ -47,6 +47,7 @@ enum class Shape(val title: String) {
     TEARDROP("Tropfen"),
     FLOWER("Blume"),
     HEXAGON("Sechseck"),
+    SYSTEM("Original"),
 }
 
 /** Icon-Stile wie bei iOS 18/26 */
@@ -159,6 +160,46 @@ class HomePrefs(ctx: Context) {
     var hidden: Set<String>
         get() = sp.getStringSet("hidden", null)?.toSet() ?: emptySet()
         set(v) = sp.edit().putStringSet("hidden", v).apply()
+    /** Paketname des Icon-Packs, null = keins */
+    var iconPack: String?
+        get() = sp.getString("icon_pack", null)?.takeIf { it.isNotBlank() }
+        set(v) = sp.edit().putString("icon_pack", v ?: "").apply()
+    /** Benachrichtigungspunkte auf Icons */
+    var badges: Boolean
+        get() = b("badges", true)
+        set(v) = pb("badges", v)
+    /** Zahl statt Punkt */
+    var badgeCount: Boolean
+        get() = b("badge_count", false)
+        set(v) = pb("badge_count", v)
+    /** App-Übersicht: 0 A–Z · 1 Meistgenutzt · 2 Neueste zuerst */
+    var drawerSort: Int
+        get() = i("drawer_sort", 0)
+        set(v) = pi("drawer_sort", v)
+    /** Heute-Seite: Widgets (App-Widget-IDs) */
+    var widgets: List<Int>
+        get() = sp.getString("widgets", null)?.split('|')?.mapNotNull { it.toIntOrNull() } ?: emptyList()
+        set(v) = sp.edit().putString("widgets", v.joinToString("|")).apply()
+
+    // ---- Ordner: Einträge "folder:<id>" in favorites ----
+    fun folderName(id: String) = sp.getString("fname_$id", null) ?: "Ordner"
+    fun setFolderName(id: String, n: String) = sp.edit().putString("fname_$id", n).apply()
+    fun folderApps(id: String): List<String> =
+        sp.getString("fapps_$id", null)?.split('|')?.filter { it.isNotBlank() } ?: emptyList()
+    fun setFolderApps(id: String, v: List<String>) = sp.edit().putString("fapps_$id", v.joinToString("|")).apply()
+    fun deleteFolder(id: String) {
+        sp.edit().remove("fname_$id").remove("fapps_$id").apply()
+        favorites = favorites - "folder:$id"
+    }
+    val folderIds: List<String> get() = favorites.filter { it.startsWith("folder:") }.map { it.removePrefix("folder:") }
+
+    /** Einmalige Korrekturen beim Update */
+    fun migrate() {
+        if (i("schema", 0) < 3) {
+            // 3.0: erzwungenes Schwarz-Weiß entfernen, Original-Form für Nicht-Apple-Looks
+            sp.edit().putBoolean("mono", false).putInt("schema", 3).apply()
+        }
+    }
 
     fun label(key: String, def: String) = sp.getString("label_$key", null)?.takeIf { it.isNotBlank() } ?: def
     fun setLabel(key: String, v: String?) =
@@ -269,6 +310,7 @@ object Looks {
                 }
                 p.close()
             }
+            Shape.SYSTEM -> p.addRoundRect(0f, 0f, s, s, s * 0.32f, s * 0.32f, Path.Direction.CW)
         }
         return p
     }
@@ -292,28 +334,48 @@ object Looks {
     }
 
     /** Durchschnittsfarbe am Rand eines alten (nicht-adaptiven) Icons → passender Hintergrund */
-    private fun edgeColor(dr: Drawable): Int {
+    /** Randfarbe eines alten Icons + ob es bis zum Rand gefüllt ist (dann nicht verkleinern) */
+    private fun edgeInfo(dr: Drawable): Pair<Int, Boolean> {
         return try {
             val b = Bitmap.createBitmap(24, 24, Bitmap.Config.ARGB_8888)
             dr.setBounds(0, 0, 24, 24)
             dr.draw(Canvas(b))
             var r = 0L; var g = 0L; var bl = 0L; var n = 0
-            for (i in 0 until 24) for ((x, y) in listOf(i to 2, i to 21, 2 to i, 21 to i)) {
+            for (i in 0 until 24) for ((x, y) in listOf(i to 1, i to 22, 1 to i, 22 to i)) {
                 val c = b.getPixel(x, y)
                 if (Color.alpha(c) > 200) { r += Color.red(c); g += Color.green(c); bl += Color.blue(c); n++ }
             }
-            if (n < 10) Color.WHITE else Color.rgb((r / n).toInt(), (g / n).toInt(), (bl / n).toInt())
-        } catch (_: Exception) { Color.WHITE }
+            // Ecken transparent → rundes/geformtes Icon → auf hellen Hintergrund setzen
+            val corner = Color.alpha(b.getPixel(1, 1)) > 200 && Color.alpha(b.getPixel(22, 22)) > 200
+            val col = if (n < 10) Color.WHITE else Color.rgb((r / n).toInt(), (g / n).toInt(), (bl / n).toInt())
+            col to (corner && n > 80)
+        } catch (_: Exception) { Color.WHITE to false }
     }
 
     /**
      * App-Icon in Form + Stil bringen (weiche Kanten).
      * Stile: Standard · Dunkel (iOS 18 Dark) · Getönt (iOS 18 Tinted) · Klar (iOS 26 Clear/Glas)
      */
-    fun icon(key: String, dr: Drawable, sizePx: Int, shape: Shape, style: Int, tint: Int, mono: Boolean): Bitmap {
-        val ck = "$key/${shape.name}/$sizePx/$style/$tint/$mono"
+    fun icon(key: String, dr: Drawable, sizePx: Int, shape: Shape, style: Int, tint: Int, mono: Boolean, pack: Boolean = false): Bitmap {
+        val ck = "$key/${shape.name}/$sizePx/$style/$tint/$mono/$pack"
         cache.get(ck)?.let { return it }
         val s = sizePx.coerceAtLeast(8)
+        // Icon-Pack oder „Original“: Icon so lassen, wie es ist (nur Größe)
+        if (style == IconStyle.STANDARD && (pack || shape == Shape.SYSTEM)) {
+            val b = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+            val bc = Canvas(b)
+            if (dr is AdaptiveIconDrawable && !pack) {
+                // System-Maske des Geräts (z. B. Pixel-Kreis, Samsung-Squircle)
+                dr.setBounds(0, 0, s, s)
+                dr.draw(bc)
+            } else {
+                dr.setBounds(0, 0, s, s)
+                dr.draw(bc)
+            }
+            val out = if (mono) monochrome(b) else b
+            cache.put(ck, out)
+            return out
+        }
         val bmp = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
         val c = Canvas(bmp)
         val layer = c.saveLayer(0f, 0f, s.toFloat(), s.toFloat(), null)
@@ -374,9 +436,11 @@ object Looks {
                 it.colorFilter = null
             }
         } else {
-            // Altes Icon: passender Hintergrund + Icon groß einpassen (nicht mehr als Quadrat im Quadrat)
-            if (style == IconStyle.STANDARD) c.drawColor(edgeColor(dr)) else styledBackground()
-            val inset = (s * 0.1f).toInt()
+            // Altes Icon: randgefüllte Icons füllen die Form; runde/kleine Icons kommen
+            // verkleinert auf einen weißen Hintergrund (wie bei Pixel/One UI) statt verzerrt
+            val (edge, full) = edgeInfo(dr)
+            if (style == IconStyle.STANDARD) c.drawColor(if (full) edge else Color.WHITE) else styledBackground()
+            val inset = (s * if (full) 0.0f else 0.17f).toInt()
             dr.setBounds(inset, inset, s - inset, s - inset)
             dr.colorFilter = fgFilter
             dr.draw(c)

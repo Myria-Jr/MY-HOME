@@ -217,6 +217,51 @@ class AirplaneContent(val on: Boolean) : Content() {
     override val expandable get() = false
 }
 
+/**
+ * Allgemeine System-Meldung (Energiesparen, Hotspot, NFC, App installiert, Termin …).
+ * [app] = optionales App-Symbol statt Glyph.
+ */
+class StatusContent(
+    val kind: String,
+    val title: String,
+    val glyph: Int,
+    val color: Int,
+    val app: android.graphics.Bitmap? = null,
+    val widthDp: Float = 150f,
+) : Content() {
+    override val key get() = "status_$kind"
+    override val expandable get() = false
+}
+
+/** Arten von System-Meldungen – mit Name & Standard für die Einstellungen */
+object StatusKinds {
+    class Kind(val id: String, val label: String, val sub: String, val def: Boolean = true)
+    val all = listOf(
+        Kind("powersave", "Energiesparmodus", "An / aus"),
+        Kind("full", "Vollständig geladen", "Wenn der Akku 100 % erreicht"),
+        Kind("bluetooth", "Bluetooth an / aus", ""),
+        Kind("hotspot", "Hotspot", "Mobiler Hotspot an / aus"),
+        Kind("nfc", "NFC", "An / aus"),
+        Kind("location", "Standort an / aus", ""),
+        Kind("darkmode", "Dunkelmodus", "Hell / dunkel gewechselt"),
+        Kind("rotation", "Automatisch drehen", "Drehsperre an / aus"),
+        Kind("apps", "Apps installiert / entfernt", "Mit App-Symbol"),
+        Kind("usb", "USB verbunden", "Datenkabel am Computer"),
+        Kind("jack", "Kopfhörer-Kabel", "Klinke eingesteckt"),
+        Kind("calendar", "Termine", "10 Minuten vorher (braucht Kalender-Zugriff)"),
+        Kind("storage", "Speicher fast voll", "Unter 5 % frei"),
+        Kind("screentime", "Bildschirmzeit", "Nach 1 Stunde am Stück", def = false),
+    )
+}
+
+/** Symbole für [StatusContent] */
+object SGlyph {
+    const val LEAF = 0; const val HOTSPOT = 1; const val NFC = 2; const val LOCATION = 3; const val MOON = 4
+    const val DOWNLOAD = 5; const val TRASH = 6; const val USB = 7; const val HEADPHONES = 8; const val ROTATE = 9
+    const val CALENDAR = 10; const val STORAGE = 11; const val BLUETOOTH = 12; const val CHECK = 13; const val CLOCK = 14
+    const val SUN = 15; const val BOLT = 16
+}
+
 /** Schloss-Animation beim Entsperren (wie Face ID) */
 class UnlockContent : Content() {
     override val key get() = "unlock"

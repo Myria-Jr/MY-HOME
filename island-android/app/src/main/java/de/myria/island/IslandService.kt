@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
+import android.graphics.Color
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -129,6 +130,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         IslandBus.serviceRunning = true
 
         registerSystemReceivers()
+        registerStatusWatchers()
         registerPrivacyWatchers()
         registerNetwork()
         OwnTimers.onChange = { pushLive() }
@@ -195,6 +197,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         IslandBus.remove(this)
         Prefs.sp(this).unregisterOnSharedPreferenceChangeListener(this)
         try { unregisterReceiver(systemReceiver) } catch (_: Exception) {}
+        unregisterStatusWatchers()
         try { unregisterReceiver(btReceiver) } catch (_: Exception) {}
         unregisterPrivacyWatchers()
         unregisterNetwork()
@@ -211,6 +214,10 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
+        val night = (newConfig.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        if (lastNight != null && lastNight != night) status("darkmode", if (night) "Dunkelmodus" else "Heller Modus",
+            if (night) SGlyph.MOON else SGlyph.SUN, if (night) 0xFF7D7AFF.toInt() else 0xFFFFD60A.toInt(), 160f)
+        lastNight = night
         applyPosition()
         updateWindow()
         landscape = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -776,6 +783,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                     lastPlugged = plugged
                     lastLevel = pct
                     if (was != null && !was && plugged) controller?.showTransient(state)
+                    if (plugged && pct >= 100 && prevLevel in 0..99) status("full", "Voll geladen", SGlyph.BOLT, 0xFF30D158.toInt(), 150f)
                     if (!plugged && prevLevel >= 0 &&
                         ((prevLevel > 20 && pct <= 20) || (prevLevel > 10 && pct <= 10))
                     ) {
@@ -816,7 +824,12 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                 Intent.ACTION_AIRPLANE_MODE_CHANGED -> {
                     controller?.showTransient(AirplaneContent(intent.getBooleanExtra("state", false)))
                 }
-                android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> controller?.cfg = effective()
+                android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> {
+                    controller?.cfg = effective()
+                    val on = (getSystemService(POWER_SERVICE) as android.os.PowerManager).isPowerSaveMode
+                    status("powersave", if (on) "Energiesparen an" else "Energiesparen aus", SGlyph.LEAF,
+                        if (on) 0xFFFFD60A.toInt() else 0xFF8E8E93.toInt(), 190f)
+                }
                 android.app.AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED -> updateNextAlarm(true)
                 Intent.ACTION_SCREEN_OFF -> {
                     screenOff = true
@@ -830,6 +843,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                     applyPrivacy()
                 }
                 Intent.ACTION_USER_PRESENT -> {
+                    onUnlockedChecks()
                     val wasLocked = locked
                     locked = false
                     screenOff = false
@@ -841,6 +855,199 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                 }
             }
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Weitere System-Meldungen (Hotspot, NFC, Bluetooth, Apps, USB, Termine …)
+    // ------------------------------------------------------------------
+
+    private var lastNight: Boolean? = null
+    private var lastLocation: Boolean? = null
+    private var lastRotation: Int? = null
+    private var unlockStart = 0L
+    private var screenTimeShown = false
+    private var lastStorageCheck = 0L
+    private val shownEvents = HashSet<Long>()
+
+    private fun status(kind: String, title: String, glyph: Int, color: Int, widthDp: Float = 150f, app: android.graphics.Bitmap? = null) {
+        handler.post { controller?.showTransient(StatusContent(kind, title, glyph, color, app, widthDp)) }
+    }
+
+    private val statusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (isInitialStickyBroadcast) return
+            when (intent.action) {
+                "android.net.wifi.WIFI_AP_STATE_CHANGED" -> when (intent.getIntExtra("wifi_state", -1)) {
+                    13 -> status("hotspot", "Hotspot an", SGlyph.HOTSPOT, 0xFF30D158.toInt(), 150f)
+                    11 -> status("hotspot", "Hotspot aus", SGlyph.HOTSPOT, 0xFF8E8E93.toInt(), 150f)
+                }
+                "android.nfc.action.ADAPTER_STATE_CHANGED" -> when (intent.getIntExtra("android.nfc.extra.ADAPTER_STATE", -1)) {
+                    3 -> status("nfc", "NFC an", SGlyph.NFC, 0xFF0A84FF.toInt(), 120f)
+                    1 -> status("nfc", "NFC aus", SGlyph.NFC, 0xFF8E8E93.toInt(), 120f)
+                }
+                android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED -> when (intent.getIntExtra(android.bluetooth.BluetoothAdapter.EXTRA_STATE, -1)) {
+                    android.bluetooth.BluetoothAdapter.STATE_ON -> status("bluetooth", "Bluetooth an", SGlyph.BLUETOOTH, 0xFF0A84FF.toInt(), 160f)
+                    android.bluetooth.BluetoothAdapter.STATE_OFF -> status("bluetooth", "Bluetooth aus", SGlyph.BLUETOOTH, 0xFF8E8E93.toInt(), 160f)
+                }
+                android.location.LocationManager.MODE_CHANGED_ACTION -> {
+                    val on = try { (getSystemService(LOCATION_SERVICE) as android.location.LocationManager).isLocationEnabled } catch (_: Exception) { return }
+                    if (on != lastLocation) {
+                        lastLocation = on
+                        status("location", if (on) "Standort an" else "Standort aus", SGlyph.LOCATION,
+                            if (on) 0xFF0A84FF.toInt() else 0xFF8E8E93.toInt(), 150f)
+                    }
+                }
+                "android.hardware.usb.action.USB_STATE" -> {
+                    val connected = intent.getBooleanExtra("connected", false)
+                    val data = intent.getBooleanExtra("mtp", false) || intent.getBooleanExtra("ptp", false) || intent.getBooleanExtra("adb", false)
+                    if (connected && data) status("usb", "USB verbunden", SGlyph.USB, Color.WHITE, 160f)
+                }
+                AudioManager.ACTION_HEADSET_PLUG -> {
+                    if (intent.getIntExtra("state", 0) == 1) status("jack", "Kopfhörer", SGlyph.HEADPHONES, Color.WHITE, 140f)
+                }
+            }
+        }
+    }
+
+    private val pkgStatusReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            val pkg = intent.data?.schemeSpecificPart ?: return
+            val replacing = intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)
+            val pm = packageManager
+            when (intent.action) {
+                Intent.ACTION_PACKAGE_ADDED -> {
+                    val name = try { pm.getApplicationLabel(pm.getApplicationInfo(pkg, 0)).toString() } catch (_: Exception) { return }
+                    val icon = try { drawableToBitmap(pm.getApplicationIcon(pkg)) } catch (_: Exception) { null }
+                    status("apps", if (replacing) "$name aktualisiert" else "$name installiert", SGlyph.DOWNLOAD, 0xFF0A84FF.toInt(),
+                        (110f + name.length * 7.5f).coerceIn(170f, 300f), icon)
+                }
+                Intent.ACTION_PACKAGE_FULLY_REMOVED -> status("apps", "App entfernt", SGlyph.TRASH, 0xFFFF453A.toInt(), 150f)
+            }
+        }
+    }
+
+    private fun drawableToBitmap(d: android.graphics.drawable.Drawable): android.graphics.Bitmap {
+        val sz = (48 * density).toInt()
+        val b = android.graphics.Bitmap.createBitmap(sz, sz, android.graphics.Bitmap.Config.ARGB_8888)
+        d.setBounds(0, 0, sz, sz)
+        d.draw(android.graphics.Canvas(b))
+        return b
+    }
+
+    private val rotationObserver = object : android.database.ContentObserver(handler) {
+        override fun onChange(selfChange: Boolean) {
+            val v = try { android.provider.Settings.System.getInt(contentResolver, android.provider.Settings.System.ACCELEROMETER_ROTATION) } catch (_: Exception) { return }
+            if (lastRotation != null && lastRotation != v)
+                status("rotation", if (v == 1) "Drehen an" else "Drehsperre", SGlyph.ROTATE, if (v == 1) Color.WHITE else 0xFFFF9F0A.toInt(), 150f)
+            lastRotation = v
+        }
+    }
+
+    /** Minütlich: Termine & Bildschirmzeit */
+    private val minuteTick = object : Runnable {
+        override fun run() {
+            checkCalendar()
+            checkScreenTime()
+            handler.postDelayed(this, 60_000L)
+        }
+    }
+
+    private fun registerStatusWatchers() {
+        lastNight = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        lastLocation = try { (getSystemService(LOCATION_SERVICE) as android.location.LocationManager).isLocationEnabled } catch (_: Exception) { null }
+        lastRotation = try { android.provider.Settings.System.getInt(contentResolver, android.provider.Settings.System.ACCELEROMETER_ROTATION) } catch (_: Exception) { null }
+        unlockStart = System.currentTimeMillis()
+        val f = IntentFilter().apply {
+            addAction("android.net.wifi.WIFI_AP_STATE_CHANGED")
+            addAction("android.nfc.action.ADAPTER_STATE_CHANGED")
+            addAction(android.bluetooth.BluetoothAdapter.ACTION_STATE_CHANGED)
+            addAction(android.location.LocationManager.MODE_CHANGED_ACTION)
+            addAction("android.hardware.usb.action.USB_STATE")
+            addAction(AudioManager.ACTION_HEADSET_PLUG)
+        }
+        val pf = IntentFilter().apply {
+            addAction(Intent.ACTION_PACKAGE_ADDED)
+            addAction(Intent.ACTION_PACKAGE_FULLY_REMOVED)
+            addDataScheme("package")
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= 33) {
+                registerReceiver(statusReceiver, f, Context.RECEIVER_EXPORTED)
+                registerReceiver(pkgStatusReceiver, pf, Context.RECEIVER_EXPORTED)
+            } else {
+                registerReceiver(statusReceiver, f)
+                registerReceiver(pkgStatusReceiver, pf)
+            }
+        } catch (_: Exception) {}
+        try {
+            contentResolver.registerContentObserver(
+                android.provider.Settings.System.getUriFor(android.provider.Settings.System.ACCELEROMETER_ROTATION), false, rotationObserver)
+        } catch (_: Exception) {}
+        handler.postDelayed(minuteTick, 60_000L)
+    }
+
+    private fun unregisterStatusWatchers() {
+        try { unregisterReceiver(statusReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(pkgStatusReceiver) } catch (_: Exception) {}
+        try { contentResolver.unregisterContentObserver(rotationObserver) } catch (_: Exception) {}
+        handler.removeCallbacks(minuteTick)
+    }
+
+    private fun onUnlockedChecks() {
+        unlockStart = System.currentTimeMillis()
+        screenTimeShown = false
+        // Speicher höchstens alle 12 h prüfen
+        if (System.currentTimeMillis() - lastStorageCheck > 12 * 3600_000L) {
+            lastStorageCheck = System.currentTimeMillis()
+            try {
+                val st = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+                val free = st.availableBytes.toDouble() / st.totalBytes.coerceAtLeast(1)
+                if (free < 0.05) handler.postDelayed({
+                    status("storage", "Speicher fast voll", SGlyph.STORAGE, 0xFFFF9F0A.toInt(), 200f)
+                }, 2500)
+            } catch (_: Exception) {}
+        }
+    }
+
+    private fun checkScreenTime() {
+        if (screenOff || locked || screenTimeShown || "screentime" !in cfg.statusOn) return
+        val mins = (System.currentTimeMillis() - unlockStart) / 60_000L
+        if (mins >= 60) {
+            screenTimeShown = true
+            status("screentime", "1 Std. am Handy", SGlyph.CLOCK, 0xFF64D2FF.toInt(), 170f)
+        }
+    }
+
+    private fun checkCalendar() {
+        if ("calendar" !in cfg.statusOn || screenOff) return
+        if (checkSelfPermission(android.Manifest.permission.READ_CALENDAR) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        Thread {
+            try {
+                val now = System.currentTimeMillis()
+                val uri = android.provider.CalendarContract.Instances.CONTENT_URI.buildUpon().also {
+                    android.content.ContentUris.appendId(it, now + 9 * 60_000L)
+                    android.content.ContentUris.appendId(it, now + 11 * 60_000L)
+                }.build()
+                contentResolver.query(uri, arrayOf(
+                    android.provider.CalendarContract.Instances.EVENT_ID,
+                    android.provider.CalendarContract.Instances.TITLE,
+                    android.provider.CalendarContract.Instances.BEGIN,
+                    android.provider.CalendarContract.Instances.ALL_DAY,
+                ), null, null, null)?.use { cur ->
+                    while (cur.moveToNext()) {
+                        val id = cur.getLong(0)
+                        val title = cur.getString(1) ?: "Termin"
+                        val begin = cur.getLong(2)
+                        if (cur.getInt(3) == 1 || begin < now + 8 * 60_000L) continue
+                        if (!shownEvents.add(id * 31 + begin)) continue
+                        val mins = ((begin - now) / 60_000L).coerceAtLeast(1)
+                        val t = "$title · in $mins min"
+                        status("calendar", t, SGlyph.CALENDAR, 0xFFFF453A.toInt(), (90f + t.length * 7.2f).coerceIn(180f, 320f))
+                        break
+                    }
+                }
+            } catch (_: Exception) {}
+        }.start()
     }
 
     private fun registerSystemReceivers() {

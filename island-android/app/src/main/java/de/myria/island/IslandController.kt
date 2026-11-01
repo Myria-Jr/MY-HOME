@@ -201,6 +201,7 @@ class IslandController(
         is TorchContent -> cfg.showTorch
         is FocusContent -> cfg.showFocus
         is AirplaneContent -> cfg.showAirplane
+        is StatusContent -> c.kind in cfg.statusOn
         is NetworkContent -> cfg.showNetwork
         is HeatContent -> cfg.tempWarning
         is AlarmContent -> cfg.showAlarm
@@ -229,6 +230,7 @@ class IslandController(
         val ms = when (c) {
             is VolumeContent -> 1600L
             is FocusContent, is AirplaneContent -> 2200L
+            is StatusContent -> if (c.kind == "calendar") 6000L else 2600L
             is Content.Notif -> cfg.notifSeconds * 1000L + if (cfg.notifAutoExpand) 3000L else 0L
             is Content.Ringer -> 2200L
             is UnlockContent -> 1500L
@@ -414,7 +416,7 @@ class IslandController(
             }
             is Content.Charging -> if (c.plugged && cfg.chargeDetails) expand(c) else dismissTransient()
             is Content.Ringer, is Content.Device, is UnlockContent, is VolumeContent, is FocusContent,
-            is AirplaneContent, is NetworkContent, is HeatContent, is AlarmContent -> dismissTransient()
+            is AirplaneContent, is NetworkContent, is HeatContent, is AlarmContent, is StatusContent -> dismissTransient()
             else -> tapPersistent(c)
         }
     }

@@ -72,6 +72,11 @@ class HomeActivity : Activity() {
     private var builtFor = ""
     private val wiggles = ArrayList<ValueAnimator>()
     private val homeIcons = ArrayList<FrameLayout>()
+    /** Benachrichtigungspunkte: Paket → Punkt-Views */
+    private val badgeViews = java.util.WeakHashMap<TextView, String>()
+    private lateinit var widgetHost: android.appwidget.AppWidgetHost
+    private var loadedPack: String? = "\u0000"
+    private var folderOverlay: View? = null
 
     // Fix: GestureDetector braucht einen fertigen Context → erst in onCreate anlegen
     // (vorher stürzte der Launcher direkt beim Start ab)
@@ -89,6 +94,9 @@ class HomeActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = HomePrefs(this)
+        prefs.migrate()
+        widgetHost = android.appwidget.AppWidgetHost(this, 0x4C55)
+        BadgeService.onChange = { updateBadges() }
         gestures = GestureDetector(this, gestureListener).apply { setIsLongpressEnabled(false) }
         doubleTapDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onDoubleTap(e: MotionEvent): Boolean {
@@ -142,8 +150,20 @@ class HomeActivity : Activity() {
         window.decorView.systemUiVisibility = flags
     }
 
+    override fun onStart() {
+        super.onStart()
+        try { widgetHost.startListening() } catch (_: Exception) {}
+    }
+
+    override fun onStop() {
+        try { widgetHost.stopListening() } catch (_: Exception) {}
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
+        if (prefs.iconPack != loadedPack && loadedPack != "\u0000") { Looks.clearCache(); loadApps() }
+        updateBadges()
         if (signature() != builtFor) {
             Looks.clearCache()
             applySystemBars()
@@ -169,6 +189,7 @@ class HomeActivity : Activity() {
     override fun onBackPressed() {
         when {
             drawerOpen -> closeDrawer()
+            folderOverlay != null -> closeFolder()
             editMode -> setEditMode(false)
             else -> pager.toPage(pager.home)
         }
@@ -178,6 +199,7 @@ class HomeActivity : Activity() {
         super.onNewIntent(intent)
         // Home-Taste: alles schließen, zurück zur ersten Seite
         if (drawerOpen) closeDrawer()
+        closeFolder()
         if (editMode) setEditMode(false)
         if (::pager.isInitialized) pager.toPage(pager.home)
     }
@@ -200,8 +222,10 @@ class HomeActivity : Activity() {
 
     private fun loadApps() {
         Thread {
+            val pack = prefs.iconPack
             Apps.load(this)
             main.post {
+                loadedPack = pack
                 if (isFinishing || isDestroyed) return@post
                 if (!prefs.initialized) {
                     val (fav, dock) = Apps.defaults(this)
@@ -340,11 +364,33 @@ class HomeActivity : Activity() {
         frame.addView(col, FrameLayout.LayoutParams(-1, -2))
         val px = dpi(sizeDp.toFloat())
         val iv = ImageView(this).apply {
-            setImageBitmap(Looks.icon(app.key, app.icon, px, prefs.effectiveShape, prefs.iconStyle, prefs.tint,
-                prefs.monoIcons || (look == Look.NOTHING && prefs.iconStyle == IconStyle.STANDARD)))
-            elevation = if (inDock || look == Look.APPLE || look == Look.NOTHING) 0f else dp(2f)
+            setImageBitmap(appIcon(app, px))
         }
-        col.addView(iv, LinearLayout.LayoutParams(px, px))
+        // Icon + Benachrichtigungspunkt
+        val iconBox = FrameLayout(this)
+        iconBox.addView(iv, FrameLayout.LayoutParams(px, px))
+        val dotSize = if (prefs.badgeCount) dpi(18f) else dpi(11f)
+        val dot = TextView(this).apply {
+            textSize = 10f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            typeface = Looks.font(this@HomeActivity, look, 700)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(9f)
+                setColor(if (look == Look.NOTHING) 0xFFD71921.toInt() else if (look == Look.APPLE) 0xFFFF3B30.toInt() else accentColor())
+                setStroke(dpi(1.5f), 0x33000000)
+            }
+            visibility = View.GONE
+            minWidth = dotSize
+        }
+        iconBox.addView(dot, FrameLayout.LayoutParams(-2, dotSize, Gravity.TOP or Gravity.END).apply {
+            topMargin = -dotSize / 4; rightMargin = -dotSize / 4
+        })
+        iconBox.clipChildren = false
+        badgeViews[dot] = app.component.packageName
+        applyBadge(app.component.packageName, dot)
+        col.clipChildren = false
+        col.addView(iconBox, LinearLayout.LayoutParams(px, px))
         if (showLabel) col.addView(TextView(this).apply {
             text = prefs.label(app.key, app.label)
             setTextColor(if (inDock || !onHome) Color.WHITE else textColor)
@@ -404,17 +450,306 @@ class HomeActivity : Activity() {
         return frame
     }
 
+    private fun appIcon(app: AppInfo, px: Int) =
+        Looks.icon(app.key, app.icon, px, prefs.effectiveShape, prefs.iconStyle, prefs.tint, prefs.monoIcons, app.packIcon)
+
+    private fun accentColor(): Int = if (Build.VERSION.SDK_INT >= 31)
+        try { getColor(android.R.color.system_accent1_500) } catch (_: Exception) { 0xFF3D7BF7.toInt() } else 0xFF3D7BF7.toInt()
+
+    private fun applyBadge(pkg: String, dot: TextView) {
+        val n = if (prefs.badges) BadgeService.counts[pkg] ?: 0 else 0
+        dot.visibility = if (n > 0) View.VISIBLE else View.GONE
+        dot.text = if (prefs.badgeCount && n > 0) (if (n > 99) "99+" else "$n") else ""
+        if (prefs.badgeCount) dot.setPadding(dpi(4f), 0, dpi(4f), 0)
+    }
+
+    private fun updateBadges() {
+        if (isFinishing) return
+        badgeViews.entries.toList().forEach { (v, pkg) -> applyBadge(pkg, v) }
+    }
+
+    // ------------------------------------------------------------------
+    // Ordner
+    // ------------------------------------------------------------------
+
+    private fun folderView(id: String, sizeDp: Int): FrameLayout {
+        val frame = FrameLayout(this)
+        val col = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, dpi(6f), 0, dpi(6f))
+        }
+        frame.addView(col, FrameLayout.LayoutParams(-1, -2))
+        val px = dpi(sizeDp.toFloat())
+        val apps = prefs.folderApps(id).mapNotNull { Apps.byKey(it) }
+        val box = object : View(this) {
+            private val pp = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            override fun onDraw(c: Canvas) {
+                val sz = width.toFloat()
+                val path = Looks.maskPath(prefs.effectiveShape.let { if (it == Shape.SYSTEM) Shape.ROUNDED else it }, sz)
+                pp.color = if (look == Look.ANDROID) 0xE6E8E2F0.toInt() else 0x59FFFFFF
+                c.drawPath(path, pp)
+                val n = if (apps.size > 4) 3 else 2
+                val gap = sz * (if (n == 3) 0.07f else 0.1f)
+                val cell = (sz - gap * (n + 1)) / n
+                apps.take(n * n).forEachIndexed { i, a ->
+                    val b = appIcon(a, cell.toInt().coerceAtLeast(8))
+                    val x = gap + (i % n) * (cell + gap)
+                    val y = gap + (i / n) * (cell + gap)
+                    c.drawBitmap(b, x, y, pp)
+                }
+            }
+        }
+        col.addView(box, LinearLayout.LayoutParams(px, px))
+        if (prefs.labels) col.addView(TextView(this).apply {
+            text = prefs.folderName(id)
+            setTextColor(textColor)
+            textSize = prefs.labelSize.toFloat()
+            typeface = if (prefs.labelFont >= 0) Looks.namedFont(this@HomeActivity, Looks.labelFonts[prefs.labelFont.coerceIn(0, Looks.labelFonts.size - 1)], 500)
+                else Looks.font(this@HomeActivity, look, 500)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER
+            setShadowLayer(dp(3f), 0f, dp(1f), shadowColor)
+            setPadding(dpi(2f), dpi(5f), dpi(2f), 0)
+        }, LinearLayout.LayoutParams(-1, -2))
+        col.setOnClickListener { if (editMode) setEditMode(false) else openFolder(id, box) }
+        col.setOnLongClickListener {
+            it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+            val pm = PopupMenu(this, it)
+            pm.menu.add(0, 1, 0, "Umbenennen")
+            pm.menu.add(0, 2, 1, "Ordner auflösen")
+            pm.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    1 -> textDialog("Ordner umbenennen", prefs.folderName(id)) { n -> prefs.setFolderName(id, n); rebuildHome() }
+                    2 -> {
+                        val fav = prefs.favorites.toMutableList()
+                        val at = fav.indexOf("folder:$id").coerceAtLeast(0)
+                        fav.remove("folder:$id")
+                        fav.addAll(at.coerceAtMost(fav.size), prefs.folderApps(id).filter { it !in fav })
+                        prefs.favorites = fav
+                        prefs.deleteFolder(id)
+                        rebuildHome()
+                    }
+                }
+                true
+            }
+            pm.show()
+            true
+        }
+        return frame
+    }
+
+    private fun rebuildHome() {
+        fillHome()
+        refreshDrawer()
+        builtFor = signature()
+    }
+
+    private fun textDialog(title: String, value: String, onOk: (String) -> Unit) {
+        val et = EditText(this).apply { setText(value); setSelectAllOnFocus(true); setSingleLine() }
+        android.app.AlertDialog.Builder(this)
+            .setTitle(title)
+            .setView(et.also { it.setPadding(dpi(20f), dpi(12f), dpi(20f), dpi(12f)) })
+            .setNegativeButton("Abbrechen", null)
+            .setPositiveButton("OK") { _, _ -> et.text.toString().trim().takeIf { it.isNotEmpty() }?.let(onOk) }
+            .show()
+    }
+
+    /** App in einen (neuen) Ordner legen */
+    private fun addToFolder(app: AppInfo) {
+        val ids = prefs.folderIds
+        val names = ids.map { prefs.folderName(it) } + "＋ Neuer Ordner"
+        android.app.AlertDialog.Builder(this)
+            .setTitle("In Ordner legen")
+            .setItems(names.toTypedArray()) { _, which ->
+                if (which < ids.size) {
+                    val id = ids[which]
+                    prefs.setFolderApps(id, (prefs.folderApps(id) + app.key).distinct())
+                    prefs.favorites = prefs.favorites - app.key
+                    rebuildHome()
+                } else textDialog("Neuer Ordner", "Ordner") { n ->
+                    val id = System.currentTimeMillis().toString(36)
+                    prefs.setFolderName(id, n)
+                    prefs.setFolderApps(id, listOf(app.key))
+                    val fav = prefs.favorites.toMutableList()
+                    val at = fav.indexOf(app.key)
+                    if (at >= 0) fav[at] = "folder:$id" else fav.add("folder:$id")
+                    prefs.favorites = fav
+                    rebuildHome()
+                }
+            }
+            .show()
+    }
+
+    private fun openFolder(id: String, from: View) {
+        closeFolder()
+        val apps = prefs.folderApps(id).mapNotNull { Apps.byKey(it) }
+        val scrim = FrameLayout(this).apply {
+            setBackgroundColor(0x99000000.toInt())
+            isClickable = true
+            setOnClickListener { closeFolder() }
+            alpha = 0f
+        }
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            isClickable = true
+            background = GradientDrawable().apply {
+                cornerRadius = dp(if (look == Look.APPLE) 38f else 30f)
+                setColor(when (look) { Look.ANDROID -> 0xF2E9E4F0.toInt(); Look.NOTHING -> 0xF2141414.toInt(); else -> 0x4DFFFFFF })
+                if (look != Look.ANDROID) setStroke(dpi(1f), 0x33FFFFFF)
+            }
+            setPadding(dpi(14f), dpi(18f), dpi(14f), dpi(18f))
+        }
+        val title = TextView(this).apply {
+            text = prefs.folderName(id)
+            textSize = 22f
+            typeface = Looks.font(this@HomeActivity, look, 700, display = true)
+            setTextColor(if (look == Look.ANDROID) 0xFF1B1B1F.toInt() else Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, dpi(12f))
+            setOnClickListener { textDialog("Ordner umbenennen", prefs.folderName(id)) { n -> prefs.setFolderName(id, n); text = n; rebuildHome() } }
+        }
+        val outer = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
+        outer.addView(title)
+        val cols = if (apps.size <= 4) 2 else if (apps.size <= 9) 3 else 4
+        apps.chunked(cols).forEach { r ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            r.forEach { a ->
+                val v = iconView(a, prefs.iconDp, prefs.labels, false, false)
+                (v.getChildAt(0) as? LinearLayout)?.let { cv ->
+                    // Text im Ordner immer lesbar
+                    for (k in 0 until cv.childCount) (cv.getChildAt(k) as? TextView)?.setTextColor(if (look == Look.ANDROID) 0xFF1B1B1F.toInt() else Color.WHITE)
+                    cv.setOnClickListener { Apps.launch(this, a, cv); main.postDelayed({ closeFolder() }, 250) }
+                    cv.setOnLongClickListener {
+                        it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        val pm = PopupMenu(this, it)
+                        pm.menu.add(0, 1, 0, "Aus Ordner nehmen")
+                        Apps.shortcuts(this, a).forEachIndexed { i, sc -> pm.menu.add(1, 100 + i, i, sc.shortLabel ?: "") }
+                        val scs = Apps.shortcuts(this, a)
+                        pm.setOnMenuItemClickListener { item ->
+                            if (item.itemId == 1) {
+                                val rest = prefs.folderApps(id) - a.key
+                                prefs.setFolderApps(id, rest)
+                                prefs.favorites = prefs.favorites + a.key
+                                if (rest.isEmpty()) prefs.deleteFolder(id)
+                                closeFolder(); rebuildHome()
+                            } else scs.getOrNull(item.itemId - 100)?.let { sc -> Apps.startShortcut(this, sc); closeFolder() }
+                            true
+                        }
+                        pm.show()
+                        true
+                    }
+                }
+                row.addView(v, LinearLayout.LayoutParams(dpi(prefs.iconDp + 30f), -2))
+            }
+            outer.addView(row)
+        }
+        panel.addView(outer)
+        scrim.addView(panel, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
+        root.addView(scrim, FrameLayout.LayoutParams(-1, -1))
+        folderOverlay = scrim
+        // Öffnen aus dem Ordner-Icon heraus
+        val loc = IntArray(2); from.getLocationOnScreen(loc)
+        panel.scaleX = 0.3f; panel.scaleY = 0.3f
+        panel.post {
+            val pl = IntArray(2); panel.getLocationOnScreen(pl)
+            panel.translationX = (loc[0] + from.width / 2f) - (pl[0] + panel.width / 2f)
+            panel.translationY = (loc[1] + from.height / 2f) - (pl[1] + panel.height / 2f)
+            panel.animate().scaleX(1f).scaleY(1f).translationX(0f).translationY(0f).setDuration(360).setInterpolator(ease).start()
+        }
+        scrim.animate().alpha(1f).setDuration(220).start()
+    }
+
+    private fun closeFolder() {
+        val v = folderOverlay ?: return
+        folderOverlay = null
+        v.animate().alpha(0f).setDuration(180).withEndAction { root.removeView(v) }.start()
+    }
+
+    // ------------------------------------------------------------------
+    // Widgets (Heute-Seite)
+    // ------------------------------------------------------------------
+
+    private var pendingWidget = -1
+
+    private fun addWidget() {
+        val id = try { widgetHost.allocateAppWidgetId() } catch (_: Exception) { return }
+        pendingWidget = id
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(Intent(android.appwidget.AppWidgetManager.ACTION_APPWIDGET_PICK)
+                .putExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, id), REQ_PICK)
+        } catch (_: Exception) {
+            widgetHost.deleteAppWidgetId(id)
+            android.widget.Toast.makeText(this, "Widget-Auswahl wird auf diesem Gerät nicht unterstützt", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        super.onActivityResult(requestCode, resultCode, data)
+        val id = data?.getIntExtra(android.appwidget.AppWidgetManager.EXTRA_APPWIDGET_ID, pendingWidget) ?: pendingWidget
+        if (id < 0) return
+        if (resultCode != RESULT_OK) {
+            try { widgetHost.deleteAppWidgetId(id) } catch (_: Exception) {}
+            return
+        }
+        val awm = android.appwidget.AppWidgetManager.getInstance(this)
+        val info = awm.getAppWidgetInfo(id)
+        if (requestCode == REQ_PICK && info?.configure != null) {
+            try {
+                widgetHost.startAppWidgetConfigureActivityForResult(this, id, 0, REQ_CONFIG, null)
+                return
+            } catch (_: Exception) {}
+        }
+        prefs.widgets = prefs.widgets + id
+        rebuildHome()
+    }
+
+    private fun widgetViews(container: LinearLayout) {
+        val awm = android.appwidget.AppWidgetManager.getInstance(this)
+        for (id in prefs.widgets) {
+            val info = awm.getAppWidgetInfo(id) ?: continue
+            val hv = try { widgetHost.createView(applicationContext, id, info) } catch (_: Exception) { null } ?: continue
+            val h = maxOf(info.minHeight, dpi(90f))
+            container.addView(hv, LinearLayout.LayoutParams(-1, h).apply { bottomMargin = dpi(12f) })
+        }
+    }
+
+    private fun manageWidgets() {
+        val awm = android.appwidget.AppWidgetManager.getInstance(this)
+        val ids = prefs.widgets
+        val names = ids.map { awm.getAppWidgetInfo(it)?.loadLabel(packageManager) ?: "Widget" }
+        if (ids.isEmpty()) { addWidget(); return }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Widgets – zum Entfernen antippen")
+            .setItems(names.toTypedArray()) { _, w ->
+                try { widgetHost.deleteAppWidgetId(ids[w]) } catch (_: Exception) {}
+                prefs.widgets = ids - ids[w]
+                rebuildHome()
+            }
+            .setPositiveButton("＋ Widget hinzufügen") { _, _ -> addWidget() }
+            .setNegativeButton("Fertig", null)
+            .show()
+    }
+
     private fun appMenu(anchor: View, app: AppInfo) {
         val pm = PopupMenu(this, anchor)
         val fav = prefs.favorites
         val dock = prefs.dockApps
-        if (app.key in fav) pm.menu.add(0, 1, 0, "Von der ersten Seite entfernen") else pm.menu.add(0, 2, 0, "Auf die erste Seite")
-        if (app.key in dock) pm.menu.add(0, 3, 1, "Aus dem Dock entfernen") else pm.menu.add(0, 4, 1, "Ins Dock")
-        pm.menu.add(0, 7, 2, "Startbildschirm bearbeiten")
-        pm.menu.add(0, 8, 3, "App ausblenden")
-        pm.menu.add(0, 9, 4, "Umbenennen")
-        pm.menu.add(0, 5, 4, "App-Info")
-        pm.menu.add(0, 6, 5, "Deinstallieren")
+        // App-Shortcuts (wie bei Pixel/Nova): ganz oben
+        val scs = Apps.shortcuts(this, app)
+        scs.forEachIndexed { i, sc -> pm.menu.add(2, 100 + i, i, "↗  " + (sc.shortLabel ?: "")) }
+        pm.menu.add(0, 10, 30, "In Ordner legen")
+        if (app.key in fav) pm.menu.add(0, 1, 20, "Von der ersten Seite entfernen") else pm.menu.add(0, 2, 20, "Auf die erste Seite")
+        if (app.key in dock) pm.menu.add(0, 3, 21, "Aus dem Dock entfernen") else pm.menu.add(0, 4, 21, "Ins Dock")
+        pm.menu.add(0, 7, 22, "Startbildschirm bearbeiten")
+        pm.menu.add(0, 8, 23, "App ausblenden")
+        pm.menu.add(0, 9, 24, "Umbenennen")
+        pm.menu.add(0, 5, 24, "App-Info")
+        pm.menu.add(0, 6, 25, "Deinstallieren")
         pm.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> prefs.favorites = fav - app.key
@@ -426,6 +761,8 @@ class HomeActivity : Activity() {
                 6 -> Apps.uninstall(this, app)
                 7 -> setEditMode(true)
                 8 -> prefs.hidden = prefs.hidden + app.key
+                10 -> addToFolder(app)
+                in 100..110 -> scs.getOrNull(item.itemId - 100)?.let { Apps.startShortcut(this, it) }
             }
             if (item.itemId in listOf(1, 2, 3, 4, 8)) {
                 fillHome()
@@ -508,6 +845,18 @@ class HomeActivity : Activity() {
         todayClock = tc
         row.addView(tc, LinearLayout.LayoutParams(-1, dpi(ClockView.heightDp(wLook))))
         col.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dpi(12f) })
+        // Eigene Widgets (echte Android-Widgets)
+        widgetViews(col)
+        col.addView(TextView(this).apply {
+            text = if (prefs.widgets.isEmpty()) "＋  Widget hinzufügen" else "Widgets bearbeiten"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(textColor)
+            typeface = Looks.font(this@HomeActivity, look, 600)
+            background = glass().apply { cornerRadius = dp(20f) }
+            setPadding(0, dpi(10f), 0, dpi(10f))
+            setOnClickListener { if (prefs.widgets.isEmpty()) addWidget() else manageWidgets() }
+        }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dpi(12f) })
         // Meistgenutzt
         val top = visibleApps().sortedByDescending { prefs.launches(it.key) }.take(8)
         if (top.isNotEmpty()) {
@@ -538,7 +887,8 @@ class HomeActivity : Activity() {
         }
     }
 
-    private fun gridOf(apps: List<AppInfo>, rows: Int): LinearLayout {
+    /** Raster aus Apps (AppInfo) und Ordnern (String-ID) */
+    private fun gridOf(apps: List<Any>, rows: Int): LinearLayout {
         val cols = prefs.columns
         val g = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -546,7 +896,10 @@ class HomeActivity : Activity() {
         }
         apps.chunked(cols).take(rows).forEach { rowApps ->
             val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            rowApps.forEach { a -> row.addView(iconView(a, prefs.iconDp, prefs.labels, false, true), LinearLayout.LayoutParams(0, -2, 1f)) }
+            rowApps.forEach { a ->
+                val v = if (a is AppInfo) iconView(a, prefs.iconDp, prefs.labels, false, true) else folderView(a as String, prefs.iconDp)
+                row.addView(v, LinearLayout.LayoutParams(0, -2, 1f))
+            }
             repeat(cols - rowApps.size) { row.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
             g.addView(row)
         }
@@ -560,7 +913,10 @@ class HomeActivity : Activity() {
         val rows = rowsPerPage()
         val cols = prefs.columns
         val hidden = prefs.hidden
-        val favApps = prefs.favorites.mapNotNull { Apps.byKey(it) }.filter { it.key !in hidden }
+        val favApps: List<Any> = prefs.favorites.mapNotNull { k ->
+            if (k.startsWith("folder:")) k.removePrefix("folder:").takeIf { prefs.folderApps(it).isNotEmpty() }
+            else Apps.byKey(k)?.takeIf { it.key !in hidden }
+        }
 
         // Seite 1: Widget + Favoriten
         val first = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -576,10 +932,10 @@ class HomeActivity : Activity() {
         pages.add(first)
 
         // weitere Seiten: übrige Favoriten + (optional) alle anderen Apps
-        val rest = ArrayList<AppInfo>()
+        val rest = ArrayList<Any>()
         rest.addAll(favApps.drop(firstRows * cols))
         if (prefs.allOnHome) {
-            val shown = prefs.favorites.toSet() + prefs.dockApps.toSet()
+            val shown = prefs.favorites.toSet() + prefs.dockApps.toSet() + prefs.folderIds.flatMap { prefs.folderApps(it) }
             rest.addAll(visibleApps().filter { it.key !in shown })
         }
         rest.chunked(rows * cols).forEach { chunk -> pages.add(gridOf(chunk, rows)) }
@@ -741,6 +1097,7 @@ class HomeActivity : Activity() {
             clipToPadding = false
             isVerticalScrollBarEnabled = false
             isFastScrollEnabled = true
+            isFastScrollAlwaysVisible = prefs.drawerSort == 0 && !prefs.drawerList
             selector = android.graphics.drawable.ColorDrawable(Color.TRANSPARENT)
             adapter = DrawerAdapter()
         }
@@ -781,15 +1138,52 @@ class HomeActivity : Activity() {
         main.postDelayed({ closeDrawer(false) }, 300)
     }
 
-    private inner class DrawerAdapter : BaseAdapter() {
-        private var items: List<AppInfo> = visibleApps()
+    private inner class DrawerAdapter : BaseAdapter(), android.widget.SectionIndexer {
+        private var items: List<AppInfo> = sorted(visibleApps())
+        private var sections: Array<String> = emptyArray()
+        private var sectionPos: IntArray = IntArray(0)
+
+        private fun sorted(all: List<AppInfo>): List<AppInfo> = when (prefs.drawerSort) {
+            1 -> all.sortedWith(compareByDescending<AppInfo> { prefs.launches(it.key) }.thenBy { prefs.label(it.key, it.label).lowercase() })
+            2 -> all.sortedByDescending { it.installed }
+            else -> all.sortedBy { prefs.label(it.key, it.label).lowercase() }
+        }
+
+        /** Tolerante Suche: Anfang, enthält, oder Anfangsbuchstaben („wa“ → WhatsApp, „gm“ → Google Maps) */
+        private fun score(name: String, q: String): Int {
+            val n = name.lowercase()
+            if (n.startsWith(q)) return 0
+            if (n.split(' ', '-', '.').any { it.startsWith(q) }) return 1
+            if (n.contains(q)) return 2
+            val initials = n.split(' ', '-', '.').filter { it.isNotEmpty() }.joinToString("") { it.take(1) }
+            if (initials.startsWith(q)) return 3
+            return -1
+        }
 
         fun filter(q: String) {
             val qq = q.trim().lowercase()
             val all = visibleApps()
-            items = if (qq.isEmpty()) all else all.filter { prefs.label(it.key, it.label).lowercase().contains(qq) }
-                .sortedBy { if (prefs.label(it.key, it.label).lowercase().startsWith(qq)) 0 else 1 }
+            items = if (qq.isEmpty()) sorted(all) else all.map { it to score(prefs.label(it.key, it.label), qq) }
+                .filter { it.second >= 0 }.sortedBy { it.second }.map { it.first }
+            // Buchstaben-Abschnitte für den Schnell-Scroller (nur A–Z)
+            if (qq.isEmpty() && prefs.drawerSort == 0) {
+                val sec = ArrayList<String>(); val pos = ArrayList<Int>()
+                items.forEachIndexed { i, a ->
+                    val l = prefs.label(a.key, a.label).firstOrNull()?.uppercaseChar()?.let { if (it.isLetter()) it.toString() else "#" } ?: "#"
+                    if (sec.lastOrNull() != l) { sec.add(l); pos.add(i) }
+                }
+                sections = sec.toTypedArray(); sectionPos = pos.toIntArray()
+            } else { sections = emptyArray(); sectionPos = IntArray(0) }
             notifyDataSetChanged()
+        }
+
+        override fun getSections(): Array<Any> = sections.map { it as Any }.toTypedArray()
+        override fun getPositionForSection(sectionIndex: Int): Int =
+            sectionPos.getOrElse(sectionIndex.coerceIn(0, maxOf(0, sectionPos.size - 1))) { 0 }
+        override fun getSectionForPosition(position: Int): Int {
+            var r = 0
+            for (i in sectionPos.indices) if (sectionPos[i] <= position) r = i
+            return r
         }
 
         fun first() = items.firstOrNull()
@@ -807,7 +1201,7 @@ class HomeActivity : Activity() {
                     setPadding(dpi(18f), dpi(8f), dpi(18f), dpi(8f))
                     val px = dpi(42f)
                     addView(ImageView(this@HomeActivity).apply {
-                        setImageBitmap(Looks.icon(a.key, a.icon, px, prefs.effectiveShape, prefs.iconStyle, prefs.tint, prefs.monoIcons))
+                        setImageBitmap(appIcon(a, px))
                     }, LinearLayout.LayoutParams(px, px))
                     addView(TextView(this@HomeActivity).apply {
                         text = prefs.label(a.key, a.label)
@@ -890,6 +1284,11 @@ class HomeActivity : Activity() {
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         if (::gestures.isInitialized) gestures.onTouchEvent(ev)
         return super.dispatchTouchEvent(ev)
+    }
+
+    companion object {
+        private const val REQ_PICK = 41
+        private const val REQ_CONFIG = 42
     }
 
     @SuppressLint("WrongConstant", "PrivateApi")

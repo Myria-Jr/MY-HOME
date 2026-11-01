@@ -358,6 +358,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is TorchContent -> compact(96f)
                 is FocusContent -> compact(130f)
                 is AirplaneContent -> compact(110f)
+                is StatusContent -> compact(c.widthDp)
                 is NetworkContent -> compact(118f)
                 is HeatContent -> compact(118f)
                 is AlarmContent -> compact(118f)
@@ -611,6 +612,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is TorchContent -> if (big) drawTorchExpanded(canvas, c, ca, interactive) else drawTorch(canvas, ca)
                 is FocusContent -> drawFocus(canvas, c, ca)
                 is AirplaneContent -> drawAirplane(canvas, c, ca)
+                is StatusContent -> drawStatus(canvas, c, ca)
                 is NetworkContent -> drawNetwork(canvas, c, ca)
                 is HeatContent -> drawHeat(canvas, c, ca)
                 is AlarmContent -> drawAlarm(canvas, c, ca)
@@ -1597,6 +1599,23 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         Icons.moon(canvas, leftX(h), island.centerY(), h * 0.56f, p)
         boldPaint.textSize = h * 0.4f * cfg.textScale
         rightText(canvas, if (c.on) "Fokus an" else "Fokus aus", boldPaint, col, a)
+    }
+
+    private fun drawStatus(canvas: Canvas, c: StatusContent, a: Float) {
+        val h = island.height()
+        val cx = leftX(h)
+        val cy = island.centerY()
+        val s = h * 0.56f
+        if (c.app != null) {
+            val r = h * 0.3f
+            drawBitmapRound(canvas, RectF(cx - r, cy - r, cx + r, cy + r), c.app, r * 0.45f, a)
+        } else {
+            p.color = withAlpha(c.color, a)
+            Icons.glyph(canvas, c.glyph, cx, cy, s, p)
+        }
+        boldPaint.textSize = h * 0.38f * cfg.textScale
+        val maxW = island.width() - h * 1.5f
+        rightText(canvas, ellipsize(c.title, boldPaint, maxW), boldPaint, if (c.app != null) Color.WHITE else c.color, a)
     }
 
     private fun drawAirplane(canvas: Canvas, c: AirplaneContent, a: Float) {

@@ -69,14 +69,74 @@ class SettingsActivity : Activity() {
 
     // ------------------------------------------------------------------
 
-    private fun build() {
+    /** Aktuelle Unterseite (null = Hauptseite) */
+    private var page: String? = null
+
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        if (page != null) open(null) else @Suppress("DEPRECATION") super.onBackPressed()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // z. B. nach dem Erlauben der Benachrichtigungspunkte
+        if (page == "badges") open("badges", animate = false)
+    }
+
+    private fun build() = open(null, animate = false)
+
+    private fun open(p: String?, animate: Boolean = true) {
+        val forward = p != null
+        page = p
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dpi(16f), dpi(18f), dpi(16f), dpi(48f))
         }
+        if (p == null) mainPage(col) else {
+            col.addView(TextView(this).apply {
+                text = "‹  Lumora Home"
+                textSize = 17f
+                setTextColor(accent)
+                setPadding(dpi(2f), dpi(4f), 0, dpi(10f))
+                setOnClickListener { open(null) }
+            })
+            col.addView(TextView(this).apply {
+                text = pages.firstOrNull { it.id == p }?.title ?: ""
+                textSize = 32f
+                typeface = Looks.font(this@SettingsActivity, Look.APPLE, 800)
+                setTextColor(label)
+                setPadding(dpi(4f), 0, 0, dpi(8f))
+            })
+            pages.firstOrNull { it.id == p }?.build?.invoke(col)
+        }
+        val sv = ScrollView(this).apply { setBackgroundColor(bg); addView(col) }
+        setContentView(sv)
+        if (animate) {
+            sv.translationX = (if (forward) 1 else -1) * dp(60f)
+            sv.alpha = 0f
+            sv.animate().translationX(0f).alpha(1f).setDuration(260)
+                .setInterpolator(android.view.animation.PathInterpolator(0.2f, 0.9f, 0.1f, 1f)).start()
+        }
+        updatePreview()
+    }
+
+    private class Page(val id: String, val title: String, val icon: String, val color: Int, val build: (LinearLayout) -> Unit)
+
+    private val pages: List<Page> by lazy { listOf(
+        Page("icons", "App-Symbole", "◆", 0xFF5E5CE6.toInt()) { iconsPage(it) },
+        Page("home", "Startbildschirm", "▦", 0xFF0A84FF.toInt()) { homePage(it) },
+        Page("dock", "Dock & Suche", "▬", 0xFF30B0C7.toInt()) { dockPage(it) },
+        Page("drawer", "App-Übersicht", "⋮⋮", 0xFF34C759.toInt()) { drawerPage(it) },
+        Page("badges", "Benachrichtigungspunkte", "●", 0xFFFF3B30.toInt()) { badgesPage(it) },
+        Page("gestures", "Gesten", "☝", 0xFFFF9F0A.toInt()) { gesturesPage(it) },
+        Page("hidden", "Ausgeblendete Apps", "◌", 0xFF8E8E93.toInt()) { hiddenPage(it) },
+        Page("reset", "Zurücksetzen", "↺", 0xFF636366.toInt()) { resetPage(it) },
+    ) }
+
+    private fun mainPage(col: LinearLayout) {
         col.addView(TextView(this).apply {
             text = "Lumora Home"
-            textSize = 32f
+            textSize = 34f
             typeface = Looks.font(this@SettingsActivity, Look.APPLE, 800)
             setTextColor(label)
             setPadding(dpi(4f), 0, 0, 0)
@@ -87,17 +147,13 @@ class SettingsActivity : Activity() {
             setTextColor(secondary)
             setPadding(dpi(4f), dpi(2f), 0, dpi(14f))
         })
-
         col.addView(preview())
 
-        col.addView(card(listOf(
+        if (!isDefaultHome()) col.addView(card(listOf(
             action("Als Standard-Startbildschirm festlegen", accent) {
                 try { startActivity(Intent(Settings.ACTION_HOME_SETTINGS)) } catch (_: Exception) {
                     startActivity(Intent(Settings.ACTION_SETTINGS))
                 }
-            },
-            action("Hintergrundbild ändern", accent) {
-                try { startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Hintergrundbild")) } catch (_: Exception) {}
             },
         )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(14f) })
 
@@ -127,8 +183,69 @@ class SettingsActivity : Activity() {
         col.addView(HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(row) })
         col.addView(desc)
 
-        // --- App-Symbole ---
-        header(col, "App-Symbole")
+        header(col, "Einstellungen")
+        col.addView(card(pages.take(6).map { navRow(it) }))
+        col.addView(card(pages.drop(6).map { navRow(it) }), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(14f) })
+        col.addView(card(listOf(
+            action("Hintergrundbild ändern", accent) {
+                try { startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Hintergrundbild")) } catch (_: Exception) {}
+            },
+        )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(14f) })
+        hint(col, "Tipps: App gedrückt halten → Shortcuts, Ordner, Umbenennen · Nach links wischen → Heute-Seite mit Widgets · Nach oben wischen → alle Apps")
+    }
+
+    private fun isDefaultHome(): Boolean = try {
+        val ri = packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
+        ri?.activityInfo?.packageName == packageName
+    } catch (_: Exception) { false }
+
+    /** Zeile mit farbigem Symbol-Quadrat wie in den iOS-Einstellungen */
+    private fun navRow(pg: Page): View = rowBase().apply {
+        addView(TextView(this@SettingsActivity).apply {
+            text = pg.icon
+            textSize = 15f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = GradientDrawable().apply { cornerRadius = dp(8f); setColor(pg.color) }
+        }, LinearLayout.LayoutParams(dpi(30f), dpi(30f)).apply { rightMargin = dpi(14f) })
+        addView(title(pg.title), LinearLayout.LayoutParams(0, -2, 1f))
+        addView(TextView(this@SettingsActivity).apply {
+            text = navValue(pg.id)
+            textSize = 15f
+            setTextColor(secondary)
+            setPadding(0, 0, dpi(8f), 0)
+        })
+        addView(TextView(this@SettingsActivity).apply { text = "›"; textSize = 22f; setTextColor(secondary) })
+        setOnClickListener { open(pg.id) }
+    }
+
+    private fun navValue(id: String): String = when (id) {
+        "icons" -> (Shape.values().getOrNull(prefs.shape)?.title ?: "Auto") + " · " + IconStyle.names[prefs.iconStyle.coerceIn(0, 3)]
+        "home" -> "${prefs.columns} Spalten"
+        "drawer" -> listOf("A–Z", "Meistgenutzt", "Neueste")[prefs.drawerSort.coerceIn(0, 2)]
+        "badges" -> if (!prefs.badges) "Aus" else if (BadgeService.granted(this)) "An" else "Erlauben"
+        "hidden" -> prefs.hidden.size.takeIf { it > 0 }?.toString() ?: ""
+        else -> ""
+    }
+
+    private fun iconsPage(col: LinearLayout) {
+        col.addView(preview())
+        // Icon-Pack
+        header(col, "Icon-Pack")
+        val packs = IconPacks.installed(this)
+        val cur = prefs.iconPack
+        val packNames = listOf("Keins") + packs.map { it.label }
+        val curIdx = packs.indexOfFirst { it.pkg == cur } + 1
+        col.addView(card(listOf(
+            labeled("Installierte Icon-Packs", chips(packNames, curIdx) { i ->
+                prefs.iconPack = if (i == 0) null else packs[i - 1].pkg
+                Thread { Apps.load(this); main.post { changed() } }.start()
+            }),
+        )))
+        hint(col, if (packs.isEmpty()) "Kein Icon-Pack installiert. Lade eins aus dem Play Store (z. B. „Delta“, „Lines“, „Whicons“, „Arcticons“) – es erscheint dann hier."
+            else "Icon-Packs funktionieren wie bei Nova & Lawnchair. Apps ohne Pack-Icon behalten ihr Original.")
+
+        header(col, "Form & Stil")
         val shapeChips = ShapePicker(this, prefs, dark) { changed() }
         tintRow = colorDots()
         tintRow.visibility = if (prefs.iconStyle == IconStyle.TINTED) View.VISIBLE else View.GONE
@@ -141,57 +258,79 @@ class SettingsActivity : Activity() {
             }),
             tintRow,
             slider("Größe", 40, 72, prefs.iconDp, "dp") { prefs.iconDp = it; changed() },
-            switch("Monochrom", prefs.monoIcons) { prefs.monoIcons = it; changed() },
+            switch("Schwarz-Weiß", prefs.monoIcons) { prefs.monoIcons = it; changed() },
         )))
-        hint(col, "„Getönt“ färbt alle Icons in deiner Farbe, „Klar“ macht sie zu Glas – wie bei iOS 18/26. Einzelne Apps umbenennen: App gedrückt halten → „Umbenennen“.")
+        hint(col, "„Original“ zeigt die Icons genau so, wie dein Handy sie liefert. „Getönt“ färbt alle Icons in deiner Farbe, „Klar“ macht sie zu Glas – wie bei iOS 18/26.")
 
-        // --- App-Namen ---
         header(col, "App-Namen")
         col.addView(card(listOf(
             switch("Namen zeigen", prefs.labels) { prefs.labels = it; changed() },
             slider("Schriftgröße", 9, 16, prefs.labelSize, "sp") { prefs.labelSize = it; changed() },
             labeled("Schrift", chips(listOf("Auto") + Looks.labelFonts, prefs.labelFont + 1) { prefs.labelFont = it - 1; changed() }),
         )))
+        hint(col, "Einzelne Apps umbenennen: App gedrückt halten → „Umbenennen“.")
+    }
 
-        // --- Startbildschirm ---
-        header(col, "Startbildschirm")
+    private fun homePage(col: LinearLayout) {
         col.addView(card(listOf(
             slider("Spalten", 3, 6, prefs.columns, "") { prefs.columns = it; changed() },
             switch("Uhr-Widget", prefs.clock) { prefs.clock = it },
             labeled("Widget-Stil", chips(listOf("Passend") + Look.values().map { it.title }, prefs.widgetStyle + 1) { prefs.widgetStyle = it - 1 }),
-            switch("Dock", prefs.dock) { prefs.dock = it },
-            slider("Apps im Dock", 3, 6, prefs.dockCount, "") { prefs.dockCount = it },
-            switch("Suchleiste", prefs.search) { prefs.search = it },
+            switch("„Heute“-Seite links (Widgets)", prefs.todayPage) { prefs.todayPage = it },
             switch("Alle Apps auf Startseiten (wie iOS)", prefs.allOnHome) { prefs.allOnHome = it },
-            switch("„Heute“-Seite links (wie iOS)", prefs.todayPage) { prefs.todayPage = it },
             labeled("Blätter-Effekt", chips(listOf("Schieben", "Zoom", "Würfel", "Stapel"), prefs.pageEffect) { prefs.pageEffect = it }),
         )))
-
-        // --- Hintergrund & Anzeige ---
         header(col, "Hintergrund & Anzeige")
         col.addView(card(listOf(
             slider("Hintergrund abdunkeln", 0, 70, prefs.dim, "%") { prefs.dim = it },
             switch("Dunkle Schrift (helle Hintergründe)", prefs.darkText) { prefs.darkText = it; changed() },
             switch("Statusleiste ausblenden", prefs.hideStatusBar) { prefs.hideStatusBar = it },
         )))
+        hint(col, "Ordner: App gedrückt halten → „In Ordner legen“. Widgets: auf der Heute-Seite „Widget hinzufügen“.")
+    }
 
-        // --- Gesten ---
-        header(col, "Gesten")
+    private fun dockPage(col: LinearLayout) {
+        col.addView(card(listOf(
+            switch("Dock", prefs.dock) { prefs.dock = it },
+            slider("Apps im Dock", 3, 6, prefs.dockCount, "") { prefs.dockCount = it },
+            switch("Suchleiste", prefs.search) { prefs.search = it },
+        )))
+    }
+
+    private fun drawerPage(col: LinearLayout) {
+        col.addView(card(listOf(
+            labeled("Sortierung", chips(listOf("A–Z", "Meistgenutzt", "Neueste zuerst"), prefs.drawerSort) { prefs.drawerSort = it }),
+            labeled("Ansicht", chips(listOf("Raster", "Liste"), if (prefs.drawerList) 1 else 0) { prefs.drawerList = it == 1 }),
+            slider("Hintergrund-Deckkraft", 40, 100, prefs.drawerOpacity, "%") { prefs.drawerOpacity = it },
+        )))
+        hint(col, "Die Suche findet Apps auch über Anfangsbuchstaben („gm“ → Google Maps). Bei A–Z kannst du am rechten Rand zu jedem Buchstaben springen.")
+    }
+
+    private fun badgesPage(col: LinearLayout) {
+        val ok = BadgeService.granted(this)
+        col.addView(card(listOf(
+            switch("Punkte auf App-Symbolen", prefs.badges) { prefs.badges = it },
+            switch("Anzahl statt Punkt", prefs.badgeCount) { prefs.badgeCount = it },
+        )))
+        if (!ok) {
+            col.addView(card(listOf(
+                action("Zugriff auf Mitteilungen erlauben", accent) {
+                    try { startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) } catch (_: Exception) {}
+                },
+            )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(14f) })
+            hint(col, "Damit Lumora Home weiß, welche App neue Mitteilungen hat, braucht es Zugriff. Es wird nichts gespeichert oder verschickt.")
+        } else hint(col, "✓ Zugriff erteilt.")
+    }
+
+    private fun gesturesPage(col: LinearLayout) {
         col.addView(card(listOf(
             labeled("Doppeltippen auf freie Fläche", chips(listOf("Nichts", "Benachrichtigungen", "Suche", "Einstellungen", "Alle Apps"), prefs.doubleTap) { prefs.doubleTap = it }),
             switch("Nach unten wischen = Suche", prefs.swipeDownSearch) { prefs.swipeDownSearch = it },
         )))
         hint(col, "Nach oben wischen: alle Apps · Seitlich: nächste Seite · Freie Fläche gedrückt halten: Bearbeiten (Wackel-Modus)")
+    }
 
-        // --- App-Übersicht ---
-        header(col, "App-Übersicht")
-        col.addView(card(listOf(
-            labeled("Ansicht", chips(listOf("Raster", "Liste"), if (prefs.drawerList) 1 else 0) { prefs.drawerList = it == 1 }),
-            slider("Hintergrund-Deckkraft", 40, 100, prefs.drawerOpacity, "%") { prefs.drawerOpacity = it },
-        )))
-
-        // --- Ausgeblendete Apps ---
-        header(col, "Ausgeblendete Apps")
+    private fun hiddenPage(col: LinearLayout) {
         val hiddenBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         fun fillHidden() {
             hiddenBox.removeAllViews()
@@ -214,23 +353,24 @@ class SettingsActivity : Activity() {
         }
         fillHidden()
         col.addView(hiddenBox)
+    }
 
+    private fun resetPage(col: LinearLayout) {
         col.addView(card(listOf(
-            action("Startbildschirm zurücksetzen", 0xFFFF453A.toInt()) {
+            action("Startbildschirm-Anordnung zurücksetzen", 0xFFFF453A.toInt()) {
                 prefs.sp.edit().remove("favorites").remove("dock_apps").apply()
                 Toast.makeText(this, "Zurückgesetzt", Toast.LENGTH_SHORT).show()
             },
             action("Alle Design-Einstellungen zurücksetzen", 0xFFFF453A.toInt()) {
-                val keep = setOf("favorites", "dock_apps", "hidden")
+                val keep = setOf("favorites", "dock_apps", "hidden", "widgets", "schema")
                 val e = prefs.sp.edit()
-                prefs.sp.all.keys.filter { it !in keep && !it.startsWith("cnt_") && !it.startsWith("label_") }.forEach { e.remove(it) }
+                prefs.sp.all.keys.filter { it !in keep && !it.startsWith("cnt_") && !it.startsWith("label_") &&
+                    !it.startsWith("fname_") && !it.startsWith("fapps_") }.forEach { e.remove(it) }
                 e.apply()
-                recreate()
+                Looks.clearCache()
+                open(null, animate = false)
             },
-        )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(24f) })
-
-        setContentView(ScrollView(this).apply { setBackgroundColor(bg); addView(col) })
-        updatePreview()
+        )))
     }
 
     // ------------------------------------------------------------------
@@ -274,7 +414,7 @@ class SettingsActivity : Activity() {
             val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
             col.addView(ImageView(this).apply {
                 setImageBitmap(Looks.icon(a.key, a.icon, size, prefs.effectiveShape, prefs.iconStyle, prefs.tint,
-                    prefs.monoIcons || (look == Look.NOTHING && prefs.iconStyle == IconStyle.STANDARD)))
+                    prefs.monoIcons, a.packIcon))
             }, LinearLayout.LayoutParams(size, size))
             if (prefs.labels) col.addView(TextView(this).apply {
                 text = prefs.label(a.key, a.label)

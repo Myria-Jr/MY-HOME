@@ -10,7 +10,12 @@ import android.os.Process
 import android.provider.MediaStore
 import android.provider.Settings
 
-class AppInfo(val key: String, val label: String, val component: ComponentName, val icon: Drawable)
+class AppInfo(
+    val key: String, val label: String, val component: ComponentName, val icon: Drawable,
+    /** Icon stammt aus einem Icon-Pack → nicht zusätzlich maskieren */
+    val packIcon: Boolean = false,
+    val installed: Long = 0L,
+)
 
 /** Lädt alle startbaren Apps über LauncherApps (wie echte Launcher). */
 object Apps {
@@ -20,11 +25,17 @@ object Apps {
 
     fun load(ctx: Context): List<AppInfo> {
         val la = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+        // Fix: vorher Dichte 0 → winzige, unscharfe Icons. Jetzt in hoher Auflösung.
+        val density = maxOf(ctx.resources.displayMetrics.densityDpi, android.util.DisplayMetrics.DENSITY_XXXHIGH)
+        IconPacks.prepare(ctx, HomePrefs(ctx).iconPack)
+        val pm = ctx.packageManager
         val list = try {
             la.getActivityList(null, Process.myUserHandle()).map {
                 val cn = it.componentName
-                AppInfo(cn.flattenToShortString(), it.label?.toString() ?: cn.packageName, cn,
-                    it.getBadgedIcon(0))
+                val pack = IconPacks.iconFor(cn, density)
+                val icon = pack ?: try { it.getIcon(density) } catch (_: Exception) { null } ?: it.getBadgedIcon(0)
+                val inst = try { pm.getPackageInfo(cn.packageName, 0).firstInstallTime } catch (_: Exception) { 0L }
+                AppInfo(cn.flattenToShortString(), it.label?.toString() ?: cn.packageName, cn, icon, pack != null, inst)
             }
         } catch (_: Exception) { emptyList() }
         all = list.sortedBy { it.label.lowercase() }
@@ -51,6 +62,29 @@ object Apps {
                     .setComponent(app.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (_: Exception) {}
         }
+    }
+
+    /** App-Shortcuts (lange drücken), nur möglich als Standard-Launcher */
+    fun shortcuts(ctx: Context, app: AppInfo): List<android.content.pm.ShortcutInfo> {
+        if (android.os.Build.VERSION.SDK_INT < 25) return emptyList()
+        val la = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+        return try {
+            if (!la.hasShortcutHostPermission()) return emptyList()
+            val q = LauncherApps.ShortcutQuery()
+                .setPackage(app.component.packageName)
+                .setQueryFlags(LauncherApps.ShortcutQuery.FLAG_MATCH_DYNAMIC or
+                    LauncherApps.ShortcutQuery.FLAG_MATCH_MANIFEST or LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED)
+            (la.getShortcuts(q, Process.myUserHandle()) ?: emptyList())
+                .filter { it.isEnabled }
+                .sortedWith(compareBy({ if (it.isDynamic) 1 else 0 }, { it.rank }))
+                .take(4)
+        } catch (_: Exception) { emptyList() }
+    }
+
+    fun startShortcut(ctx: Context, s: android.content.pm.ShortcutInfo) {
+        if (android.os.Build.VERSION.SDK_INT < 25) return
+        val la = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+        try { la.startShortcut(s, null, null) } catch (_: Exception) {}
     }
 
     fun appInfo(ctx: Context, app: AppInfo) {

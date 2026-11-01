@@ -78,6 +78,8 @@ data class IslandConfig(
     val showTorch: Boolean = true,
     val showFocus: Boolean = true,
     val showAirplane: Boolean = true,
+    /** Aktivierte System-Meldungen (StatusKinds) */
+    val statusOn: Set<String> = StatusKinds.all.filter { it.def }.map { it.id }.toSet(),
 
     // Musik
     val waveform: Boolean = true,
@@ -446,6 +448,7 @@ object Prefs {
             showTorch = b(TORCH, d.showTorch),
             showFocus = b(FOCUS, d.showFocus),
             showAirplane = b(AIRPLANE, d.showAirplane),
+            statusOn = StatusKinds.all.filter { b("st_" + it.id, it.def) }.map { it.id }.toSet(),
 
             waveform = b(WAVEFORM, d.waveform),
             waveformCover = b(WAVEFORM_COVER, d.waveformCover),

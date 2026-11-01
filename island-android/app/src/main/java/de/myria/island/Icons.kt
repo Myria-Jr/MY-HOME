@@ -634,6 +634,120 @@ object Icons {
         c.drawCircle(cx, cy + s * 0.04f, s * 0.17f, hole)
     }
 
+    /** Glyph für System-Meldungen ([Glyph]) */
+    fun glyph(c: Canvas, g: Int, cx: Float, cy: Float, s: Float, p: Paint) {
+        if (family == NOTHING && !inDots) { dots("g$g", c, cx, cy, s, p) { cc, x, y, ss, pp -> glyph(cc, g, x, y, ss, pp) }; return }
+        when (g) {
+            SGlyph.MOON -> moon(c, cx, cy, s, p)
+            SGlyph.LOCATION -> location(c, cx, cy, s, p)
+            SGlyph.HEADPHONES -> headphones(c, cx, cy, s, p)
+            SGlyph.CHECK -> check(c, cx, cy, s, p)
+            SGlyph.CLOCK -> timer(c, cx, cy, s, p)
+            SGlyph.SUN -> sun(c, cx, cy, s, p)
+            SGlyph.BOLT -> bolt(c, cx, cy, s, p)
+            else -> stroke(c, p, s * 0.1f) { drawGlyph(c, g, cx, cy, s, p) }
+        }
+    }
+
+    private fun drawGlyph(c: Canvas, g: Int, cx: Float, cy: Float, s: Float, p: Paint) {
+        val x = cx - s / 2
+        val y = cy - s / 2
+        when (g) {
+            SGlyph.LEAF -> {
+                path.reset()
+                path.moveTo(x + s * 0.18f, y + s * 0.84f)
+                path.cubicTo(x + s * 0.1f, y + s * 0.3f, x + s * 0.45f, y + s * 0.12f, x + s * 0.86f, y + s * 0.12f)
+                path.cubicTo(x + s * 0.88f, y + s * 0.55f, x + s * 0.65f, y + s * 0.86f, x + s * 0.18f, y + s * 0.84f)
+                c.drawPath(path, p)
+                c.drawLine(x + s * 0.12f, y + s * 0.92f, x + s * 0.6f, y + s * 0.42f, p)
+            }
+            SGlyph.HOTSPOT -> {
+                val oldStyle = p.style
+                p.style = Paint.Style.FILL
+                c.drawCircle(cx, cy, s * 0.09f, p)
+                p.style = oldStyle
+                for (i in 1..2) {
+                    val r = s * (0.2f + 0.17f * i)
+                    rect.set(cx - r, cy - r, cx + r, cy + r)
+                    c.drawArc(rect, -50f, 100f, false, p)
+                    c.drawArc(rect, 130f, 100f, false, p)
+                }
+            }
+            SGlyph.NFC -> {
+                for (i in 0..2) {
+                    val r = s * (0.16f + 0.15f * i)
+                    rect.set(cx - s * 0.3f - r, cy - r, cx - s * 0.3f + r, cy + r)
+                    c.drawArc(rect, -45f, 90f, false, p)
+                }
+            }
+            SGlyph.DOWNLOAD -> {
+                c.drawLine(cx, y + s * 0.1f, cx, y + s * 0.66f, p)
+                c.drawLine(cx - s * 0.24f, y + s * 0.44f, cx, y + s * 0.68f, p)
+                c.drawLine(cx + s * 0.24f, y + s * 0.44f, cx, y + s * 0.68f, p)
+                c.drawLine(x + s * 0.16f, y + s * 0.88f, x + s * 0.84f, y + s * 0.88f, p)
+            }
+            SGlyph.TRASH -> {
+                c.drawLine(x + s * 0.14f, y + s * 0.24f, x + s * 0.86f, y + s * 0.24f, p)
+                c.drawLine(x + s * 0.38f, y + s * 0.1f, x + s * 0.62f, y + s * 0.1f, p)
+                rect.set(x + s * 0.24f, y + s * 0.24f, x + s * 0.76f, y + s * 0.92f)
+                c.drawRoundRect(rect, s * 0.08f, s * 0.08f, p)
+            }
+            SGlyph.USB -> {
+                c.drawLine(cx, y + s * 0.18f, cx, y + s * 0.8f, p)
+                c.drawLine(cx, y + s * 0.62f, cx - s * 0.22f, y + s * 0.46f, p)
+                c.drawLine(cx - s * 0.22f, y + s * 0.46f, cx - s * 0.22f, y + s * 0.36f, p)
+                c.drawLine(cx, y + s * 0.52f, cx + s * 0.22f, y + s * 0.38f, p)
+                c.drawLine(cx + s * 0.22f, y + s * 0.38f, cx + s * 0.22f, y + s * 0.28f, p)
+                val oldStyle = p.style
+                p.style = Paint.Style.FILL
+                c.drawCircle(cx, y + s * 0.86f, s * 0.08f, p)
+                path.reset()
+                path.moveTo(cx, y + s * 0.04f); path.lineTo(cx - s * 0.09f, y + s * 0.2f); path.lineTo(cx + s * 0.09f, y + s * 0.2f); path.close()
+                c.drawPath(path, p)
+                p.style = oldStyle
+            }
+            SGlyph.ROTATE -> {
+                rect.set(x + s * 0.16f, y + s * 0.16f, x + s * 0.84f, y + s * 0.84f)
+                c.drawArc(rect, -60f, 290f, false, p)
+                c.drawLine(x + s * 0.68f, y + s * 0.1f, x + s * 0.7f, y + s * 0.26f, p)
+                c.drawLine(x + s * 0.7f, y + s * 0.26f, x + s * 0.86f, y + s * 0.22f, p)
+            }
+            SGlyph.CALENDAR -> {
+                rect.set(x + s * 0.12f, y + s * 0.18f, x + s * 0.88f, y + s * 0.88f)
+                c.drawRoundRect(rect, s * 0.12f, s * 0.12f, p)
+                c.drawLine(x + s * 0.12f, y + s * 0.38f, x + s * 0.88f, y + s * 0.38f, p)
+                c.drawLine(x + s * 0.32f, y + s * 0.08f, x + s * 0.32f, y + s * 0.24f, p)
+                c.drawLine(x + s * 0.68f, y + s * 0.08f, x + s * 0.68f, y + s * 0.24f, p)
+            }
+            SGlyph.STORAGE -> {
+                for (i in 0..2) {
+                    rect.set(x + s * 0.14f, y + s * (0.12f + 0.27f * i), x + s * 0.86f, y + s * (0.34f + 0.27f * i))
+                    c.drawRoundRect(rect, s * 0.06f, s * 0.06f, p)
+                }
+            }
+            SGlyph.BLUETOOTH -> {
+                path.reset()
+                path.moveTo(x + s * 0.24f, y + s * 0.3f)
+                path.lineTo(x + s * 0.74f, y + s * 0.7f)
+                path.lineTo(cx, y + s * 0.94f)
+                path.lineTo(cx, y + s * 0.06f)
+                path.lineTo(x + s * 0.74f, y + s * 0.3f)
+                path.lineTo(x + s * 0.24f, y + s * 0.7f)
+                c.drawPath(path, p)
+            }
+        }
+    }
+
+    private inline fun stroke(c: Canvas, p: Paint, w: Float, block: () -> Unit) {
+        val oldStyle = p.style; val oldW = p.strokeWidth; val oldCap = p.strokeCap; val oldJoin = p.strokeJoin
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = w * (if (family == MATERIAL) 1.15f else 1f)
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeJoin = Paint.Join.ROUND
+        block()
+        p.style = oldStyle; p.strokeWidth = oldW; p.strokeCap = oldCap; p.strokeJoin = oldJoin
+    }
+
     /** Material / One UI: deutlich rundere Ecken als bei SF Symbols */
     private inline fun roundJoin(p: Paint, s: Float, block: () -> Unit) {
         val oldJoin = p.strokeJoin
