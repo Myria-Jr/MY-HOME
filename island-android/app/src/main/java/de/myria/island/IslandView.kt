@@ -51,6 +51,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         fun onSeek(ms: Long)
         fun onDoubleTap() {}
         fun onTorchLevel(level: Float) {}
+        fun onPanelVolume(v: Float) {}
+        fun onPanelBrightness(v: Float) {}
+        fun onPanelShortcut(index: Int) {}
         fun onSwipeHorizontal(dir: Int) {}
     }
 
@@ -335,7 +338,13 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             Mode.HIDDEN -> Size(h * 1.1f, h * 0.8f, h * 0.4f)
             Mode.IDLE -> Size(if (cfg.idleContent != IslandConfig.IDLE_NONE) w + 58 * d else w, h, h / 2)
             Mode.COMPACT -> when (c) {
-                is Content.Notif -> banner(max(72 * d, h + 32 * d))
+                is Content.Notif -> if (cfg.notifStyle == IslandConfig.NOTIF_COMPACT) compact(150f) else {
+                    val base = when (cfg.notifSize) { 0 -> 60f; 2 -> 88f; else -> 72f } * d
+                    val extraH = (cfg.notifLines - 1).coerceIn(0, 2) * 18 * d * cfg.textScale +
+                        (if (cfg.notifShowApp) 15 * d else 0f)
+                    val nh = max(base + extraH, h + 28 * d)
+                    Size(full * (cfg.notifWidthPct.coerceIn(60, 100) / 100f), nh, min(nh / 2, max(big, 36 * d)))
+                }
                 is Content.Call -> if (c.incoming) banner(max(80 * d, h + 40 * d)) else compact(124f)
                 is Content.Ringer -> compact(132f)
                 is Content.Charging -> compact(112f)
@@ -362,6 +371,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is Content.Progress -> exp(96 * d)
                 is Content.Charging -> exp(104 * d)
                 is TorchContent -> exp(156 * d)
+                is PanelContent -> exp(186 * d)
                 else -> sizeFor(Mode.COMPACT, c)
             }
         }
@@ -417,6 +427,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         reportWindowNeed(moving)
 
         hits.clear()
+        if (sliderIndex < 0) sliderHits.clear()
         seekActive = false
         torchActive = false
         val alpha = sAlpha.value.coerceIn(0f, 1f)
@@ -501,7 +512,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         // --- Glow / Schatten ---
         bgPaint.clearShadowLayer()
         if (Build.VERSION.SDK_INT >= 28) {
-            if (cfg.glow && c is Content.Music && c.info.playing) {
+            if (cfg.notifAppGlow && c is Content.Notif && c.accent != null) {
+                bgPaint.setShadowLayer(16 * d, 0f, 3 * d, withAlpha(c.accent, 0.6f * ca))
+            } else if (cfg.glow && c is Content.Music && c.info.playing) {
                 val s = cfg.glowStrength / 100f
                 bgPaint.setShadowLayer((8 + 18 * s) * d, 0f, 3 * d, withAlpha(accentOf(c), (0.25f + 0.6f * s) * ca))
             } else if (cfg.shadow || cfg.style == IslandConfig.STYLE_GLASS) {
@@ -568,7 +581,12 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is Content.Music -> if (big) drawMusicExpanded(canvas, c, ca, interactive) else drawMusicCompact(canvas, c, ca)
                 is Content.Charging -> if (big) drawChargingExpanded(canvas, c, ca) else drawCharging(canvas, c, ca)
                 is Content.Ringer -> drawRinger(canvas, c, ca)
-                is Content.Notif -> if (big) drawNotifExpanded(canvas, c, ca, interactive) else drawNotif(canvas, c, ca)
+                is Content.Notif -> when {
+                    big -> drawNotifExpanded(canvas, c, ca, interactive)
+                    cfg.notifStyle == IslandConfig.NOTIF_COMPACT -> drawNotifCompact(canvas, c, ca)
+                    else -> drawNotif(canvas, c, ca)
+                }
+                is PanelContent -> drawPanel(canvas, c, ca, interactive)
                 is Content.Timer -> if (big) drawTimerExpanded(canvas, c, ca, interactive) else drawTimerCompact(canvas, c, ca)
                 is Content.Call -> when {
                     c.incoming -> drawCallIncoming(canvas, c, ca, interactive)
@@ -617,6 +635,20 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 val col = mix(base, accentOf(c), 0.08f)
                 bgPaint.color = col
                 canvas.drawRoundRect(rect, r, r, bgPaint)
+                gapPaint.color = col
+            }
+            IslandConfig.STYLE_CAPSULE -> {
+                // Material-You-Kapsel: tonale Fläche in der Systemfarbe + feiner Akzent-Rand
+                val acc = accentOf(c)
+                val base = systemColor(android.R.color.system_accent2_900, 0xFF1F1A2B.toInt())
+                val col = mix(base, acc, 0.14f)
+                bgPaint.color = col
+                canvas.drawRoundRect(rect, r, r, bgPaint)
+                strokePaint.shader = null
+                strokePaint.strokeWidth = 1f * d
+                strokePaint.color = withAlpha(acc, 0.35f)
+                tmp2.set(rect); tmp2.inset(0.5f * d, 0.5f * d)
+                canvas.drawRoundRect(tmp2, r, r, strokePaint)
                 gapPaint.color = col
             }
             IslandConfig.STYLE_GRAPHITE -> {
@@ -1679,26 +1711,45 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
     // ---- Benachrichtigung ----
 
+    private fun notifIcon(canvas: Canvas, n: Content.Notif, rect: RectF, a: Float) {
+        val rad = if (cfg.notifIconRound) rect.width() / 2 else rect.width() * 0.24f
+        if (!drawBitmapRound(canvas, rect, n.icon, rad, a)) {
+            p.color = withAlpha(0xFF3A3A3C.toInt(), a)
+            canvas.drawRoundRect(rect, rad, rad, p)
+        }
+    }
+
     private fun drawNotif(canvas: Canvas, n: Content.Notif, a: Float) {
         val h = island.height()
-        val icon = min(46 * d, h - 22 * d)
-        val left = island.left + (h - icon) / 2
+        val sc = when (cfg.notifSize) { 0 -> 0.88f; 2 -> 1.12f; else -> 1f }
+        val icon = min(46 * d * sc, min(h - 22 * d, 58 * d))
+        val left = island.left + (min(h, 76 * d * sc) - icon) / 2 + 2 * d
         val iconRect = RectF(left, island.centerY() - icon / 2, left + icon, island.centerY() + icon / 2)
-        if (!drawBitmapRound(canvas, iconRect, n.icon, icon * 0.24f, a)) {
-            p.color = withAlpha(0xFF3A3A3C.toInt(), a)
-            canvas.drawRoundRect(iconRect, icon * 0.24f, icon * 0.24f, p)
-        }
+        notifIcon(canvas, n, iconRect, a)
 
         val tx = iconRect.right + 12 * d
+        val right = island.right - min(h, 76 * d) * 0.42f
         textPaint.textSize = spx(12f)
         val time = "jetzt"
-        val timeW = textPaint.measureText(time)
-        val right = island.right - h * 0.42f
+        val timeW = if (cfg.notifShowTime) textPaint.measureText(time) else 0f
         val avail = right - tx - timeW - 8 * d
 
-        boldPaint.textSize = spx(15f)
+        // Textblock vertikal zentrieren
+        val lines = cfg.notifLines.coerceIn(1, 3)
+        val appH = if (cfg.notifShowApp) 15 * d else 0f
+        val titleH = 19 * d * sc
+        val bodyH = 18 * d * sc * lines
+        var y = island.centerY() - (appH + titleH + bodyH) / 2
+
+        if (cfg.notifShowApp) {
+            textPaint.textSize = spx(11.5f)
+            textPaint.color = withAlpha(GRAY, a)
+            canvas.drawText(ellipsize(n.app.uppercase(), textPaint, avail), tx, y + 11 * d, textPaint)
+            y += appH
+        }
+        boldPaint.textSize = spx(15f * sc)
         boldPaint.color = withAlpha(Color.WHITE, a)
-        val titleY = island.centerY() - 3 * d
+        val titleY = y + titleH * 0.8f
         canvas.drawText(ellipsize(n.title.ifBlank { n.app }, boldPaint, avail), tx, titleY, boldPaint)
 
         if (queueCount > 0) {
@@ -1710,14 +1761,94 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             canvas.drawRoundRect(tmp, tmp.height() / 2, tmp.height() / 2, p)
             numPaint.color = withAlpha(Color.WHITE, a)
             canvas.drawText(badge, tmp.centerX() - numPaint.measureText(badge) / 2, titleY, numPaint)
-        } else {
+        } else if (cfg.notifShowTime) {
+            textPaint.textSize = spx(12f)
             textPaint.color = withAlpha(GRAY, a)
             canvas.drawText(time, right - timeW, titleY, textPaint)
         }
+        y += titleH
 
-        textPaint.textSize = spx(13.5f)
-        textPaint.color = withAlpha(LIGHT, a)
-        canvas.drawText(ellipsize(n.text.ifBlank { n.app }, textPaint, right - tx), tx, island.centerY() + 17 * d, textPaint)
+        val body = n.text.ifBlank { n.app }
+        if (lines == 1) {
+            textPaint.textSize = spx(13.5f * sc)
+            textPaint.color = withAlpha(LIGHT, a)
+            canvas.drawText(ellipsize(body, textPaint, right - tx), tx, y + 14 * d * sc, textPaint)
+        } else {
+            val tp = TextPaint(textPaint).apply { textSize = spx(13.5f * sc); color = withAlpha(LIGHT, a) }
+            val w = max(1, (right - tx).toInt())
+            val l = StaticLayout.Builder.obtain(body, 0, body.length, tp, w)
+                .setMaxLines(lines).setEllipsize(TextUtils.TruncateAt.END).setLineSpacing(1f * d, 1f).build()
+            canvas.save()
+            canvas.translate(tx, y + 1 * d)
+            l.draw(canvas)
+            canvas.restore()
+        }
+    }
+
+    /** Kompakt-Stil: Icon links, App/Titel rechts – so schmal wie andere Aktivitäten */
+    private fun drawNotifCompact(canvas: Canvas, n: Content.Notif, a: Float) {
+        val h = island.height()
+        val s = h * 0.64f
+        val lx = leftX(h)
+        notifIcon(canvas, n, RectF(lx - s / 2, island.centerY() - s / 2, lx + s / 2, island.centerY() + s / 2), a)
+        boldPaint.textSize = h * 0.38f * cfg.textScale
+        rightText(canvas, (if (cfg.notifShowApp) n.app else n.title.ifBlank { n.app }), boldPaint, n.accent?.let { mix(it, Color.WHITE, 0.35f) } ?: Color.WHITE, a)
+    }
+
+    // ---- Kontrollzentrum (wie MT Capsule) ----
+
+    private class SliderHit(val rect: RectF, val value: Float, val onChange: (Float) -> Unit)
+    private val sliderHits = ArrayList<SliderHit>()
+    private var sliderIndex = -1
+    private var sliderValue = 0f
+
+    private fun drawPanel(canvas: Canvas, c: PanelContent, a: Float, interactive: Boolean) {
+        val pad = 18 * d
+        val acc = accentOf(null)
+        var y = island.top + pad + 4 * d
+        val sh = 42 * d
+        fun slider(index: Int, value: Float, icon: (Float, Float, Float, Paint) -> Unit, label: String, onChange: (Float) -> Unit) {
+            val v = if (sliderIndex == index) sliderValue else value
+            tmp.set(island.left + pad, y, island.right - pad, y + sh)
+            p.color = withAlpha(Color.WHITE, a * 0.12f)
+            canvas.drawRoundRect(tmp, sh / 2, sh / 2, p)
+            val fillR = tmp.left + max(sh, tmp.width() * v.coerceIn(0f, 1f))
+            tmp2.set(tmp.left, tmp.top, fillR, tmp.bottom)
+            p.color = withAlpha(acc, a)
+            canvas.drawRoundRect(tmp2, sh / 2, sh / 2, p)
+            p.color = withAlpha(if (isLight(acc)) 0xFF1C1B1F.toInt() else Color.WHITE, a)
+            icon(tmp.left + sh / 2, tmp.centerY(), sh * 0.5f, p)
+            numPaint.textSize = spx(13f)
+            numPaint.color = withAlpha(Color.WHITE, a * 0.85f)
+            val txt = "$label  ${(v * 100).toInt()} %"
+            canvas.drawText(txt, tmp.right - 14 * d - numPaint.measureText(txt), tmp.centerY() + numPaint.textSize * 0.36f, numPaint)
+            if (interactive) sliderHits.add(SliderHit(RectF(tmp), value, onChange))
+            y += sh + 10 * d
+        }
+        slider(0, c.volume, { x, yy, s, pp -> Icons.speaker(canvas, x, yy, s, 2, false, pp) }, "Lautstärke") { listener?.onPanelVolume(it) }
+        slider(1, c.brightness, { x, yy, s, pp -> Icons.sun(canvas, x, yy, s, pp) }, if (c.canBrightness) "Helligkeit" else "Helligkeit 🔒") { listener?.onPanelBrightness(it) }
+
+        // Schnellzugriffe
+        val by = y + 26 * d
+        val n = 4
+        val step = (island.width() - pad * 2) / n
+        val br = 22 * d
+        for (i in 0 until n) {
+            val cx = island.left + pad + step * i + step / 2
+            p.color = withAlpha(Color.WHITE, a * 0.14f)
+            canvas.drawCircle(cx, by, br, p)
+            p.color = withAlpha(Color.WHITE, a)
+            when (i) {
+                0 -> Icons.flashlight(canvas, cx, by, br * 1.0f, p)
+                1 -> Icons.timer(canvas, cx, by, br * 1.0f, p)
+                2 -> Icons.alarm(canvas, cx, by, br * 1.0f, p)
+                else -> Icons.camera(canvas, cx, by, br * 1.1f, p, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(0xFF2A2A2E.toInt(), a) })
+            }
+            if (interactive) {
+                val idx = i
+                hits.add(Hit(RectF(cx - br - 6 * d, by - br - 6 * d, cx + br + 6 * d, by + br + 6 * d)) { listener?.onPanelShortcut(idx) })
+            }
+        }
     }
 
     private fun bodyLayout(n: Content.Notif, width: Float): StaticLayout {
@@ -1827,6 +1958,15 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                     kick()
                     return true
                 }
+                val si = sliderHits.indexOfFirst { it.rect.contains(e.x, e.y) }
+                if (si >= 0) {
+                    sliderIndex = si
+                    val r0 = sliderHits[si].rect
+                    sliderValue = ((e.x - r0.left) / r0.width()).coerceIn(0f, 1f)
+                    sliderHits[si].onChange(sliderValue)
+                    kick()
+                    return true
+                }
                 val torch = drawn as? TorchContent
                 if (torchActive && torch != null && torchRect.contains(e.x, e.y)) {
                     torchStartLevel = torch.level
@@ -1841,6 +1981,16 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 if (seeking) {
                     seekFrac = ((e.x - seekRect.left) / seekRect.width()).coerceIn(0f, 1f)
                     kick()
+                    return true
+                }
+                if (sliderIndex >= 0 && sliderIndex < sliderHits.size) {
+                    val r0 = sliderHits[sliderIndex].rect
+                    val v = ((e.x - r0.left) / r0.width()).coerceIn(0f, 1f)
+                    if (abs(v - sliderValue) > 0.01f) {
+                        sliderValue = v
+                        sliderHits[sliderIndex].onChange(v)
+                        kick()
+                    }
                     return true
                 }
                 if (!pressed) return bubblePressed
@@ -1886,6 +2036,12 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                     kick()
                     return true
                 }
+                if (sliderIndex >= 0) {
+                    sliderIndex = -1
+                    pressed = false
+                    kick()
+                    return true
+                }
                 if (torchDragging) {
                     torchDragging = false
                     pressed = false
@@ -1926,6 +2082,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 pressed = false
                 bubblePressed = false
                 seeking = false
+                sliderIndex = -1
                 sPress.target = 1f
                 kick()
                 return true

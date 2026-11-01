@@ -443,6 +443,32 @@ object Icons {
         p.strokeCap = oldCap
     }
 
+    fun sun(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        c.drawCircle(cx, cy, s * 0.2f, p)
+        val oldStyle = p.style
+        val oldW = p.strokeWidth
+        val oldCap = p.strokeCap
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.08f
+        p.strokeCap = Paint.Cap.ROUND
+        for (i in 0 until 8) {
+            val a = Math.toRadians(i * 45.0)
+            c.drawLine(cx + (s * 0.32f * Math.cos(a)).toFloat(), cy + (s * 0.32f * Math.sin(a)).toFloat(),
+                cx + (s * 0.45f * Math.cos(a)).toFloat(), cy + (s * 0.45f * Math.sin(a)).toFloat(), p)
+        }
+        p.style = oldStyle
+        p.strokeWidth = oldW
+        p.strokeCap = oldCap
+    }
+
+    fun camera(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint, hole: Paint) {
+        rect.set(cx - s * 0.45f, cy - s * 0.28f, cx + s * 0.45f, cy + s * 0.36f)
+        c.drawRoundRect(rect, s * 0.1f, s * 0.1f, p)
+        rect.set(cx - s * 0.16f, cy - s * 0.4f, cx + s * 0.16f, cy - s * 0.22f)
+        c.drawRoundRect(rect, s * 0.05f, s * 0.05f, p)
+        c.drawCircle(cx, cy + s * 0.04f, s * 0.17f, hole)
+    }
+
     private inline fun roundJoin(p: Paint, block: () -> Unit) {
         val oldJoin = p.strokeJoin
         val oldStyle = p.style

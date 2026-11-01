@@ -115,6 +115,17 @@ data class IslandConfig(
     val appFont: Int = -1,
     val timerMinutes: Int = 5,
 
+    // Mitteilungs-Aussehen
+    val notifStyle: Int = NOTIF_BANNER,
+    val notifSize: Int = 1,
+    val notifLines: Int = 1,
+    val notifWidthPct: Int = 100,
+    val notifShowApp: Boolean = false,
+    val notifShowTime: Boolean = true,
+    val notifIconRound: Boolean = false,
+    val notifAppGlow: Boolean = false,
+    val idleTap: Int = 1,
+
     // Verhalten
     val tapExpands: Boolean = false,
     val swipeDownExpands: Boolean = true,
@@ -179,6 +190,13 @@ data class IslandConfig(
         const val IDLE_DATE = 4
         const val IDLE_ALARM = 5
         const val IDLE_DATE_BATTERY = 6
+
+        const val DESIGN_CAPSULE = 6
+        const val STYLE_CAPSULE = 6
+
+        const val NOTIF_BANNER = 0
+        const val NOTIF_COMPACT = 1
+        const val NOTIF_LARGE = 2
 
         const val ANIM_APPLE = 0
         const val ANIM_ANDROID = 1
@@ -312,6 +330,15 @@ object Prefs {
     const val APP_FONT = "app_font"
     const val TIMER_MINUTES = "timer_minutes"
     const val ONBOARDED = "onboarded"
+    const val NOTIF_STYLE = "notif_style"
+    const val NOTIF_SIZE = "notif_size"
+    const val NOTIF_LINES = "notif_lines"
+    const val NOTIF_WIDTH = "notif_width"
+    const val NOTIF_SHOW_APP = "notif_show_app"
+    const val NOTIF_SHOW_TIME = "notif_show_time"
+    const val NOTIF_ICON_ROUND = "notif_icon_round"
+    const val NOTIF_APP_GLOW = "notif_app_glow"
+    const val IDLE_TAP = "idle_tap"
 
     const val TAP_EXPANDS = "tap_expands_v2"
     const val SWIPE_DOWN = "swipe_down_expands"
@@ -427,6 +454,15 @@ object Prefs {
             powerSaveReduce = b(POWER_SAVE, d.powerSaveReduce),
             appFont = i(APP_FONT, d.appFont),
             timerMinutes = i(TIMER_MINUTES, d.timerMinutes),
+            notifStyle = i(NOTIF_STYLE, d.notifStyle),
+            notifSize = i(NOTIF_SIZE, d.notifSize),
+            notifLines = i(NOTIF_LINES, d.notifLines),
+            notifWidthPct = i(NOTIF_WIDTH, d.notifWidthPct),
+            notifShowApp = b(NOTIF_SHOW_APP, d.notifShowApp),
+            notifShowTime = b(NOTIF_SHOW_TIME, d.notifShowTime),
+            notifIconRound = b(NOTIF_ICON_ROUND, d.notifIconRound),
+            notifAppGlow = b(NOTIF_APP_GLOW, d.notifAppGlow),
+            idleTap = i(IDLE_TAP, d.idleTap),
 
             tapExpands = b(TAP_EXPANDS, d.tapExpands),
             swipeDownExpands = b(SWIPE_DOWN, d.swipeDownExpands),
@@ -463,6 +499,15 @@ object Prefs {
                 C.WAVE_BARS, C.PROGRESS_LINE, C.CONTROL_CIRCLE, C.FONT_SYSTEM, C.LOOK_ONEUI, false, C.ANIM_ONEUI)
             C.DESIGN_NOTHING -> look(C.STYLE_OUTLINE, C.ACCENT_CUSTOM, 0xFFD71921.toInt(), 20, 72, 0, 72,
                 C.WAVE_DOTS, C.PROGRESS_DOTS, C.CONTROL_OUTLINE, 7, C.LOOK_NOTHING, false, C.ANIM_NOTHING)
+            C.DESIGN_CAPSULE -> {
+                // Extra-Vorlage: Material-You-Kapsel, die eng um die Kamera sitzt
+                look(C.STYLE_CAPSULE, C.ACCENT_SYSTEM, null, 30, 100, 22, 58,
+                    C.WAVE_LINE, C.PROGRESS_SQUIGGLE, C.CONTROL_FILLED, C.FONT_GOOGLE, C.LOOK_ANDROID, false, C.ANIM_ANDROID)
+                e.putInt(WIDTH, 96).putInt(HEIGHT, 30).putInt(NOTIF_STYLE, C.NOTIF_COMPACT)
+                    .putBoolean(NOTIF_SHOW_APP, true).putBoolean(NOTIF_ICON_ROUND, true).putBoolean(NOTIF_APP_GLOW, true)
+                    // Kapsel sitzt immer um die Kamera, Antippen öffnet das Kontrollzentrum
+                    .putBoolean(ALWAYS, true).putBoolean(IDLE_TOUCH_THROUGH, false).putInt(IDLE_TAP, 1)
+            }
             C.DESIGN_GLASS -> {
                 look(C.STYLE_GLASS, C.ACCENT_COVER, null, 40, 100, 40, 52,
                     C.WAVE_BARS, C.PROGRESS_LINE, C.CONTROL_PLAIN, Fonts.INTER, C.LOOK_GLASS, true, C.ANIM_APPLE)

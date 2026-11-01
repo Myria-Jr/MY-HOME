@@ -15,6 +15,10 @@
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <!-- WLAN / Offline-Anzeige -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Helligkeits-Regler im Kontrollzentrum -->
+    <uses-permission
+        android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <application
         android:name=".IslandApp"

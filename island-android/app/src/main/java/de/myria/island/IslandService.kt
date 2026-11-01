@@ -342,6 +342,57 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
     override fun startTimer() = OwnTimers.startTimer(cfg.timerMinutes.coerceIn(1, 120))
 
+    // ---- Kontrollzentrum ----
+
+    private val audio get() = getSystemService(AUDIO_SERVICE) as AudioManager
+
+    override fun volume(): Float {
+        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
+        return audio.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / max
+    }
+
+    override fun setVolume(v: Float) {
+        val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        try { audio.setStreamVolume(AudioManager.STREAM_MUSIC, (v * max + 0.5f).toInt().coerceIn(0, max), 0) } catch (_: Exception) {}
+    }
+
+    override fun canBrightness(): Boolean = android.provider.Settings.System.canWrite(this)
+
+    override fun brightness(): Float = try {
+        android.provider.Settings.System.getInt(contentResolver, android.provider.Settings.System.SCREEN_BRIGHTNESS) / 255f
+    } catch (_: Exception) { 0.5f }
+
+    private var askedWriteSettings = false
+
+    override fun setBrightness(v: Float) {
+        if (!canBrightness()) {
+            if (!askedWriteSettings) {
+                askedWriteSettings = true
+                try {
+                    startActivity(Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                        android.net.Uri.parse("package:$packageName")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                } catch (_: Exception) {}
+            }
+            return
+        }
+        try {
+            val cr = contentResolver
+            android.provider.Settings.System.putInt(cr, android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE,
+                android.provider.Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
+            android.provider.Settings.System.putInt(cr, android.provider.Settings.System.SCREEN_BRIGHTNESS, (v * 255).toInt().coerceIn(1, 255))
+        } catch (_: Exception) {}
+    }
+
+    override fun openCamera() {
+        try {
+            startActivity(Intent(android.provider.MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) {}
+    }
+
+    override fun onCalibrate(on: Boolean) {
+        controller?.calibrating = on
+    }
+
     override fun startStopwatch() {
         if (OwnTimers.stopwatchRunning) OwnTimers.stopStopwatch() else OwnTimers.startStopwatch()
     }

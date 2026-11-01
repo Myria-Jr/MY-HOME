@@ -27,7 +27,22 @@ class IslandController(
         fun startStopwatch() {}
         fun openSettings() {}
         fun setTorchLevel(level: Float) {}
+        fun volume(): Float = 0.5f
+        fun setVolume(v: Float) {}
+        fun brightness(): Float = 0.5f
+        fun canBrightness(): Boolean = false
+        fun setBrightness(v: Float) {}
+        fun openCamera() {}
     }
+
+    /** Kalibrier-Modus: leere Island bleibt sichtbar (beim Einstellen von Größe & Position) */
+    var calibrating = false
+        set(v) {
+            if (field != v) {
+                field = v
+                refresh()
+            }
+        }
 
     var cfg: IslandConfig = IslandConfig()
         set(v) {
@@ -171,6 +186,7 @@ class IslandController(
         is NetworkContent -> cfg.showNetwork
         is HeatContent -> cfg.tempWarning
         is AlarmContent -> cfg.showAlarm
+        is PanelContent -> true
     }
 
     private fun inQuietHours(): Boolean {
@@ -204,7 +220,8 @@ class IslandController(
             else -> 3000L
         }
         transient = c
-        expandedKey = if (c is Content.Notif && cfg.notifAutoExpand && c.expandable) c.key else null
+        val bigNotif = cfg.notifAutoExpand || cfg.notifStyle == IslandConfig.NOTIF_LARGE
+        expandedKey = if (c is Content.Notif && bigNotif && c.expandable) c.key else null
         handler.removeCallbacks(clearTransient)
         handler.postDelayed(clearTransient, ms)
         if (cfg.haptics && c !is UnlockContent && c !is VolumeContent && !quiet) host.haptic(false)
@@ -243,7 +260,7 @@ class IslandController(
         val privacyOn = (privacy.camera && cfg.privacyCamera) || (privacy.mic && cfg.privacyMic) ||
             (privacy.location && cfg.privacyLocation)
         val mode = when {
-            primary == null -> if (cfg.alwaysVisible || privacyOn) Mode.IDLE else Mode.HIDDEN
+            primary == null -> if (cfg.alwaysVisible || privacyOn || calibrating) Mode.IDLE else Mode.HIDDEN
             expandedKey == primary.key && primary.expandable -> Mode.EXPANDED
             else -> Mode.COMPACT
         }
@@ -267,6 +284,10 @@ class IslandController(
     }
 
     private fun collapse() {
+        if (transient is PanelContent) {
+            dismissTransient()
+            return
+        }
         if (expandedKey == null) return
         expandedKey = null
         handler.removeCallbacks(autoCollapse)
@@ -300,8 +321,45 @@ class IslandController(
     // Touch aus der View
     // ------------------------------------------------------------------
 
+    /** Kontrollzentrum öffnen (Regler + Schnellzugriffe) */
+    fun showPanel() {
+        val p = PanelContent(host.volume(), host.brightness(), host.canBrightness())
+        transient = p
+        expandedKey = p.key
+        handler.removeCallbacks(clearTransient)
+        scheduleCollapse()
+        if (cfg.haptics) host.haptic(true)
+        refresh()
+    }
+
+    override fun onPanelVolume(v: Float) {
+        host.setVolume(v)
+        scheduleCollapse()
+    }
+
+    override fun onPanelBrightness(v: Float) {
+        host.setBrightness(v)
+        scheduleCollapse()
+    }
+
+    override fun onPanelShortcut(index: Int) {
+        when (index) {
+            0 -> host.toggleTorch()
+            1 -> host.startTimer()
+            2 -> host.startStopwatch()
+            else -> host.openCamera()
+        }
+        dismissTransient()
+    }
+
     override fun onIslandTap() {
-        val c = view.target ?: return
+        val c0 = view.target
+        if (c0 == null) {
+            // Leere Kapsel antippen → Kontrollzentrum (wie MT Capsule)
+            if (view.mode == Mode.IDLE && cfg.idleTap == 1) showPanel()
+            return
+        }
+        val c = c0
         if (c is TorchContent) {
             if (cfg.haptics) host.haptic(true)
             collapse()

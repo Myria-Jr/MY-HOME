@@ -830,6 +830,7 @@ class DesignTile(ctx: Context, private val pal: Palette, private val design: Int
             IslandConfig.DESIGN_NOTHING -> 0xFF111111.toInt() to 0xFF3A3A3A.toInt()
             IslandConfig.DESIGN_CUSTOM -> 0xFF7B3FA0.toInt() to 0xFFF7A86B.toInt()
             IslandConfig.DESIGN_GLASS -> 0xFF4A3AA8.toInt() to 0xFF16B5C9.toInt()
+            IslandConfig.DESIGN_CAPSULE -> 0xFF3B2A6E.toInt() to 0xFFC9B6FF.toInt()
             else -> 0xFF2B1B5E.toInt() to 0xFFE0688F.toInt()
         }
         p.shader = LinearGradient(0f, 0f, w, h, c1, c2, Shader.TileMode.CLAMP)
@@ -850,6 +851,11 @@ class DesignTile(ctx: Context, private val pal: Palette, private val design: Int
             IslandConfig.DESIGN_NOTHING -> {
                 p.color = Color.BLACK; c.drawRoundRect(r, rad, rad, p)
                 p.style = Paint.Style.STROKE; p.strokeWidth = 1.2f * dp1; p.color = 0x55FFFFFF
+                c.drawRoundRect(r, rad, rad, p); p.style = Paint.Style.FILL
+            }
+            IslandConfig.DESIGN_CAPSULE -> {
+                p.color = 0xFF2A2140.toInt(); c.drawRoundRect(r, rad, rad, p)
+                p.style = Paint.Style.STROKE; p.strokeWidth = 1f * dp1; p.color = 0x66D0BCFF
                 c.drawRoundRect(r, rad, rad, p); p.style = Paint.Style.FILL
             }
             IslandConfig.DESIGN_GLASS -> {

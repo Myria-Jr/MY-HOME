@@ -102,6 +102,61 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         refreshers.forEach { it() }
+        if (stackNames.lastOrNull() == "geometry") IslandBus.calibrate(true)
+    }
+
+    override fun onPause() {
+        IslandBus.calibrate(false)
+        super.onPause()
+    }
+
+    private fun it_haptic() {
+        host.performHapticFeedback(HapticFeedbackConstants.CONFIRM.takeIf { Build.VERSION.SDK_INT >= 30 } ?: HapticFeedbackConstants.LONG_PRESS)
+    }
+
+    /**
+     * Smart-Anpassung: misst die Kamera-Aussparung und berechnet daraus die perfekte Island.
+     * Punch-Hole → Höhe ≈ 1,4 × Kamera-Durchmesser, Breite ≈ 3,1 × Höhe; Notch → umschließt die Notch.
+     */
+    @Suppress("DEPRECATION")
+    private fun smartFit(): String {
+        val dm = resources.displayMetrics
+        val d = dm.density
+        val rect: android.graphics.Rect? = try {
+            if (Build.VERSION.SDK_INT >= 29) windowManager.defaultDisplay.cutout?.boundingRectTop?.takeIf { !it.isEmpty }
+            else window.decorView.rootWindowInsets?.displayCutout?.boundingRectTop?.takeIf { !it.isEmpty }
+        } catch (_: Exception) { null }
+        val model = Build.MANUFACTURER.replaceFirstChar { it.uppercase() } + " " + Build.MODEL
+        val e = prefs.edit()
+        val text: String
+        if (rect == null) {
+            e.putBoolean(Prefs.AUTO_CAMERA, false).putInt(Prefs.WIDTH, 112).putInt(Prefs.HEIGHT, 34)
+                .putInt(Prefs.OFFSET_X, 0).putInt(Prefs.OFFSET_Y, 6).putInt(Prefs.COMPACT_ROUND, 100)
+            text = "📱 $model\nKeine Kamera-Aussparung gefunden → Island sitzt oben mittig (112 × 34 dp)."
+        } else {
+            val wDp = rect.width() / d
+            val hDp = rect.height() / d
+            val mm = rect.height() / dm.ydpi * 25.4f
+            val notch = wDp > hDp * 1.8f
+            val w: Int
+            val h: Int
+            if (notch) {
+                w = (wDp + 18).toInt().coerceIn(80, 240)
+                h = hDp.toInt().coerceIn(26, 52)
+            } else {
+                val dia = minOf(wDp, hDp)
+                h = (dia * 1.4f + 6).toInt().coerceIn(26, 46)
+                w = maxOf((h * 3.1f).toInt(), (dia + 72).toInt()).coerceIn(90, 170)
+            }
+            val off = rect.centerX() / d - dm.widthPixels / d / 2
+            val pos = when { kotlin.math.abs(off) < 8 -> "oben mittig"; off < 0 -> "oben links"; else -> "oben rechts" }
+            e.putBoolean(Prefs.AUTO_CAMERA, true).putInt(Prefs.WIDTH, w).putInt(Prefs.HEIGHT, h)
+                .putInt(Prefs.OFFSET_X, 0).putInt(Prefs.OFFSET_Y, 0).putInt(Prefs.COMPACT_ROUND, 100)
+            text = "📱 $model\n" + (if (notch) "Notch" else "Kamera-Loch") +
+                " · %.1f mm · $pos\n→ Island $w × $h dp, genau auf der Kamera zentriert".format(mm)
+        }
+        e.putString(PREF_SMART, text).apply()
+        return text
     }
 
     override fun onDestroy() {
@@ -207,7 +262,8 @@ class MainActivity : Activity() {
     private fun pop(): Boolean {
         if (stack.size <= 1) return false
         val top = stack.removeAt(stack.size - 1)
-        stackNames.removeAt(stackNames.size - 1)
+        val name = stackNames.removeAt(stackNames.size - 1)
+        if (name == "geometry") IslandBus.calibrate(false)
         val prev = stack.last()
         prev.visibility = View.VISIBLE
         val w = host.width.toFloat()
@@ -347,6 +403,7 @@ class MainActivity : Activity() {
         IslandConfig.DESIGN_NOTHING -> "Nothing"
         IslandConfig.DESIGN_CUSTOM -> "Custom"
         IslandConfig.DESIGN_GLASS -> "Liquid Glass"
+        IslandConfig.DESIGN_CAPSULE -> "Kapsel"
         else -> "Apple"
     }
 
@@ -519,7 +576,8 @@ class MainActivity : Activity() {
 
     private val designList = listOf(
         IslandConfig.DESIGN_APPLE to "Apple", IslandConfig.DESIGN_ANDROID to "Android",
-        IslandConfig.DESIGN_GLASS to "Liquid Glass", IslandConfig.DESIGN_ONEUI to "One UI",
+        IslandConfig.DESIGN_GLASS to "Liquid Glass", IslandConfig.DESIGN_CAPSULE to "Kapsel",
+        IslandConfig.DESIGN_ONEUI to "One UI",
         IslandConfig.DESIGN_NOTHING to "Nothing", IslandConfig.DESIGN_CUSTOM to "Custom",
     )
 
@@ -593,6 +651,7 @@ class MainActivity : Activity() {
             "Material" to "Dunkle Material-You-Fläche",
             "Graphit" to "Dunkelgrau mit feinem Rand",
             "Umriss" to "Schwarz mit hellem Rand",
+            "Kapsel" to "Tonal in deinen Material-You-Farben",
         )) {
             if (it == IslandConfig.STYLE_GLASS) {
                 Toast.makeText(this, "Tipp: Unter „Liquid Glass“ kannst du das Glas fein einstellen 💧", Toast.LENGTH_SHORT).show()
@@ -663,6 +722,23 @@ class MainActivity : Activity() {
 
     private fun geometryPage() = page("Größe & Position", true) { c ->
         c.addView(previewCard(big = false, root = c))
+        IslandBus.calibrate(true)
+        val result = TextView(this).apply {
+            text = prefs.getString(PREF_SMART, null) ?: "Noch nicht angepasst."
+            textSize = 14f
+            typeface = pal.font(400)
+            setTextColor(pal.secondary)
+            setLineSpacing(0f, 1.2f)
+            setPadding(dpi(16f), dpi(12f), dpi(16f), dpi(12f))
+        }
+        c.addView(section("Smart-Anpassung ✨", listOf(
+            actionRow("Automatisch an mein Handy anpassen") {
+                result.text = smartFit()
+                it_haptic()
+                Toast.makeText(this, "Angepasst – schau mal oben 👀", Toast.LENGTH_SHORT).show()
+            },
+            result,
+        ), footer = "Erkennt dein Handy und misst die Kamera-Aussparung (Form, Größe, Lage). Daraus wird die perfekte Größe berechnet. Solange diese Seite offen ist, bleibt die echte Island oben sichtbar – zum Feinjustieren."))
         c.addView(section("Position", listOf(
             switchRow("An Kamera ausrichten", Prefs.AUTO_CAMERA, D.autoCamera, "Findet die Kamera-Aussparung automatisch"),
             sliderRow("Vertikal", Prefs.OFFSET_Y, D.offsetYDp, -30, 80) { signed(it) },
@@ -772,6 +848,24 @@ class MainActivity : Activity() {
     }
 
     private fun notifPage() = page("Mitteilungen", true) { c ->
+        c.addView(previewCard(big = false, root = c))
+        c.addView(section("Aussehen", choiceRows(Prefs.NOTIF_STYLE, D.notifStyle, listOf(
+            "Banner" to "Breit mit Icon, Titel und Text",
+            "Kompakt" to "Schmale Kapsel: Icon + App-Name",
+            "Groß" to "Sofort mit ganzem Text und Buttons",
+        )) + listOf(
+            labeled("Größe", segmentRow(listOf("Klein", "Normal", "Groß"), prefs.getInt(Prefs.NOTIF_SIZE, D.notifSize)) {
+                prefs.edit().putInt(Prefs.NOTIF_SIZE, it).apply()
+            }),
+            labeled("Textzeilen", segmentRow(listOf("1", "2", "3"), prefs.getInt(Prefs.NOTIF_LINES, D.notifLines) - 1) {
+                prefs.edit().putInt(Prefs.NOTIF_LINES, it + 1).apply()
+            }),
+            sliderRow("Breite", Prefs.NOTIF_WIDTH, D.notifWidthPct, 60, 100) { "$it %" },
+            switchRow("App-Name zeigen", Prefs.NOTIF_SHOW_APP, D.notifShowApp),
+            switchRow("Uhrzeit zeigen", Prefs.NOTIF_SHOW_TIME, D.notifShowTime),
+            switchRow("Runde Icons", Prefs.NOTIF_ICON_ROUND, D.notifIconRound),
+            switchRow("Leuchten in App-Farbe", Prefs.NOTIF_APP_GLOW, D.notifAppGlow, "Glow in der Farbe des App-Icons"),
+        ), footer = "Tippe in der Vorschau auf „Nachricht“, um's direkt zu sehen."))
         c.addView(section(null, listOf(
             switchRow("Mitteilungen in der Island", Prefs.NOTIFS, D.showNotifications),
             sliderRow("Anzeigedauer", Prefs.NOTIF_SECONDS, D.notifSeconds, 2, 12) { "$it s" },
@@ -812,6 +906,10 @@ class MainActivity : Activity() {
             "Aktivität wechseln" to "Zwischen Musik, Timer, Navi … blättern",
             "Song wechseln" to "Bei Musik: nächster / vorheriger Song",
         ))))
+        c.addView(section("Leere Pille antippen", choiceRows(Prefs.IDLE_TAP, D.idleTap, listOf(
+            "Nichts" to null,
+            "Kontrollzentrum" to "Lautstärke, Helligkeit, Lampe, Timer, Kamera",
+        ))))
         c.addView(section("Leere Pille gedrückt halten", choiceRows(Prefs.IDLE_LP, D.idleLongPress, listOf(
             "Nichts" to null, "Timer starten" to null, "Stoppuhr" to null, "Taschenlampe" to null, "Isla öffnen" to null,
         )), footer = "Funktioniert bei „Immer sichtbar“, wenn „Leere Pille durchklickbar“ aus ist."))
@@ -843,6 +941,11 @@ class MainActivity : Activity() {
         if (Build.VERSION.SDK_INT >= 31) {
             optional.add(permRow("Bluetooth", "Für Kopfhörer + Akkustand", Manifest.permission.BLUETOOTH_CONNECT))
         }
+        optional.add(statusRow("Helligkeit ändern", "Für den Regler im Kontrollzentrum", { Settings.System.canWrite(this) }) {
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
+            } catch (_: Exception) {}
+        })
         c.addView(section("Optional", optional))
         c.addView(section(null, listOf(
             actionRow("App-Info öffnen") {
@@ -1017,6 +1120,11 @@ class MainActivity : Activity() {
             override fun haptic(strong: Boolean) {
                 view.performHapticFeedback(if (strong) HapticFeedbackConstants.LONG_PRESS else HapticFeedbackConstants.CONTEXT_CLICK)
             }
+            override fun volume() = demoPanelVol
+            override fun setVolume(v: Float) { demoPanelVol = v }
+            override fun brightness() = demoPanelBright
+            override fun canBrightness() = true
+            override fun setBrightness(v: Float) { demoPanelBright = v }
             override fun setTorchLevel(level: Float) {
                 demoTorchLevel = level
                 if (demoLive.containsKey("torch")) {
@@ -1045,6 +1153,7 @@ class MainActivity : Activity() {
         fun chip(t: String, f: () -> Unit) {
             chips.addView(glassChip(this, t, f), LinearLayout.LayoutParams(-2, -2).apply { rightMargin = dpi(8f) })
         }
+        chip("🎛  Kontrollzentrum") { previews.forEach { it.showPanel() } }
         chip("♫  Musik") { demoMusicToggle() }
         chip("💬  Nachricht") { demoNotif() }
         chip("📞  Anruf") { demoCall() }
@@ -1245,6 +1354,8 @@ class MainActivity : Activity() {
     }
 
     private var demoTorchLevel = 0.8f
+    private var demoPanelVol = 0.6f
+    private var demoPanelBright = 0.7f
 
     private fun demoTorchContent(): TorchContent =
         TorchContent({ demoLive.remove("torch"); pushDemoLive() }, demoTorchLevel, true)
@@ -1784,6 +1895,7 @@ class MainActivity : Activity() {
         c.addView(designStrip())
         c.addView(section(null, listOf(
             actionRow("Los geht's ✨") {
+                smartFit()
                 prefs.edit().putBoolean(Prefs.ONBOARDED, true).apply()
                 pop()
             },
@@ -1877,6 +1989,7 @@ class MainActivity : Activity() {
     companion object {
         const val APP_NAME = "Isla"
         private const val PREF_ICON = "app_icon"
+        private const val PREF_SMART = "smart_result"
         private val ICONS = listOf(
             "classic" to "Klassisch", "light" to "Hell", "lagoon" to "Lagune", "sunset" to "Sunset",
             "midnight" to "Mitternacht", "glass" to "Glas", "neon" to "Neon", "dots" to "Punkte",
@@ -1924,6 +2037,10 @@ class MainActivity : Activity() {
             "Akku-Rand Hitze Temperatur Schnellladen Restzeit" to "live",
             "Internet WLAN Wecker Energiesparmodus Datum" to "system",
             "Export Import Sichern Backup" to "info",
+            "Smart-Anpassung KI automatisch Kamera kalibrieren erkennen" to "geometry",
+            "Mitteilungen Größe Stil Banner Kompakt Zeilen Breite App-Name runde Icons" to "notif",
+            "Kontrollzentrum Regler Helligkeit Lautstärke Kapsel" to "behavior",
+            "Kapsel MT Capsule Material You" to "design",
         )
     }
 }

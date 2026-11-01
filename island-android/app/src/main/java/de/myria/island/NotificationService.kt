@@ -268,6 +268,7 @@ class NotificationService : NotificationListenerService() {
                 open = open,
                 actions = if (cfg.notifActions && !cfg.notifHideContent) actionsOf(n, key, autoCancel) else emptyList(),
                 id = key + "@" + sbn.postTime,
+                accent = (appIcon(sbn.packageName) ?: icon)?.let { Colors.accentOf(it) },
             )
         )
     }

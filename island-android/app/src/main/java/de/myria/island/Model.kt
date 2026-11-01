@@ -79,6 +79,8 @@ sealed class Content {
         val open: (() -> Unit)?,
         val actions: List<NotifAction> = emptyList(),
         val id: String = "n" + SystemClock.elapsedRealtimeNanos(),
+        /** Farbe aus dem App-Icon (für Leuchten), null = keine */
+        val accent: Int? = null,
     ) : Content() {
         override val key get() = id
         override val priority get() = 200
@@ -153,6 +155,12 @@ sealed class Content {
         override val key get() = "device"
         override val expandable get() = false
     }
+}
+
+/** Kontrollzentrum in der Kapsel (wie MT Capsule): Regler + Schnellzugriffe */
+class PanelContent(val volume: Float, val brightness: Float, val canBrightness: Boolean) : Content() {
+    override val key get() = "panel"
+    override val priority get() = 300
 }
 
 /** Internet: 0 = offline, 1 = WLAN, 2 = Mobilfunk */
@@ -231,6 +239,7 @@ object IslandBus {
         fun onLive(list: List<Content>) {}
         fun onTestMusic(m: MusicInfo) {}
         fun onTestLive(list: List<Content>) {}
+        fun onCalibrate(on: Boolean) {}
     }
 
     private val listeners = CopyOnWriteArrayList<Listener>()
@@ -260,6 +269,8 @@ object IslandBus {
     fun event(c: Content) = listeners.forEach { it.onEvent(c) }
     fun testMusic(m: MusicInfo) = listeners.forEach { it.onTestMusic(m) }
     fun testLive(list: List<Content>) = listeners.forEach { it.onTestLive(list) }
+    /** Kalibrier-Modus: echte Island bleibt sichtbar, solange man Größe & Position einstellt */
+    fun calibrate(on: Boolean) = listeners.forEach { it.onCalibrate(on) }
 }
 
 
