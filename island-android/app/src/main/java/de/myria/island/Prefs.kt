@@ -8,6 +8,8 @@ data class IslandConfig(
     // Design
     val design: Int = DESIGN_APPLE,
     val uiLook: Int = LOOK_APPLE,
+    /** Symbol-Stil: -1 = passend zum Design, sonst Icons.APPLE/MATERIAL/ONEUI/NOTHING */
+    val iconFamily: Int = -1,
 
     // Allgemein
     val enabled: Boolean = true,
@@ -144,6 +146,13 @@ data class IslandConfig(
     /** 1.0 = kein Nachschwingen, 0.45 = sehr bouncy */
     val dampingRatio: Float get() = if (reduceMotion) 1f else 1f - bounce / 100f * 0.55f
     val stiffness: Float get() = 160f + speed / 100f * 560f
+    /** Tatsächlicher Symbol-Stil (Apple / Material / One UI / Nothing) */
+    val symbols: Int get() = if (iconFamily in 0..3) iconFamily else when (design) {
+        DESIGN_ANDROID, DESIGN_PIXEL, DESIGN_CAPSULE -> Icons.MATERIAL
+        DESIGN_ONEUI -> Icons.ONEUI
+        DESIGN_NOTHING -> Icons.NOTHING
+        else -> Icons.APPLE
+    }
     val textScale: Float get() = when (fontScale) { 0 -> 0.9f; 2 -> 1.12f; else -> 1f }
 
     companion object {
@@ -242,6 +251,7 @@ object Prefs {
 
     const val DESIGN = "design"
     const val UI_LOOK = "ui_look"
+    const val ICON_FAMILY = "icon_family"
 
     const val ENABLED = "enabled"
     const val ALWAYS = "always_visible"
@@ -373,6 +383,7 @@ object Prefs {
         return IslandConfig(
             design = i(DESIGN, d.design),
             uiLook = i(UI_LOOK, d.uiLook),
+            iconFamily = i(ICON_FAMILY, d.iconFamily),
 
             enabled = b(ENABLED, d.enabled),
             alwaysVisible = b(ALWAYS, d.alwaysVisible),

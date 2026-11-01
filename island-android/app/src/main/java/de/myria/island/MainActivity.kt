@@ -657,6 +657,12 @@ class MainActivity : Activity() {
         c.addView(grid)
         c.addView(footerText("Eine Vorlage setzt Form, Farben, Schrift, Animation, Wellenform, Tasten und den Look dieser App. Danach kannst du trotzdem alles einzeln ändern. „Custom“ ist dein eigener Look und merkt sich deine Werte."))
 
+        c.addView(section("Symbole", listOf(
+            segmentRow(listOf("Passend", "Apple", "Pixel", "One UI", "Nothing"), prefs.getInt(Prefs.ICON_FAMILY, -1) + 1) {
+                prefs.edit().putInt(Prefs.ICON_FAMILY, it - 1).apply()
+            },
+        ), footer = "Akku, Laden, Standort, WLAN, Musik-Tasten & Co. sehen aus wie im jeweiligen System. „Passend“ folgt dem Design – Nothing zeichnet alles als Punktraster."))
+
         c.addView(section("Look dieser App", listOf(
             segmentRow(listOf("iOS", "Material", "One UI", "Nothing", "Glas"), prefs.getInt(Prefs.UI_LOOK, D.uiLook)) {
                 prefs.edit().putInt(Prefs.UI_LOOK, it).apply()

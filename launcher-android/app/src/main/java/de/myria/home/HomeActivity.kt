@@ -62,6 +62,7 @@ class HomeActivity : Activity() {
     private lateinit var webRow: TextView
     private lateinit var doneButton: TextView
     private var clockView: ClockView? = null
+    private var todayClock: ClockView? = null
     private val main = Handler(Looper.getMainLooper())
     private val ease = PathInterpolator(0.2f, 0.9f, 0.1f, 1f)
     private var drawerOpen = false
@@ -149,7 +150,7 @@ class HomeActivity : Activity() {
             build()
             fillHome()
         }
-        clockView?.invalidate()
+        clockView?.invalidate(); todayClock?.invalidate()
     }
 
     override fun onPause() {
@@ -191,7 +192,7 @@ class HomeActivity : Activity() {
                     i.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
                 ClockView.charging = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
             }
-            clockView?.invalidate()
+            clockView?.invalidate(); todayClock?.invalidate()
         }
     }
 
@@ -492,7 +493,7 @@ class HomeActivity : Activity() {
         }
         // Suche
         col.addView(TextView(this).apply {
-            text = "  🔍  Suchen"
+            text = "⌕   Suchen"
             textSize = 16f
             gravity = Gravity.CENTER_VERTICAL
             setTextColor((textColor and 0x00FFFFFF) or 0xCC000000.toInt())
@@ -503,7 +504,9 @@ class HomeActivity : Activity() {
         // Akku + Uhr nebeneinander
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         val wLook = Look.values().getOrNull(prefs.widgetStyle) ?: look
-        row.addView(ClockView(this, wLook, prefs.darkText), LinearLayout.LayoutParams(-1, dpi(ClockView.heightDp(wLook))))
+        val tc = ClockView(this, wLook, prefs.darkText)
+        todayClock = tc
+        row.addView(tc, LinearLayout.LayoutParams(-1, dpi(ClockView.heightDp(wLook))))
         col.addView(row, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dpi(12f) })
         // Meistgenutzt
         val top = visibleApps().sortedByDescending { prefs.launches(it.key) }.take(8)
@@ -1013,12 +1016,12 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
         fun heightDp(look: Look) = when (look) {
             Look.APPLE -> 170f
             Look.ANDROID -> 96f
-            Look.ONEUI -> 150f
+            Look.ONEUI -> 160f
             Look.GALAXY -> 200f
-            Look.NOTHING -> 150f
-            Look.COLOROS -> 140f
+            Look.NOTHING -> 156f
+            Look.COLOROS -> 146f
             Look.HYPEROS -> 140f
-            Look.MAGICOS -> 140f
+            Look.MAGICOS -> 152f
             Look.ORIGINOS -> 150f
         }
     }
@@ -1037,6 +1040,85 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
         p.textAlign = align
         if (shadow && !darkText) p.setShadowLayer(4 * d, 0f, d, 0x66000000) else p.clearShadowLayer()
         cv?.drawText(t, x, y, p)
+    }
+
+    /**
+     * Akku-Symbol im Stil des jeweiligen Systems. x = linke Kante, cy = Mitte, h = Höhe.
+     * Gibt die Breite zurück (inkl. Prozentzahl).
+     */
+    private fun batteryGlyph(c: Canvas, x: Float, cy: Float, h: Float, withText: Boolean = true): Float {
+        if (battery < 0) return 0f
+        val lv = battery.coerceIn(0, 100) / 100f
+        val low = battery <= 20 && !charging
+        val fgc = fg
+        val dim = (fg and 0x00FFFFFF) or 0x55000000
+        val accent = when {
+            low -> 0xFFFF453A.toInt()
+            charging && look != Look.NOTHING -> 0xFF30D158.toInt()
+            else -> fgc
+        }
+        p.clearShadowLayer()
+        p.style = Paint.Style.FILL
+        val w: Float
+        when (look) {
+            Look.ANDROID -> {
+                // Pixel: gefüllte Kapsel
+                w = h * 2.0f
+                p.color = dim; r.set(x, cy - h / 2, x + w, cy + h / 2); c.drawRoundRect(r, h * 0.45f, h * 0.45f, p)
+                c.save(); val pt = android.graphics.Path(); pt.addRoundRect(r, h * 0.45f, h * 0.45f, android.graphics.Path.Direction.CW); c.clipPath(pt)
+                p.color = accent; c.drawRect(x, cy - h / 2, x + w * lv.coerceAtLeast(0.08f), cy + h / 2, p); c.restore()
+            }
+            Look.HYPEROS -> {
+                // Xiaomi: gefüllte Pille mit Zahl darin
+                w = h * 2.4f
+                p.color = dim; r.set(x, cy - h / 2, x + w, cy + h / 2); c.drawRoundRect(r, h * 0.3f, h * 0.3f, p)
+                p.color = accent; r.set(x, cy - h / 2, x + w * lv.coerceAtLeast(0.1f), cy + h / 2); c.drawRoundRect(r, h * 0.3f, h * 0.3f, p)
+                p.textSize = h * 0.72f; p.textAlign = Paint.Align.CENTER
+                p.typeface = Looks.font(context, look, 700)
+                p.color = if (darkText) Color.WHITE else 0xFF111114.toInt()
+                c.drawText("$battery", x + w / 2, cy + h * 0.26f, p)
+                p.textAlign = Paint.Align.LEFT
+                return w
+            }
+            Look.NOTHING -> {
+                // Nothing: Punktraster
+                val cols = 8; val cell = h / 2.4f; val rad = cell * 0.36f
+                w = cols * cell
+                val lit = (lv * cols + 0.5f).toInt().coerceIn(1, cols)
+                for (i in 0 until cols) for (j in 0 until 2) {
+                    p.color = if (i < lit) (if (low) accent else fgc) else dim
+                    c.drawCircle(x + (i + 0.5f) * cell, cy + (j - 0.5f) * cell, rad, p)
+                }
+            }
+            Look.APPLE -> {
+                w = h * 2.1f
+                p.style = Paint.Style.STROKE; p.strokeWidth = h * 0.1f; p.color = dim
+                r.set(x, cy - h / 2, x + w * 0.9f, cy + h / 2); c.drawRoundRect(r, h * 0.32f, h * 0.32f, p)
+                p.style = Paint.Style.FILL
+                r.set(x + w * 0.92f, cy - h * 0.18f, x + w, cy + h * 0.18f); c.drawRoundRect(r, h * 0.1f, h * 0.1f, p)
+                val ins = h * 0.17f
+                p.color = accent; r.set(x + ins, cy - h / 2 + ins, x + ins + (w * 0.9f - 2 * ins) * lv.coerceAtLeast(0.06f), cy + h / 2 - ins)
+                c.drawRoundRect(r, h * 0.16f, h * 0.16f, p)
+            }
+            else -> {
+                // One UI / ColorOS / MagicOS / OriginOS: dünne Kontur, kantiger
+                w = h * 2.0f
+                p.style = Paint.Style.STROKE; p.strokeWidth = h * 0.08f; p.color = fgc
+                r.set(x, cy - h / 2, x + w * 0.92f, cy + h / 2); c.drawRoundRect(r, h * 0.18f, h * 0.18f, p)
+                p.style = Paint.Style.FILL
+                c.drawRect(x + w * 0.94f, cy - h * 0.16f, x + w, cy + h * 0.16f, p)
+                val ins = h * 0.2f
+                p.color = accent; c.drawRect(x + ins, cy - h / 2 + ins, x + ins + (w * 0.92f - 2 * ins) * lv.coerceAtLeast(0.06f), cy + h / 2 - ins, p)
+            }
+        }
+        if (!withText) return w
+        p.textSize = h * 1.15f
+        p.typeface = Looks.font(context, look, 600)
+        p.color = fgc
+        p.textAlign = Paint.Align.LEFT
+        val t = (if (charging) "⚡" else "") + "$battery %"
+        c.drawText(t, x + w + h * 0.4f, cy + h * 0.4f, p)
+        return w + h * 0.4f + p.measureText(t)
     }
 
     override fun onDraw(c: Canvas) {
@@ -1085,11 +1167,14 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
             }
             Look.ANDROID -> {
                 text(SimpleDateFormat("EEE., d. MMM.", de).format(now), 10 * d, 44 * d, 24f, 400)
-                text(time + (if (battery >= 0) "  ·  $battery %" else ""), 10 * d, 78 * d, 16f, 500)
+                text(time, 10 * d, 78 * d, 16f, 500)
+                p.textSize = 16 * d
+                batteryGlyph(c, 10 * d + p.measureText(time) + 14 * d, 72 * d, 11 * d)
             }
             Look.ONEUI -> {
                 text(time, w / 2, 96 * d, 76f, 250, align = Paint.Align.CENTER)
                 text(SimpleDateFormat("EEE., d. MMMM", de).format(now), w / 2, 128 * d, 16f, 500, align = Paint.Align.CENTER)
+                batteryGlyph(c, w / 2 - 38 * d, 146 * d, 10 * d)
             }
             Look.GALAXY -> {
                 text(SimpleDateFormat("HH", de).format(now), 12 * d, 86 * d, 84f, 800)
@@ -1101,18 +1186,21 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
                 p.clearShadowLayer()
                 p.color = 0xFFD71921.toInt()
                 c.drawCircle(w / 2 + 128 * d, 34 * d, 5 * d, p)
-                text(SimpleDateFormat("EEE d MMM", de).format(now).uppercase() + if (battery >= 0) "  ·  $battery%" else "",
-                    w / 2, 130 * d, 14f, 500, align = Paint.Align.CENTER)
+                text(SimpleDateFormat("EEE d MMM", de).format(now).uppercase(), w / 2, 130 * d, 14f, 500, align = Paint.Align.CENTER)
+                batteryGlyph(c, w / 2 - 44 * d, 144 * d, 9 * d)
             }
             Look.COLOROS -> {
                 text(time, 10 * d, 84 * d, 72f, 200)
                 text(SimpleDateFormat("EEEE, d. MMMM", de).format(now), 12 * d, 116 * d, 16f, 400)
+                batteryGlyph(c, 12 * d, 132 * d, 10 * d)
             }
             Look.HYPEROS -> {
                 // Xiaomi: kräftige Uhr links, Datum + Akku klein darunter
                 text(time, 8 * d, 86 * d, 78f, 800)
-                text(SimpleDateFormat("EEEE, d. MMMM", de).format(now) + if (battery >= 0) "   ▮ $battery %" else "",
-                    12 * d, 120 * d, 15f, 500)
+                val ds = SimpleDateFormat("EEEE, d. MMMM", de).format(now)
+                text(ds, 12 * d, 120 * d, 15f, 500)
+                p.textSize = 15 * d
+                batteryGlyph(c, 12 * d + p.measureText(ds) + 12 * d, 115 * d, 13 * d)
             }
             Look.MAGICOS -> {
                 // Honor: zentrierte, leichte Uhr mit Datum in Pille
@@ -1125,6 +1213,7 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
                 p.color = 0x33FFFFFF
                 c.drawRoundRect(r, 13 * d, 13 * d, p)
                 text(dt, w / 2, 120 * d, 14f, 500, align = Paint.Align.CENTER, shadow = false)
+                batteryGlyph(c, w / 2 - 36 * d, 140 * d, 9 * d)
             }
             Look.ORIGINOS -> {
                 // vivo: große, dünne Uhr links, Datum fett rechts daneben
@@ -1132,6 +1221,8 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
                 text(SimpleDateFormat("mm", de).format(now), w * 0.42f, 92 * d, 92f, 200)
                 text(SimpleDateFormat("EEEE", de).format(now), 12 * d, 128 * d, 16f, 700)
                 text(SimpleDateFormat("d. MMMM", de).format(now), 12 * d, 148 * d, 14f, 400)
+                p.textSize = 14 * d
+                batteryGlyph(c, 12 * d + p.measureText(SimpleDateFormat("d. MMMM", de).format(now)) + 14 * d, 143 * d, 10 * d)
             }
         }
         cv = null

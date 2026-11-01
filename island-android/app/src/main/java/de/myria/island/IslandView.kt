@@ -408,6 +408,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     // =====================================================================
 
     override fun onDraw(canvas: Canvas) {
+        Icons.family = cfg.symbols
         val now = System.nanoTime()
         val dt = if (lastFrame == 0L) 1f / 60f else ((now - lastFrame) / 1e9f).coerceIn(0.001f, 1f / 24f)
         lastFrame = now
@@ -1202,9 +1203,17 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
     // ---- Laden ----
 
+    /** Lade-Farbe je System: Apple/One UI grün, Pixel in der Akzentfarbe, Nothing weiß */
+    private fun chargeColor(low: Boolean): Int = when {
+        low -> if (Icons.family == Icons.NOTHING) 0xFFD71921.toInt() else RED
+        Icons.family == Icons.NOTHING -> Color.WHITE
+        Icons.family == Icons.MATERIAL -> systemColor(android.R.color.system_accent1_200, 0xFFA8C7FA.toInt())
+        else -> GREEN
+    }
+
     private fun drawCharging(canvas: Canvas, c: Content.Charging, a: Float) {
         val h = island.height()
-        val color = if (c.level <= 20 && !c.plugged) RED else GREEN
+        val color = chargeColor(c.level <= 20 && !c.plugged)
         val fill = if (c.plugged) sFill.value.coerceIn(0f, 1f) else c.level / 100f
         val age = (System.nanoTime() - chargeStart) / 1e9f
 
@@ -1218,7 +1227,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         Icons.battery(canvas, bx, island.centerY(), bw, fill, body, p, bolt, d)
 
         // Glanz, der über die Füllung läuft
-        if (c.plugged && age < 4.5f && !cfg.reduceMotion) {
+        if (c.plugged && age < 4.5f && !cfg.reduceMotion && Icons.family == Icons.APPLE) {
             val bh = bw * 0.48f
             val l = bx - bw / 2
             val sweep = ((age * 0.9f) % 1f)
@@ -1659,12 +1668,26 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val pad = 22 * d
         val cy = island.centerY()
         val fill = sFill.value.coerceIn(0f, 1f)
-        val color = if (c.level <= 20) RED else GREEN
+        val color = chargeColor(c.level <= 20)
         val bw = 64 * d
         p.color = withAlpha(color, a)
-        val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = withAlpha(Color.WHITE, a * 0.45f) }
-        val bolt = Paint(p).apply { this.color = withAlpha(Color.WHITE, a) }
-        Icons.battery(canvas, island.left + pad + bw / 2, cy, bw, fill, body, p, bolt, d)
+        val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = withAlpha(Color.WHITE, a * if (Icons.family == Icons.NOTHING) 0.22f else 0.45f) }
+        val bolt = Paint(p).apply { this.color = withAlpha(if (Icons.family == Icons.NOTHING) Color.WHITE else Color.WHITE, a) }
+        if (Icons.family == Icons.MATERIAL) {
+            // Pixel-Ladeanimation: Ring mit Blitz in der Mitte, der sanft pulsiert
+            val r = 26 * d
+            val rcx = island.left + pad + bw / 2
+            val age = (System.nanoTime() - chargeStart) / 1e9f
+            val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 6 * d; strokeCap = Paint.Cap.ROUND }
+            ring.color = withAlpha(Color.WHITE, a * 0.16f)
+            canvas.drawCircle(rcx, cy, r, ring)
+            ring.color = withAlpha(color, a)
+            tmp.set(rcx - r, cy - r, rcx + r, cy + r)
+            canvas.drawArc(tmp, -90f, 360f * fill.coerceAtLeast(0.02f), false, ring)
+            val puls = if (cfg.reduceMotion) 1f else 0.9f + 0.1f * sin(age * 3f)
+            p.color = withAlpha(color, a * puls)
+            Icons.bolt(canvas, rcx, cy, r * 0.9f * puls, p)
+        } else Icons.battery(canvas, island.left + pad + bw / 2, cy, bw, fill, body, p, bolt, d)
         val tx = island.left + pad + bw + 18 * d
         numPaint.textSize = spx(30f)
         numPaint.color = withAlpha(color, a)
