@@ -147,6 +147,167 @@ object Icons {
         c.drawPath(path, p)
     }
 
+    /** Telefonhörer. rotation 0 = annehmen, 135 = auflegen */
+    fun phone(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint, rotation: Float = 0f) {
+        c.save()
+        c.rotate(rotation, cx, cy)
+        val x = cx - s / 2
+        val y = cy - s / 2
+        path.reset()
+        path.moveTo(x + s * 0.22f, y + s * 0.08f)
+        path.cubicTo(x + s * 0.30f, y + s * 0.06f, x + s * 0.36f, y + s * 0.12f, x + s * 0.40f, y + s * 0.22f)
+        path.lineTo(x + s * 0.44f, y + s * 0.32f)
+        path.cubicTo(x + s * 0.46f, y + s * 0.38f, x + s * 0.42f, y + s * 0.42f, x + s * 0.36f, y + s * 0.46f)
+        path.cubicTo(x + s * 0.42f, y + s * 0.58f, x + s * 0.50f, y + s * 0.66f, x + s * 0.60f, y + s * 0.70f)
+        path.cubicTo(x + s * 0.62f, y + s * 0.62f, x + s * 0.68f, y + s * 0.58f, x + s * 0.74f, y + s * 0.60f)
+        path.lineTo(x + s * 0.86f, y + s * 0.66f)
+        path.cubicTo(x + s * 0.94f, y + s * 0.70f, x + s * 0.96f, y + s * 0.76f, x + s * 0.92f, y + s * 0.82f)
+        path.lineTo(x + s * 0.84f, y + s * 0.92f)
+        path.cubicTo(x + s * 0.50f, y + s * 0.98f, x + s * 0.02f, y + s * 0.50f, x + s * 0.08f, y + s * 0.16f)
+        path.close()
+        roundJoin(p) { c.drawPath(path, p) }
+        c.restore()
+    }
+
+    fun timer(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        val oldStyle = p.style
+        val oldW = p.strokeWidth
+        val oldCap = p.strokeCap
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.11f
+        p.strokeCap = Paint.Cap.ROUND
+        val r = s * 0.38f
+        val ccy = cy + s * 0.06f
+        c.drawCircle(cx, ccy, r, p)
+        c.drawLine(cx, ccy, cx + r * 0.45f, ccy - r * 0.5f, p)
+        c.drawLine(cx - s * 0.12f, cy - s * 0.44f, cx + s * 0.12f, cy - s * 0.44f, p)
+        p.style = oldStyle
+        p.strokeWidth = oldW
+        p.strokeCap = oldCap
+    }
+
+    fun headphones(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        val oldStyle = p.style
+        val oldW = p.strokeWidth
+        val oldCap = p.strokeCap
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.1f
+        p.strokeCap = Paint.Cap.ROUND
+        rect.set(cx - s * 0.4f, cy - s * 0.42f, cx + s * 0.4f, cy + s * 0.38f)
+        c.drawArc(rect, 180f, 180f, false, p)
+        c.drawLine(cx - s * 0.4f, cy, cx - s * 0.4f, cy + s * 0.12f, p)
+        c.drawLine(cx + s * 0.4f, cy, cx + s * 0.4f, cy + s * 0.12f, p)
+        p.style = Paint.Style.FILL
+        rect.set(cx - s * 0.46f, cy + s * 0.04f, cx - s * 0.22f, cy + s * 0.44f)
+        c.drawRoundRect(rect, s * 0.08f, s * 0.08f, p)
+        rect.set(cx + s * 0.22f, cy + s * 0.04f, cx + s * 0.46f, cy + s * 0.44f)
+        c.drawRoundRect(rect, s * 0.08f, s * 0.08f, p)
+        p.style = oldStyle
+        p.strokeWidth = oldW
+        p.strokeCap = oldCap
+    }
+
+    /** iOS-Standortpfeil ➤ */
+    fun location(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        val x = cx - s / 2
+        val y = cy - s / 2
+        path.reset()
+        path.moveTo(x + s * 0.92f, y + s * 0.08f)
+        path.lineTo(x + s * 0.08f, y + s * 0.44f)
+        path.lineTo(x + s * 0.50f, y + s * 0.50f)
+        path.lineTo(x + s * 0.56f, y + s * 0.92f)
+        path.close()
+        roundJoin(p) { c.drawPath(path, p) }
+    }
+
+    fun check(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        val oldStyle = p.style
+        val oldW = p.strokeWidth
+        val oldCap = p.strokeCap
+        val oldJoin = p.strokeJoin
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.16f
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeJoin = Paint.Join.ROUND
+        path.reset()
+        path.moveTo(cx - s * 0.36f, cy + s * 0.02f)
+        path.lineTo(cx - s * 0.10f, cy + s * 0.28f)
+        path.lineTo(cx + s * 0.38f, cy - s * 0.28f)
+        c.drawPath(path, p)
+        p.style = oldStyle
+        p.strokeWidth = oldW
+        p.strokeCap = oldCap
+        p.strokeJoin = oldJoin
+    }
+
+    /** Abbiegepfeil für Navigation (falls die App kein eigenes Bild liefert) */
+    fun turnArrow(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        val oldStyle = p.style
+        val oldW = p.strokeWidth
+        val oldCap = p.strokeCap
+        val oldJoin = p.strokeJoin
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.14f
+        p.strokeCap = Paint.Cap.ROUND
+        p.strokeJoin = Paint.Join.ROUND
+        path.reset()
+        path.moveTo(cx - s * 0.2f, cy + s * 0.42f)
+        path.lineTo(cx - s * 0.2f, cy - s * 0.02f)
+        path.quadTo(cx - s * 0.2f, cy - s * 0.18f, cx, cy - s * 0.18f)
+        path.lineTo(cx + s * 0.3f, cy - s * 0.18f)
+        c.drawPath(path, p)
+        path.reset()
+        path.moveTo(cx + s * 0.12f, cy - s * 0.38f)
+        path.lineTo(cx + s * 0.34f, cy - s * 0.18f)
+        path.lineTo(cx + s * 0.12f, cy + s * 0.02f)
+        c.drawPath(path, p)
+        p.style = oldStyle
+        p.strokeWidth = oldW
+        p.strokeCap = oldCap
+        p.strokeJoin = oldJoin
+    }
+
+    fun mic(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        rect.set(cx - s * 0.16f, cy - s * 0.44f, cx + s * 0.16f, cy + s * 0.12f)
+        c.drawRoundRect(rect, s * 0.16f, s * 0.16f, p)
+        val oldStyle = p.style
+        val oldW = p.strokeWidth
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.08f
+        rect.set(cx - s * 0.3f, cy - s * 0.2f, cx + s * 0.3f, cy + s * 0.3f)
+        c.drawArc(rect, 0f, 180f, false, p)
+        c.drawLine(cx, cy + s * 0.3f, cx, cy + s * 0.44f, p)
+        p.style = oldStyle
+        p.strokeWidth = oldW
+    }
+
+    /** Vorhängeschloss; open 0..1 hebt + dreht den Bügel */
+    fun lock(c: Canvas, cx: Float, cy: Float, s: Float, open: Float, p: Paint) {
+        rect.set(cx - s * 0.36f, cy - s * 0.04f, cx + s * 0.36f, cy + s * 0.46f)
+        c.drawRoundRect(rect, s * 0.1f, s * 0.1f, p)
+        val oldStyle = p.style
+        val oldW = p.strokeWidth
+        val oldCap = p.strokeCap
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.11f
+        p.strokeCap = Paint.Cap.ROUND
+        c.save()
+        val lift = s * 0.14f * open
+        c.translate(0f, -lift)
+        c.rotate(-28f * open, cx + s * 0.22f, cy - s * 0.02f)
+        path.reset()
+        path.moveTo(cx - s * 0.22f, cy - s * 0.02f + (if (open > 0.5f) -s * 0.12f * (open - 0.5f) * 2 else 0f))
+        path.lineTo(cx - s * 0.22f, cy - s * 0.2f)
+        rect.set(cx - s * 0.22f, cy - s * 0.42f, cx + s * 0.22f, cy + s * 0.02f)
+        path.arcTo(rect, 180f, 180f, false)
+        path.lineTo(cx + s * 0.22f, cy - s * 0.02f)
+        c.drawPath(path, p)
+        c.restore()
+        p.style = oldStyle
+        p.strokeWidth = oldW
+        p.strokeCap = oldCap
+    }
+
     private inline fun roundJoin(p: Paint, block: () -> Unit) {
         val oldJoin = p.strokeJoin
         val oldStyle = p.style

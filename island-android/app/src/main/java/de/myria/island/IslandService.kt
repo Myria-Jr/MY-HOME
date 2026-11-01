@@ -1,15 +1,24 @@
 package de.myria.island
 
+import android.Manifest
 import android.accessibilityservice.AccessibilityService
+import android.app.KeyguardManager
+import android.bluetooth.BluetoothClass
+import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.graphics.Rect
+import android.hardware.camera2.CameraManager
+import android.location.GnssStatus
+import android.location.LocationManager
 import android.media.AudioManager
+import android.media.AudioRecordingConfiguration
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
@@ -38,6 +47,14 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     private val handler = Handler(Looper.getMainLooper())
     private var testRevert: Runnable? = null
 
+    private var landscape = false
+    private var screenOff = false
+    private var locked = false
+
+    private var privacy = Privacy()
+    private val camerasInUse = HashSet<String>()
+    private var gnssRegistered = false
+
     private val density get() = resources.displayMetrics.density
 
     // ------------------------------------------------------------------
@@ -51,7 +68,6 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
         val v = IslandView(this)
         view = v
-        v.hostWidthPx = screenWidth()
         val c = IslandController(v, this)
         controller = c
         c.cfg = cfg
@@ -84,8 +100,12 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         IslandBus.serviceRunning = true
 
         registerSystemReceivers()
-        updateLandscape(resources.configuration)
+        registerPrivacyWatchers()
+        landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        locked = (getSystemService(KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
+        updateSuppressed()
         c.setMusic(IslandBus.music)
+        c.setLive(IslandBus.live)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
@@ -101,11 +121,17 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         return super.onUnbind(intent)
     }
 
+    private var tornDown = false
+
     private fun teardown() {
+        if (tornDown) return
+        tornDown = true
         IslandBus.serviceRunning = false
         IslandBus.remove(this)
         Prefs.sp(this).unregisterOnSharedPreferenceChangeListener(this)
         try { unregisterReceiver(systemReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(btReceiver) } catch (_: Exception) {}
+        unregisterPrivacyWatchers()
         controller?.release()
         controller = null
         view?.let { try { wm.removeView(it) } catch (_: Exception) {} }
@@ -115,15 +141,16 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        view?.hostWidthPx = screenWidth()
         applyPosition()
         updateWindow()
-        updateLandscape(newConfig)
+        landscape = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
+        updateSuppressed()
         controller?.refresh()
     }
 
-    private fun updateLandscape(c: Configuration) {
-        controller?.suppressed = cfg.hideLandscape && c.orientation == Configuration.ORIENTATION_LANDSCAPE
+    private fun updateSuppressed() {
+        controller?.suppressed = (cfg.hideLandscape && landscape) || screenOff ||
+            (locked && !cfg.showOnLockscreen)
     }
 
     // ------------------------------------------------------------------
@@ -171,15 +198,18 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         val d = density
         var x = 0f
         var y = 10 * d
+        val sw = screenWidth()
         if (cfg.autoCamera) {
             val r = cutoutRect()
             if (r != null && r.height() > 0) {
-                x = r.centerX() - screenWidth() / 2f
+                x = r.centerX() - sw / 2f
                 y = max(0f, r.centerY() - cfg.heightDp * d / 2f)
             }
         }
         lp.x = (x + cfg.offsetXDp * d).toInt()
         lp.y = (y + cfg.offsetYDp * d).toInt()
+        // Fix: Bei seitlicher Kamera darf die große Island nicht aus dem Bildschirm ragen
+        view?.hostWidthPx = (sw - 2 * abs(lp.x)).coerceAtLeast((sw * 0.5f).toInt())
     }
 
     @Suppress("DEPRECATION")
@@ -211,11 +241,13 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
     override fun haptic(strong: Boolean) {
         val v = view ?: return
+        val type = when (cfg.hapticStrength) {
+            0 -> if (strong) HapticFeedbackConstants.CONTEXT_CLICK else HapticFeedbackConstants.CLOCK_TICK
+            2 -> if (strong) HapticFeedbackConstants.LONG_PRESS else HapticFeedbackConstants.VIRTUAL_KEY
+            else -> if (strong) HapticFeedbackConstants.LONG_PRESS else HapticFeedbackConstants.CONTEXT_CLICK
+        }
         @Suppress("DEPRECATION")
-        v.performHapticFeedback(
-            if (strong) HapticFeedbackConstants.LONG_PRESS else HapticFeedbackConstants.CONTEXT_CLICK,
-            HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING,
-        )
+        v.performHapticFeedback(type, HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING)
     }
 
     override fun onModeChanged(mode: IslandView.Mode) {
@@ -229,11 +261,28 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     }
 
     // ------------------------------------------------------------------
-    // Events
+    // Events vom Bus
     // ------------------------------------------------------------------
 
     override fun onMusic(m: MusicInfo?) {
         if (testRevert == null) controller?.setMusic(m)
+    }
+
+    private var testLive: List<Content> = emptyList()
+    private val clearTestLive = Runnable {
+        testLive = emptyList()
+        controller?.setLive(IslandBus.live)
+    }
+
+    override fun onLive(list: List<Content>) {
+        controller?.setLive(list + testLive)
+    }
+
+    override fun onTestLive(list: List<Content>) {
+        testLive = list
+        controller?.setLive(IslandBus.live + list)
+        handler.removeCallbacks(clearTestLive)
+        if (list.isNotEmpty()) handler.postDelayed(clearTestLive, 20_000)
     }
 
     override fun onEvent(c: Content) {
@@ -256,10 +305,148 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         controller?.cfg = cfg
         applyPosition()
         updateWindow()
-        updateLandscape(resources.configuration)
+        updateSuppressed()
+        // Berechtigungen evtl. neu erteilt → Watcher nachziehen
+        registerGnss()
+        registerBluetooth()
     }
 
+    // ------------------------------------------------------------------
+    // Kamera / Mikrofon / Standort
+    // ------------------------------------------------------------------
+
+    private val cameraCallback = object : CameraManager.AvailabilityCallback() {
+        override fun onCameraUnavailable(cameraId: String) {
+            camerasInUse.add(cameraId)
+            pushPrivacy()
+        }
+        override fun onCameraAvailable(cameraId: String) {
+            camerasInUse.remove(cameraId)
+            pushPrivacy()
+        }
+    }
+
+    private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
+        override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>?) {
+            privacy = privacy.copy(mic = !configs.isNullOrEmpty())
+            controller?.privacy = privacy
+        }
+    }
+
+    private val gnssCallback = object : GnssStatus.Callback() {
+        override fun onStarted() {
+            privacy = privacy.copy(location = true)
+            controller?.privacy = privacy
+        }
+        override fun onStopped() {
+            privacy = privacy.copy(location = false)
+            controller?.privacy = privacy
+        }
+    }
+
+    private fun pushPrivacy() {
+        privacy = privacy.copy(camera = camerasInUse.isNotEmpty())
+        controller?.privacy = privacy
+    }
+
+    private fun registerPrivacyWatchers() {
+        try {
+            (getSystemService(CAMERA_SERVICE) as CameraManager).registerAvailabilityCallback(cameraCallback, handler)
+        } catch (_: Exception) {}
+        try {
+            val am = getSystemService(AUDIO_SERVICE) as AudioManager
+            am.registerAudioRecordingCallback(recordingCallback, handler)
+            privacy = privacy.copy(mic = am.activeRecordingConfigurations.isNotEmpty())
+        } catch (_: Exception) {}
+        registerGnss()
+        registerBluetooth()
+    }
+
+    @Suppress("DEPRECATION", "MissingPermission")
+    private fun registerGnss() {
+        if (gnssRegistered) return
+        if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) return
+        try {
+            val lm = getSystemService(LOCATION_SERVICE) as LocationManager
+            gnssRegistered = lm.registerGnssStatusCallback(gnssCallback, handler)
+        } catch (_: Exception) {}
+    }
+
+    private fun unregisterPrivacyWatchers() {
+        try { (getSystemService(CAMERA_SERVICE) as CameraManager).unregisterAvailabilityCallback(cameraCallback) } catch (_: Exception) {}
+        try { (getSystemService(AUDIO_SERVICE) as AudioManager).unregisterAudioRecordingCallback(recordingCallback) } catch (_: Exception) {}
+        if (gnssRegistered) {
+            try { (getSystemService(LOCATION_SERVICE) as LocationManager).unregisterGnssStatusCallback(gnssCallback) } catch (_: Exception) {}
+            gnssRegistered = false
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Bluetooth-Kopfhörer
+    // ------------------------------------------------------------------
+
+    private var btRegistered = false
+    private var lastDeviceName = ""
+    private var lastDeviceAt = 0L
+
+    private val btReceiver = object : BroadcastReceiver() {
+        @Suppress("DEPRECATION")
+        override fun onReceive(ctx: Context, intent: Intent) {
+            val dev: BluetoothDevice = (if (Build.VERSION.SDK_INT >= 33)
+                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+            else intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)) ?: return
+            val name = try { dev.name ?: "Kopfhörer" } catch (_: SecurityException) { "Kopfhörer" }
+            val isAudio = try {
+                val cls = dev.bluetoothClass
+                cls == null || cls.majorDeviceClass == BluetoothClass.Device.Major.AUDIO_VIDEO
+            } catch (_: SecurityException) { true }
+            if (!isAudio) return
+            when (intent.action) {
+                BluetoothDevice.ACTION_ACL_CONNECTED -> {
+                    lastDeviceName = name
+                    lastDeviceAt = System.currentTimeMillis()
+                    controller?.showTransient(Content.Device(name, true, batteryOf(dev)))
+                }
+                BluetoothDevice.ACTION_ACL_DISCONNECTED ->
+                    controller?.showTransient(Content.Device(name, false, -1))
+                ACTION_BATTERY_LEVEL -> {
+                    val lvl = intent.getIntExtra(EXTRA_BATTERY_LEVEL, -1)
+                    // Akkustand kommt oft kurz nach dem Verbinden → Anzeige aktualisieren
+                    if (lvl in 0..100 && name == lastDeviceName && System.currentTimeMillis() - lastDeviceAt < 6000) {
+                        controller?.showTransient(Content.Device(name, true, lvl))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun batteryOf(dev: BluetoothDevice): Int = try {
+        (dev.javaClass.getMethod("getBatteryLevel").invoke(dev) as? Int)?.takeIf { it in 0..100 } ?: -1
+    } catch (_: Exception) { -1 }
+
+    private fun registerBluetooth() {
+        if (btRegistered) return
+        if (Build.VERSION.SDK_INT >= 31 &&
+            checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+        ) return
+        val f = IntentFilter().apply {
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(ACTION_BATTERY_LEVEL)
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(btReceiver, f, Context.RECEIVER_EXPORTED)
+            else registerReceiver(btReceiver, f)
+            btRegistered = true
+        } catch (_: Exception) {}
+    }
+
+    // ------------------------------------------------------------------
+    // Akku, Lautlos, Bildschirm
+    // ------------------------------------------------------------------
+
     private var lastPlugged: Boolean? = null
+    private var lastLevel = -1
     private var lastRinger: Int? = null
 
     private val systemReceiver = object : BroadcastReceiver() {
@@ -273,8 +460,15 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                     val state = Content.Charging(pct, plugged)
                     controller?.setCharging(state)
                     val was = lastPlugged
+                    val prevLevel = lastLevel
                     lastPlugged = plugged
+                    lastLevel = pct
                     if (was != null && !was && plugged) controller?.showTransient(state)
+                    if (!plugged && prevLevel >= 0 &&
+                        ((prevLevel > 20 && pct <= 20) || (prevLevel > 10 && pct <= 10))
+                    ) {
+                        controller?.showTransient(Content.Charging(pct, false))
+                    }
                 }
                 AudioManager.RINGER_MODE_CHANGED_ACTION -> {
                     val mode = intent.getIntExtra(AudioManager.EXTRA_RINGER_MODE, AudioManager.RINGER_MODE_NORMAL)
@@ -289,6 +483,23 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                         )
                     }
                 }
+                Intent.ACTION_SCREEN_OFF -> {
+                    screenOff = true
+                    locked = true
+                    updateSuppressed()
+                }
+                Intent.ACTION_SCREEN_ON -> {
+                    screenOff = false
+                    locked = (getSystemService(KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
+                    updateSuppressed()
+                }
+                Intent.ACTION_USER_PRESENT -> {
+                    val wasLocked = locked
+                    locked = false
+                    screenOff = false
+                    updateSuppressed()
+                    if (wasLocked) controller?.showTransient(UnlockContent())
+                }
             }
         }
     }
@@ -297,11 +508,19 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         val f = IntentFilter().apply {
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(AudioManager.RINGER_MODE_CHANGED_ACTION)
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
         }
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(systemReceiver, f, Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(systemReceiver, f)
         }
+    }
+
+    companion object {
+        private const val ACTION_BATTERY_LEVEL = "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED"
+        private const val EXTRA_BATTERY_LEVEL = "android.bluetooth.device.extra.BATTERY_LEVEL"
     }
 }
