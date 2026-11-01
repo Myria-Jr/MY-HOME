@@ -258,6 +258,7 @@ class NotificationService : NotificationListenerService() {
         val autoCancel = n.flags and Notification.FLAG_AUTO_CANCEL != 0
         val open = openerFor(n, sbn.packageName, key, autoCancel)
 
+        if (cfg.notifHistory) NotifHistory.add(this, app, title, text)
         IslandBus.event(
             Content.Notif(
                 icon = icon,

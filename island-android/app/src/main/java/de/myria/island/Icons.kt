@@ -395,6 +395,54 @@ object Icons {
         roundJoin(p) { c.drawPath(path, p) }
     }
 
+    fun wifi(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint, on: Boolean) {
+        val oldStyle = p.style
+        val oldW = p.strokeWidth
+        val oldCap = p.strokeCap
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.11f
+        p.strokeCap = Paint.Cap.ROUND
+        val by = cy + s * 0.32f
+        for (i in 1..3) {
+            val r = s * 0.17f * i
+            rect.set(cx - r, by - r, cx + r, by + r)
+            c.drawArc(rect, 225f, 90f, false, p)
+        }
+        p.style = Paint.Style.FILL
+        c.drawCircle(cx, by, s * 0.07f, p)
+        if (!on) {
+            p.style = Paint.Style.STROKE
+            p.strokeWidth = s * 0.1f
+            c.drawLine(cx - s * 0.42f, cy - s * 0.4f, cx + s * 0.42f, cy + s * 0.42f, p)
+        }
+        p.style = oldStyle
+        p.strokeWidth = oldW
+        p.strokeCap = oldCap
+    }
+
+    fun thermometer(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        rect.set(cx - s * 0.11f, cy - s * 0.46f, cx + s * 0.11f, cy + s * 0.2f)
+        c.drawRoundRect(rect, s * 0.11f, s * 0.11f, p)
+        c.drawCircle(cx, cy + s * 0.27f, s * 0.2f, p)
+    }
+
+    fun alarm(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        val oldStyle = p.style
+        val oldW = p.strokeWidth
+        val oldCap = p.strokeCap
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.1f
+        p.strokeCap = Paint.Cap.ROUND
+        c.drawCircle(cx, cy + s * 0.05f, s * 0.34f, p)
+        c.drawLine(cx, cy + s * 0.05f, cx, cy - s * 0.15f, p)
+        c.drawLine(cx, cy + s * 0.05f, cx + s * 0.14f, cy + s * 0.13f, p)
+        c.drawLine(cx - s * 0.42f, cy - s * 0.3f, cx - s * 0.26f, cy - s * 0.44f, p)
+        c.drawLine(cx + s * 0.42f, cy - s * 0.3f, cx + s * 0.26f, cy - s * 0.44f, p)
+        p.style = oldStyle
+        p.strokeWidth = oldW
+        p.strokeCap = oldCap
+    }
+
     private inline fun roundJoin(p: Paint, block: () -> Unit) {
         val oldJoin = p.strokeJoin
         val oldStyle = p.style

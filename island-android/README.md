@@ -1,4 +1,4 @@
-# Atoll 🏝️ – Dynamic Island für Android
+# Isla 🏝️ – Dynamic Island für Android
 
 Native Android-App (Kotlin, ohne Libraries). Eine Dynamic Island in **jedem Design**:
 Apple, Android (Material You), One UI, Nothing – oder komplett Custom.
@@ -14,6 +14,13 @@ Apple, Android (Material You), One UI, Nothing – oder komplett Custom.
 
 **Liquid Glass** mit Reglern für Milchigkeit, Glanz, Tönung, Kanten-Stärke und Farbsaum.
 
+## Neu in Isla 4
+Liquid-Glass-Look für die ganze App (nach stormaref/LiquidGlassSkill) · 10 Schriftarten für Island & App ·
+5 Animationsstile (Apple, Android, One UI, Nothing, Jelly) · eigener Timer & Stoppuhr · Mitteilungs-Verlauf,
+Warteschlange & Ruhezeiten · in bestimmten Apps ausblenden · Doppeltipp- & Wisch-Aktionen · Vinyl-Cover ·
+Lade-Details, Akku-Rand, Hitze-Warnung · WLAN & Wecker · Energiesparmodus · Schnelleinstellungs-Kachel ·
+Export/Import · Begrüßung · 13 App-Symbole (u.a. Trans Pride 🏳️‍⚧️)
+
 ## Live-Aktivitäten
 🎵 Musik (Cover-Pop, Spulen, 3 Wellenform-Stile) · 📞 Anrufe annehmen/ablehnen · ⏱ Timer & Stoppuhr ·
 🧭 Navigation · ⬆️ Uploads/Downloads · ⚡ Laden mit Animation · 🔦 Taschenlampe (antippen = aus) ·
@@ -22,7 +29,7 @@ Apple, Android (Material You), One UI, Nothing – oder komplett Custom.
 zwei Aktivitäten gleichzeitig als Bubble.
 
 ## Installieren
-1. Unter **Releases** `Atoll.apk` laden und installieren (über ältere „Island“-Versionen drüber).
+1. Unter **Releases** `Isla.apk` laden und installieren (über ältere „Atoll“/„Island“-Versionen drüber).
 2. App öffnen → **Bedienungshilfe** einschalten.
    - Android 13+: ausgegraut? → App-Info → ⋮ → „Eingeschränkte Einstellungen zulassen“.
 3. **Mitteilungen & Musik** einschalten.

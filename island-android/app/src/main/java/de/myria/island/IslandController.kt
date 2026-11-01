@@ -22,12 +22,20 @@ class IslandController(
     interface Host {
         fun haptic(strong: Boolean)
         fun onModeChanged(mode: Mode) {}
+        fun toggleTorch() {}
+        fun startTimer() {}
+        fun startStopwatch() {}
+        fun openSettings() {}
+        fun setTorchLevel(level: Float) {}
     }
 
     var cfg: IslandConfig = IslandConfig()
         set(v) {
             field = v
             view.cfg = v
+            // Fix: Akku-Rand sofort an/aus, nicht erst beim nächsten Akku-Signal
+            val ch = charging
+            view.ringLevel = if (v.batteryRing && ch != null && ch.plugged) ch.level / 100f else -1f
             refresh()
         }
 
@@ -58,10 +66,26 @@ class IslandController(
     private var pinnedKey: String? = null
     private var snoozedKey: String? = null
     private var knownLive = HashSet<String>()
+    private val queue = ArrayList<Content.Notif>()
+
+    /** Nächster Wecker (für die leere Pille) */
+    var nextAlarm: String? = null
+        set(v) {
+            field = v
+            view.nextAlarm = v
+        }
 
     private val handler = Handler(Looper.getMainLooper())
     private val clearTransient = Runnable {
         transient = null
+        // Warteschlange: nächste Mitteilung zeigen
+        if (queue.isNotEmpty()) {
+            val next = queue.removeAt(0)
+            view.queueCount = queue.size
+            showTransient(next)
+            return@Runnable
+        }
+        view.queueCount = 0
         refresh()
     }
     private val autoCollapse = Runnable {
@@ -109,6 +133,12 @@ class IslandController(
             if (c.key !in knownLive && c is Content.Call && c.incoming && cfg.showCalls && cfg.haptics) {
                 host.haptic(true)
             }
+            // Taschenlampe an → kurz groß aufklappen mit Lichtkegel (wie iOS)
+            if (c.key !in knownLive && c is TorchContent && cfg.showTorch && transient == null) {
+                expandedKey = c.key
+                scheduleCollapse(2800)
+                if (cfg.haptics) host.haptic(true)
+            }
         }
         knownLive = keys
         if (snoozedKey != null && snoozedKey != "music" && snoozedKey !in keys) snoozedKey = null
@@ -119,6 +149,7 @@ class IslandController(
     fun setCharging(c: Content.Charging) {
         charging = c
         view.idleBattery = c.level
+        view.ringLevel = if (cfg.batteryRing && c.plugged) c.level / 100f else -1f
         refresh()
     }
 
@@ -137,10 +168,29 @@ class IslandController(
         is TorchContent -> cfg.showTorch
         is FocusContent -> cfg.showFocus
         is AirplaneContent -> cfg.showAirplane
+        is NetworkContent -> cfg.showNetwork
+        is HeatContent -> cfg.tempWarning
+        is AlarmContent -> cfg.showAlarm
+    }
+
+    private fun inQuietHours(): Boolean {
+        if (!cfg.quietHours) return false
+        val h = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+        val s = cfg.quietStart
+        val e = cfg.quietEnd
+        return if (s == e) false else if (s < e) h in s until e else h >= s || h < e
     }
 
     fun showTransient(c: Content) {
         if (!allowed(c) || !cfg.enabled || suppressed) return
+        if (c is Content.Notif && inQuietHours()) return
+        // Warteschlange statt überschreiben
+        val cur = transient
+        if (c is Content.Notif && cur is Content.Notif && cfg.notifQueue && cur.key != c.key) {
+            if (queue.size < 9) queue.add(c)
+            view.queueCount = queue.size
+            return
+        }
         val quiet = c is VolumeContent && transient is VolumeContent
         val ms = when (c) {
             is VolumeContent -> 1600L
@@ -229,9 +279,9 @@ class IslandController(
 
     private fun dismissTransient() {
         handler.removeCallbacks(clearTransient)
-        transient = null
         expandedKey = null
-        refresh()
+        // Fix: wartende Mitteilungen kommen danach dran (statt hängenzubleiben)
+        clearTransient.run()
     }
 
     private fun open(c: Content?) {
@@ -252,6 +302,12 @@ class IslandController(
 
     override fun onIslandTap() {
         val c = view.target ?: return
+        if (c is TorchContent) {
+            if (cfg.haptics) host.haptic(true)
+            collapse()
+            c.off?.invoke()
+            return
+        }
         if (view.mode == Mode.EXPANDED) {
             if (cfg.haptics) host.haptic(false)
             open(c)
@@ -269,8 +325,9 @@ class IslandController(
                 if (cfg.haptics) host.haptic(true)
                 c.off?.invoke()
             }
-            is Content.Charging, is Content.Ringer, is Content.Device, is UnlockContent,
-            is VolumeContent, is FocusContent, is AirplaneContent -> dismissTransient()
+            is Content.Charging -> if (c.plugged && cfg.chargeDetails) expand(c) else dismissTransient()
+            is Content.Ringer, is Content.Device, is UnlockContent, is VolumeContent, is FocusContent,
+            is AirplaneContent, is NetworkContent, is HeatContent, is AlarmContent -> dismissTransient()
             else -> tapPersistent(c)
         }
     }
@@ -285,7 +342,20 @@ class IslandController(
     }
 
     override fun onIslandLongPress() {
-        val c = view.target ?: return
+        val c = view.target
+        if (c == null) {
+            // Leere Pille gedrückt halten
+            if (view.mode != Mode.IDLE) return
+            when (cfg.idleLongPress) {
+                IslandConfig.IDLE_LP_TIMER -> host.startTimer()
+                IslandConfig.IDLE_LP_STOPWATCH -> host.startStopwatch()
+                IslandConfig.IDLE_LP_TORCH -> host.toggleTorch()
+                IslandConfig.IDLE_LP_SETTINGS -> host.openSettings()
+                else -> return
+            }
+            if (cfg.haptics) host.haptic(true)
+            return
+        }
         if (view.mode == Mode.EXPANDED) return
         if (cfg.tapExpands) {
             if (cfg.haptics) host.haptic(true)
@@ -319,6 +389,41 @@ class IslandController(
         if (cfg.swipeDownExpands) expand(c)
     }
 
+    override fun onDoubleTap() {
+        val c = view.target
+        if (cfg.haptics) host.haptic(true)
+        when (cfg.doubleTapAction) {
+            IslandConfig.DOUBLE_PLAYPAUSE -> (music ?: (c as? Content.Music)?.info)?.actions?.playPause()
+            IslandConfig.DOUBLE_OPEN -> open(c)
+            IslandConfig.DOUBLE_EXPAND -> if (c != null) expand(c)
+            IslandConfig.DOUBLE_TORCH -> host.toggleTorch()
+        }
+    }
+
+    override fun onSwipeHorizontal(dir: Int) {
+        val c = view.target ?: return
+        if (cfg.swipeHorizontal == IslandConfig.SWIPE_OFF) return
+        if (cfg.swipeHorizontal == IslandConfig.SWIPE_TRACK && c is Content.Music) {
+            if (dir > 0) c.info.actions?.previous() else c.info.actions?.next()
+            if (cfg.haptics) host.haptic(false)
+            return
+        }
+        // Zwischen den laufenden Aktivitäten blättern
+        val list = persistentList()
+        if (list.size < 2 || transient != null) return
+        val idx = list.indexOfFirst { it.key == c.key }.coerceAtLeast(0)
+        val next = list[(idx + (if (dir > 0) -1 else 1) + list.size) % list.size]
+        pinnedKey = next.key
+        if (cfg.haptics) host.haptic(false)
+        refresh()
+    }
+
+    override fun onTorchLevel(level: Float) {
+        host.setTorchLevel(level)
+        if (cfg.haptics) host.haptic(false)
+        scheduleCollapse(3500)
+    }
+
     override fun onBubbleTap() {
         val s = view.secondary ?: return
         pinnedKey = s.key
@@ -345,6 +450,7 @@ class IslandController(
     }
 
     fun release() {
+        queue.clear()
         handler.removeCallbacksAndMessages(null)
     }
 }

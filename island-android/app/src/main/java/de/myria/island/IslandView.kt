@@ -10,6 +10,7 @@ import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PathMeasure
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.SweepGradient
@@ -48,6 +49,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         fun onBubbleTap()
         fun onHit(run: () -> Unit)
         fun onSeek(ms: Long)
+        fun onDoubleTap() {}
+        fun onTorchLevel(level: Float) {}
+        fun onSwipeHorizontal(dir: Int) {}
     }
 
     companion object {
@@ -84,6 +88,35 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             retarget()
             kick()
         }
+
+    /** Ladestand für den Akku-Rand (0..1), < 0 = aus */
+    var ringLevel = -1f
+        set(v) {
+            if (field != v) {
+                field = v
+                kick()
+            }
+        }
+
+    /** Wartende Mitteilungen (für „+N“) */
+    var queueCount = 0
+        set(v) {
+            if (field != v) {
+                field = v
+                kick()
+            }
+        }
+
+    /** Nächster Wecker, z.B. „07:00“ (für die leere Pille) */
+    var nextAlarm: String? = null
+        set(v) {
+            if (field != v) {
+                field = v
+                kick()
+            }
+        }
+
+    private var vinylAngle = 0f
 
     /** Akkustand für die leere Pille */
     var idleBattery = -1
@@ -176,6 +209,14 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     private var swiped = false
     private var seeking = false
     private var seekFrac = 0f
+    private var lastTapTime = 0L
+    // Taschenlampen-Helligkeit per Wischen
+    private val torchRect = RectF()
+    private var torchActive = false
+    private var torchDragging = false
+    private var torchDragLevel = 1f
+    private var torchStartLevel = 1f
+    private var pendingTap: Runnable? = null
     private val longPress = Runnable {
         if (pressed && !swiped && !seeking) {
             longFired = true
@@ -190,18 +231,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         setLayerType(LAYER_TYPE_HARDWARE, null)
     }
 
-    private fun font(weight: Int): Typeface {
-        val family = when (cfg.fontStyle) {
-            IslandConfig.FONT_GOOGLE -> "google-sans"
-            IslandConfig.FONT_CONDENSED -> "sans-serif-condensed"
-            IslandConfig.FONT_MONO -> "monospace"
-            IslandConfig.FONT_SERIF -> "serif"
-            else -> "sans-serif"
-        }
-        val base = Typeface.create(family, Typeface.NORMAL)
-        return if (Build.VERSION.SDK_INT >= 28) Typeface.create(base, weight, false)
-        else Typeface.create(base, if (weight >= 600) Typeface.BOLD else Typeface.NORMAL)
-    }
+    private fun font(weight: Int): Typeface = Fonts.get(context, cfg.fontStyle, weight)
 
     private fun applyFonts() {
         textPaint.typeface = font(500)
@@ -211,13 +241,28 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     }
 
     private fun applySpringParams() {
-        val k = cfg.stiffness
-        val z = cfg.dampingRatio
-        for (s in arrayOf(sW, sH, sR)) {
-            s.stiffness = k; s.dampingRatio = z
+        var k = cfg.stiffness
+        var z = cfg.dampingRatio
+        var zH = z
+        var kH = k
+        var contentZ = 1f
+        var contentK = k * 2.2f
+        when (cfg.animStyle) {
+            IslandConfig.ANIM_ANDROID -> { z = max(z, 0.9f); zH = z; k *= 1.1f; kH = k }
+            IslandConfig.ANIM_ONEUI -> { z = max(z, 0.78f); zH = z }
+            IslandConfig.ANIM_NOTHING -> { z = 1f; zH = 1f; k *= 1.4f; kH = k; contentK = k * 3f }
+            IslandConfig.ANIM_JELLY -> {
+                // Breite und Höhe schwingen versetzt → „Wackelpudding“
+                z = (z * 0.75f).coerceAtLeast(0.32f); zH = (z * 0.8f).coerceAtLeast(0.28f)
+                kH = k * 0.75f; contentZ = 0.6f
+            }
         }
+        if (cfg.reduceMotion) { z = 1f; zH = 1f; contentZ = 1f }
+        sW.stiffness = k; sW.dampingRatio = z
+        sH.stiffness = kH; sH.dampingRatio = zH
+        sR.stiffness = kH; sR.dampingRatio = zH
         sAlpha.stiffness = k * 1.4f; sAlpha.dampingRatio = 1f
-        sContent.stiffness = k * 2.2f; sContent.dampingRatio = 1f
+        sContent.stiffness = contentK; sContent.dampingRatio = contentZ
         sPress.stiffness = 600f; sPress.dampingRatio = if (cfg.reduceMotion) 1f else 0.55f
         sBubble.stiffness = k * 0.9f; sBubble.dampingRatio = if (cfg.reduceMotion) 1f else 0.7f
     }
@@ -303,6 +348,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is TorchContent -> compact(96f)
                 is FocusContent -> compact(130f)
                 is AirplaneContent -> compact(110f)
+                is NetworkContent -> compact(118f)
+                is HeatContent -> compact(118f)
+                is AlarmContent -> compact(118f)
                 else -> compact(116f)
             }
             Mode.EXPANDED -> when (c) {
@@ -312,6 +360,8 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is Content.Timer -> exp(92 * d)
                 is Content.Nav -> exp(112 * d)
                 is Content.Progress -> exp(96 * d)
+                is Content.Charging -> exp(104 * d)
+                is TorchContent -> exp(156 * d)
                 else -> sizeFor(Mode.COMPACT, c)
             }
         }
@@ -350,6 +400,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val now = System.nanoTime()
         val dt = if (lastFrame == 0L) 1f / 60f else ((now - lastFrame) / 1e9f).coerceIn(0.001f, 1f / 24f)
         lastFrame = now
+        if (cfg.vinyl && (drawn as? Content.Music)?.info?.playing == true) vinylAngle = (vinylAngle + dt * 42f) % 360f
 
         var moving = false
         for (s in springs) {
@@ -367,6 +418,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
         hits.clear()
         seekActive = false
+        torchActive = false
         val alpha = sAlpha.value.coerceIn(0f, 1f)
         if (alpha > 0.003f) drawIsland(canvas, alpha)
 
@@ -390,12 +442,13 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             when (c) {
                 is Content.Music -> {
                     if (mode == Mode.EXPANDED && c === drawn) want(33)
-                    else if (c.info.playing && cfg.waveform) want(33)
+                    else if (c.info.playing && (cfg.waveform || cfg.vinyl)) want(33)
                 }
                 is Content.Timer -> want(250)
                 is Content.Call -> want(if (c.incoming) 33 else 250)
                 is Content.Progress -> if (c.progress < 0) want(33)
                 is UnlockContent -> if (c === drawn) want(16)
+                is TorchContent -> want(if (mode == Mode.EXPANDED) 16 else 50)
                 is VolumeContent -> {}
                 is Content.Charging -> if (c.plugged && c === drawn &&
                     System.nanoTime() - chargeStart < 4_500_000_000L) want(33)
@@ -459,6 +512,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         // --- Form ---
         paintShape(canvas, island, r, c)
 
+        // --- Akku-Rand (Ladestand als Linie um die Island) ---
+        if (ringLevel >= 0f && (mode == Mode.IDLE || mode == Mode.COMPACT)) drawBatteryRing(canvas, r)
+
         // --- Grüne Welle beim Einstecken (außerhalb der Form) ---
         if (c is Content.Charging && c.plugged && !cfg.reduceMotion) {
             val age = (System.nanoTime() - chargeStart) / 1e9f
@@ -484,14 +540,33 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             canvas.save()
             canvas.clipPath(islandPath)
             if (!cfg.reduceMotion) {
-                val scale = 0.9f + 0.1f * ca
-                canvas.scale(scale, scale, island.centerX(), island.centerY())
+                val raw = sContent.value
+                when (cfg.animStyle) {
+                    IslandConfig.ANIM_ANDROID -> {
+                        canvas.translate(0f, (1f - ca) * 10 * d)
+                        val sc = 0.97f + 0.03f * ca
+                        canvas.scale(sc, sc, island.centerX(), island.centerY())
+                    }
+                    IslandConfig.ANIM_ONEUI -> {
+                        val sc = 0.95f + 0.05f * ca
+                        canvas.scale(sc, sc, island.centerX(), island.centerY())
+                    }
+                    IslandConfig.ANIM_NOTHING -> {}
+                    IslandConfig.ANIM_JELLY -> {
+                        val sc = 0.8f + 0.2f * raw
+                        canvas.scale(sc, sc, island.centerX(), island.centerY())
+                    }
+                    else -> {
+                        val sc = 0.9f + 0.1f * ca
+                        canvas.scale(sc, sc, island.centerX(), island.centerY())
+                    }
+                }
             }
             val big = mode == Mode.EXPANDED && sH.value > cfg.heightDp * d * 1.8f
             val interactive = ca > 0.6f
             when (c) {
                 is Content.Music -> if (big) drawMusicExpanded(canvas, c, ca, interactive) else drawMusicCompact(canvas, c, ca)
-                is Content.Charging -> drawCharging(canvas, c, ca)
+                is Content.Charging -> if (big) drawChargingExpanded(canvas, c, ca) else drawCharging(canvas, c, ca)
                 is Content.Ringer -> drawRinger(canvas, c, ca)
                 is Content.Notif -> if (big) drawNotifExpanded(canvas, c, ca, interactive) else drawNotif(canvas, c, ca)
                 is Content.Timer -> if (big) drawTimerExpanded(canvas, c, ca, interactive) else drawTimerCompact(canvas, c, ca)
@@ -505,9 +580,12 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is Content.Device -> drawDevice(canvas, c, ca)
                 is UnlockContent -> drawUnlock(canvas, ca)
                 is VolumeContent -> drawVolume(canvas, c, ca)
-                is TorchContent -> drawTorch(canvas, ca)
+                is TorchContent -> if (big) drawTorchExpanded(canvas, c, ca, interactive) else drawTorch(canvas, ca)
                 is FocusContent -> drawFocus(canvas, c, ca)
                 is AirplaneContent -> drawAirplane(canvas, c, ca)
+                is NetworkContent -> drawNetwork(canvas, c, ca)
+                is HeatContent -> drawHeat(canvas, c, ca)
+                is AlarmContent -> drawAlarm(canvas, c, ca)
             }
             canvas.restore()
         }
@@ -758,6 +836,25 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     }
 
     private fun drawArt(canvas: Canvas, rect: RectF, c: Content.Music, radius: Float, a: Float) {
+        if (cfg.vinyl) {
+            // Schallplatte: rundes Cover, dreht sich beim Abspielen
+            canvas.save()
+            canvas.rotate(vinylAngle, rect.centerX(), rect.centerY())
+            val rad = rect.width() / 2
+            if (!drawBitmapRound(canvas, rect, c.info.art, rad, a)) {
+                p.color = withAlpha(accentOf(c), a)
+                canvas.drawCircle(rect.centerX(), rect.centerY(), rad, p)
+            }
+            canvas.restore()
+            ringPaint.strokeWidth = max(1f, rad * 0.05f)
+            ringPaint.color = withAlpha(Color.BLACK, a * 0.25f)
+            canvas.drawCircle(rect.centerX(), rect.centerY(), rad * 0.62f, ringPaint)
+            p.color = withAlpha(0xFF111111.toInt(), a)
+            canvas.drawCircle(rect.centerX(), rect.centerY(), rad * 0.18f, p)
+            p.color = withAlpha(Color.WHITE, a * 0.6f)
+            canvas.drawCircle(rect.centerX(), rect.centerY(), rad * 0.06f, p)
+            return
+        }
         if (!drawBitmapRound(canvas, rect, c.info.art, radius, a)) {
             p.color = withAlpha(accentOf(c), a)
             canvas.drawRoundRect(rect, radius, radius, p)
@@ -925,8 +1022,11 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     private fun rightText(canvas: Canvas, text: String, paint: Paint, color: Int, a: Float) {
         val h = island.height()
         paint.color = withAlpha(color, a)
-        val tw = paint.measureText(text)
-        canvas.drawText(text, rightEdge(h) - tw, island.centerY() + paint.textSize * 0.36f, paint)
+        // Fix: nie in die Kamera-Mitte oder über den Rand laufen
+        val avail = rightEdge(h) - (island.centerX() + cfg.widthDp * d * 0.32f)
+        val t = if (paint.measureText(text) > avail) ellipsize(text, paint, avail) else text
+        val tw = paint.measureText(t)
+        canvas.drawText(t, rightEdge(h) - tw, island.centerY() + paint.textSize * 0.36f, paint)
     }
 
     // ---- Musik ----
@@ -1351,10 +1451,78 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     private fun drawTorch(canvas: Canvas, a: Float) {
         val h = island.height()
         val y = 0xFFFFD60A.toInt()
+        // sanft pulsierendes Glühen hinter dem Symbol
+        val t = System.nanoTime() / 1e9f
+        val glowR = h * (0.42f + 0.06f * sin(t * 3f))
+        p.shader = android.graphics.RadialGradient(leftX(h), island.centerY(), glowR,
+            withAlpha(y, a * 0.45f), withAlpha(y, 0f), Shader.TileMode.CLAMP)
+        canvas.drawCircle(leftX(h), island.centerY(), glowR, p)
+        p.shader = null
         p.color = withAlpha(y, a)
         Icons.flashlight(canvas, leftX(h), island.centerY(), h * 0.56f, p)
         boldPaint.textSize = h * 0.4f * cfg.textScale
         rightText(canvas, "An", boldPaint, y, a)
+    }
+
+    /** Wie iOS: Lichtkegel strahlt aus der Kamera, Breite/Helligkeit folgt dem Regler. */
+    private fun drawTorchExpanded(canvas: Canvas, c: TorchContent, a: Float, interactive: Boolean) {
+        val lvl = (if (torchDragging) torchDragLevel else c.level).coerceIn(0.05f, 1f)
+        val t = System.nanoTime() / 1e9f
+        val cx = island.centerX()
+        val top = island.top + cfg.heightDp * d * 0.5f
+        val bottom = island.bottom - 8 * d
+        val flicker = 1f + 0.03f * sin(t * 13f) + 0.02f * sin(t * 7.3f)
+        val halfW = (island.width() * (0.16f + 0.3f * lvl)) * flicker
+        val warm = 0xFFFFF4D6.toInt()
+
+        // Lichtkegel
+        linePath.reset()
+        linePath.moveTo(cx - 7 * d, top)
+        linePath.lineTo(cx + 7 * d, top)
+        linePath.lineTo(cx + halfW, bottom)
+        linePath.quadTo(cx, bottom + 18 * d, cx - halfW, bottom)
+        linePath.close()
+        p.shader = LinearGradient(0f, top, 0f, bottom,
+            intArrayOf(withAlpha(warm, a * (0.5f + 0.45f * lvl)), withAlpha(warm, a * (0.12f + 0.2f * lvl)), withAlpha(warm, 0f)),
+            floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
+        canvas.drawPath(linePath, p)
+        // weiche Lichtstrahlen
+        for (i in -2..2) {
+            val sway = sin(t * 1.7f + i) * 4 * d
+            val x = cx + i * halfW * 0.38f + sway
+            p.shader = LinearGradient(0f, top, 0f, bottom, withAlpha(Color.WHITE, a * 0.10f * lvl), withAlpha(Color.WHITE, 0f), Shader.TileMode.CLAMP)
+            linePath.reset()
+            linePath.moveTo(cx - 2 * d, top)
+            linePath.lineTo(cx + 2 * d, top)
+            linePath.lineTo(x + 6 * d, bottom)
+            linePath.lineTo(x - 6 * d, bottom)
+            linePath.close()
+            canvas.drawPath(linePath, p)
+        }
+        // Glühen an der Kamera
+        val gr = (22 + 14 * lvl) * d
+        p.shader = android.graphics.RadialGradient(cx, top, gr, withAlpha(Color.WHITE, a * (0.6f + 0.4f * lvl)), withAlpha(warm, 0f), Shader.TileMode.CLAMP)
+        canvas.drawCircle(cx, top, gr, p)
+        p.shader = null
+
+        // Beschriftung
+        val pad = 18 * d
+        p.color = withAlpha(0xFFFFD60A.toInt(), a)
+        Icons.flashlight(canvas, island.left + pad + 10 * d, island.top + pad + 8 * d, 20 * d, p)
+        textPaint.textSize = spx(12.5f)
+        textPaint.color = withAlpha(LIGHT, a)
+        val hint = if (c.adjustable) "Wischen: Helligkeit · Tippen: Aus" else "Tippen zum Ausschalten"
+        canvas.drawText(ellipsize(hint, textPaint, island.width() - pad * 2), island.left + pad, island.bottom - 14 * d, textPaint)
+        if (c.adjustable) {
+            numPaint.textSize = spx(15f)
+            numPaint.color = withAlpha(Color.WHITE, a)
+            val pct = "${(lvl * 100).toInt()} %"
+            canvas.drawText(pct, island.right - pad - numPaint.measureText(pct), island.top + pad + 14 * d, numPaint)
+            if (interactive) {
+                torchRect.set(island)
+                torchActive = true
+            }
+        }
     }
 
     private fun drawFocus(canvas: Canvas, c: FocusContent, a: Float) {
@@ -1375,6 +1543,90 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         rightText(canvas, if (c.on) "An" else "Aus", boldPaint, col, a)
     }
 
+    private fun drawNetwork(canvas: Canvas, c: NetworkContent, a: Float) {
+        val h = island.height()
+        val col = if (c.kind == 0) GRAY else BLUE
+        p.color = withAlpha(col, a)
+        Icons.wifi(canvas, leftX(h), island.centerY(), h * 0.56f, p, c.kind != 0)
+        boldPaint.textSize = h * 0.4f * cfg.textScale
+        rightText(canvas, when (c.kind) { 1 -> "WLAN"; 2 -> "Mobil"; else -> "Offline" }, boldPaint, col, a)
+    }
+
+    private fun drawHeat(canvas: Canvas, c: HeatContent, a: Float) {
+        val h = island.height()
+        p.color = withAlpha(RED, a)
+        Icons.thermometer(canvas, leftX(h), island.centerY(), h * 0.56f, p)
+        numPaint.textSize = h * 0.42f * cfg.textScale
+        rightText(canvas, "%.0f °C".format(c.tempC), numPaint, RED, a)
+    }
+
+    private fun drawAlarm(canvas: Canvas, c: AlarmContent, a: Float) {
+        val h = island.height()
+        p.color = withAlpha(ORANGE, a)
+        Icons.alarm(canvas, leftX(h), island.centerY(), h * 0.56f, p)
+        numPaint.textSize = h * 0.42f * cfg.textScale
+        rightText(canvas, c.text, numPaint, ORANGE, a)
+    }
+
+    private val ringPath = Path()
+    private val ringSeg = Path()
+
+    /** Ladestand als Linie, die oben in der Mitte startet und im Uhrzeigersinn um die Island läuft. */
+    private fun drawBatteryRing(canvas: Canvas, r0: Float) {
+        val inset = 1.6f * d
+        val l = island.left + inset
+        val t = island.top + inset
+        val rr = island.right - inset
+        val b = island.bottom - inset
+        val r = (r0 - inset).coerceIn(0f, (b - t) / 2)
+        val cx = island.centerX()
+        ringPath.reset()
+        ringPath.moveTo(cx, t)
+        ringPath.lineTo(rr - r, t)
+        ringPath.arcTo(rr - 2 * r, t, rr, t + 2 * r, -90f, 90f, false)
+        ringPath.lineTo(rr, b - r)
+        ringPath.arcTo(rr - 2 * r, b - 2 * r, rr, b, 0f, 90f, false)
+        ringPath.lineTo(l + r, b)
+        ringPath.arcTo(l, b - 2 * r, l + 2 * r, b, 90f, 90f, false)
+        ringPath.lineTo(l, t + r)
+        ringPath.arcTo(l, t, l + 2 * r, t + 2 * r, 180f, 90f, false)
+        ringPath.lineTo(cx, t)
+        val pm = PathMeasure(ringPath, false)
+        ringSeg.reset()
+        pm.getSegment(0f, pm.length * ringLevel.coerceIn(0f, 1f), ringSeg, true)
+        ringPaint.strokeWidth = 2.2f * d
+        ringPaint.color = if (ringLevel <= 0.2f) RED else GREEN
+        canvas.drawPath(ringSeg, ringPaint)
+    }
+
+    private fun drawChargingExpanded(canvas: Canvas, c: Content.Charging, a: Float) {
+        val pad = 22 * d
+        val cy = island.centerY()
+        val fill = sFill.value.coerceIn(0f, 1f)
+        val color = if (c.level <= 20) RED else GREEN
+        val bw = 64 * d
+        p.color = withAlpha(color, a)
+        val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = withAlpha(Color.WHITE, a * 0.45f) }
+        val bolt = Paint(p).apply { this.color = withAlpha(Color.WHITE, a) }
+        Icons.battery(canvas, island.left + pad + bw / 2, cy, bw, fill, body, p, bolt, d)
+        val tx = island.left + pad + bw + 18 * d
+        numPaint.textSize = spx(30f)
+        numPaint.color = withAlpha(color, a)
+        val shown = (fill * 100).toInt().coerceAtMost(c.level)
+        canvas.drawText("$shown %", tx, cy + 4 * d, numPaint)
+        val parts = ArrayList<String>()
+        if (c.level >= 100) parts.add("Voll geladen")
+        else if (c.timeLeftMs > 0 && cfg.chargeDetails) {
+            val m = c.timeLeftMs / 60_000
+            parts.add(if (m >= 60) "Voll in ${m / 60} h ${m % 60} min" else "Voll in $m min")
+        } else parts.add("Lädt")
+        if (c.fast && cfg.chargeDetails) parts.add("⚡ Schnell")
+        if (!c.tempC.isNaN() && cfg.chargeDetails) parts.add("%.0f °C".format(c.tempC))
+        textPaint.textSize = spx(14f)
+        textPaint.color = withAlpha(LIGHT, a)
+        canvas.drawText(ellipsize(parts.joinToString("  ·  "), textPaint, island.right - pad - tx), tx, cy + 26 * d, textPaint)
+    }
+
     // ---- Leere Pille: Uhrzeit / Akku ----
 
     private fun drawIdleContent(canvas: Canvas) {
@@ -1384,12 +1636,19 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val a = (sW.value / max(1f, sW.target)).coerceIn(0f, 1f).let { it * it }
         if (a < 0.2f) return
         numPaint.textSize = h * 0.38f * cfg.textScale
-        if (ic == IslandConfig.IDLE_TIME || ic == IslandConfig.IDLE_BOTH) {
-            numPaint.color = withAlpha(Color.WHITE, a)
-            val t = android.text.format.DateFormat.getTimeFormat(context).format(java.util.Date())
-            canvas.drawText(t, island.left + h * 0.45f, island.centerY() + numPaint.textSize * 0.36f, numPaint)
+        val left: String? = when (ic) {
+            IslandConfig.IDLE_TIME, IslandConfig.IDLE_BOTH ->
+                android.text.format.DateFormat.getTimeFormat(context).format(java.util.Date())
+            IslandConfig.IDLE_DATE, IslandConfig.IDLE_DATE_BATTERY ->
+                java.text.SimpleDateFormat("EE d.", java.util.Locale.GERMANY).format(java.util.Date())
+            IslandConfig.IDLE_ALARM -> nextAlarm?.let { "⏰ $it" }
+            else -> null
         }
-        if ((ic == IslandConfig.IDLE_BATTERY || ic == IslandConfig.IDLE_BOTH) && idleBattery >= 0 && !privacy.any) {
+        if (left != null) {
+            numPaint.color = withAlpha(Color.WHITE, a)
+            canvas.drawText(ellipsize(left, numPaint, island.width() / 2 - h * 0.3f), island.left + h * 0.45f, island.centerY() + numPaint.textSize * 0.36f, numPaint)
+        }
+        if ((ic == IslandConfig.IDLE_BATTERY || ic == IslandConfig.IDLE_BOTH || ic == IslandConfig.IDLE_DATE_BATTERY) && idleBattery >= 0 && !privacy.any) {
             val col = if (idleBattery <= 20) RED else Color.WHITE
             val txt = "$idleBattery%"
             numPaint.color = withAlpha(col, a)
@@ -1442,8 +1701,19 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val titleY = island.centerY() - 3 * d
         canvas.drawText(ellipsize(n.title.ifBlank { n.app }, boldPaint, avail), tx, titleY, boldPaint)
 
-        textPaint.color = withAlpha(GRAY, a)
-        canvas.drawText(time, right - timeW, titleY, textPaint)
+        if (queueCount > 0) {
+            val badge = "+$queueCount"
+            numPaint.textSize = spx(11.5f)
+            val bw = numPaint.measureText(badge) + 12 * d
+            tmp.set(right - bw, titleY - 13 * d, right, titleY + 4 * d)
+            p.color = withAlpha(Color.WHITE, a * 0.18f)
+            canvas.drawRoundRect(tmp, tmp.height() / 2, tmp.height() / 2, p)
+            numPaint.color = withAlpha(Color.WHITE, a)
+            canvas.drawText(badge, tmp.centerX() - numPaint.measureText(badge) / 2, titleY, numPaint)
+        } else {
+            textPaint.color = withAlpha(GRAY, a)
+            canvas.drawText(time, right - timeW, titleY, textPaint)
+        }
 
         textPaint.textSize = spx(13.5f)
         textPaint.color = withAlpha(LIGHT, a)
@@ -1557,6 +1827,11 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                     kick()
                     return true
                 }
+                val torch = drawn as? TorchContent
+                if (torchActive && torch != null && torchRect.contains(e.x, e.y)) {
+                    torchStartLevel = torch.level
+                    torchDragLevel = torch.level
+                }
                 if (mode != Mode.EXPANDED && cfg.squish) sPress.target = 0.95f
                 kick()
                 postDelayed(longPress, 420)
@@ -1570,8 +1845,21 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 }
                 if (!pressed) return bubblePressed
                 val dy = e.y - downY
-                if (abs(e.x - downX) > 12 * d || abs(dy) > 12 * d) removeCallbacks(longPress)
-                if (!swiped && dy < -28 * d) {
+                val dx = e.x - downX
+                // Taschenlampe: hoch/runter wischen = Helligkeit (wie iOS)
+                if (torchActive && (torchDragging || abs(dy) > 10 * d)) {
+                    if (!torchDragging) { torchDragging = true; swiped = true; removeCallbacks(longPress) }
+                    torchDragLevel = (torchStartLevel - dy / (island.height() * 0.9f)).coerceIn(0.05f, 1f)
+                    kick()
+                    return true
+                }
+                if (abs(dx) > 12 * d || abs(dy) > 12 * d) removeCallbacks(longPress)
+                if (!swiped && abs(dx) > 44 * d && abs(dx) > abs(dy) * 1.6f && mode != Mode.EXPANDED) {
+                    swiped = true
+                    sPress.target = 1f
+                    kick()
+                    listener?.onSwipeHorizontal(if (dx > 0) 1 else -1)
+                } else if (!swiped && dy < -28 * d) {
                     swiped = true
                     sPress.target = 1f
                     kick()
@@ -1598,13 +1886,38 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                     kick()
                     return true
                 }
+                if (torchDragging) {
+                    torchDragging = false
+                    pressed = false
+                    listener?.onTorchLevel(torchDragLevel)
+                    kick()
+                    return true
+                }
                 val wasPressed = pressed
                 pressed = false
                 sPress.target = 1f
                 kick()
                 if (wasPressed && !longFired && !swiped) {
                     val h = hits.lastOrNull { it.rect.contains(e.x, e.y) }
-                    if (h != null) listener?.onHit(h.run) else listener?.onIslandTap()
+                    if (h != null) {
+                        listener?.onHit(h.run)
+                    } else if (cfg.doubleTapAction != IslandConfig.DOUBLE_NONE && mode != Mode.EXPANDED) {
+                        // Doppeltipp erkennen: Einzeltipp kurz zurückhalten
+                        val now = System.currentTimeMillis()
+                        if (now - lastTapTime < 300 && pendingTap != null) {
+                            removeCallbacks(pendingTap)
+                            pendingTap = null
+                            lastTapTime = 0
+                            listener?.onDoubleTap()
+                        } else {
+                            lastTapTime = now
+                            val r = Runnable { pendingTap = null; listener?.onIslandTap() }
+                            pendingTap = r
+                            postDelayed(r, 260)
+                        }
+                    } else {
+                        listener?.onIslandTap()
+                    }
                 }
                 return true
             }

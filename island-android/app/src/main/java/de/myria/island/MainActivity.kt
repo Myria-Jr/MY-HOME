@@ -75,7 +75,8 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         val dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
             Configuration.UI_MODE_NIGHT_YES
-        pal = Palette(Prefs.load(this).uiLook, dark, this)
+        val cfg0 = Prefs.load(this)
+        pal = Palette(cfg0.uiLook, dark, this, cfg0.appFont)
         styleWindow(dark)
 
         host = FrameLayout(this).apply { setBackgroundColor(pal.bg) }
@@ -87,6 +88,8 @@ class MainActivity : Activity() {
 
         // Nach Design-Wechsel (recreate) die offenen Seiten wiederherstellen
         savedInstanceState?.getStringArrayList(STATE_PAGES)?.forEach { open(it, animate = false) }
+        // Erster Start: Begrüßung
+        if (savedInstanceState == null && !prefs.getBoolean(Prefs.ONBOARDED, false)) open("welcome", animate = false)
 
         prefs.registerOnSharedPreferenceChangeListener(prefListener)
     }
@@ -110,6 +113,7 @@ class MainActivity : Activity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        if (stackNames.lastOrNull() == "welcome") prefs.edit().putBoolean(Prefs.ONBOARDED, true).apply()
         if (!pop()) {
             @Suppress("DEPRECATION")
             super.onBackPressed()
@@ -153,6 +157,11 @@ class MainActivity : Activity() {
         "permissions" -> permissionsPage()
         "info" -> infoPage()
         "icons" -> iconsPage()
+        "fonts" -> fontsPage()
+        "timer" -> timerPage()
+        "history" -> historyPage()
+        "hidein" -> appsPage(hideMode = true)
+        "welcome" -> welcomePage()
         else -> null
     }
 
@@ -166,6 +175,7 @@ class MainActivity : Activity() {
             prev?.visibility = View.INVISIBLE
             return
         }
+        staggerIn(page)
         val w = host.width.toFloat().takeIf { it > 0 } ?: resources.displayMetrics.widthPixels.toFloat()
         if (pal.isNothing) {
             page.alpha = 0f
@@ -179,6 +189,19 @@ class MainActivity : Activity() {
             .start()
         prev?.animate()?.translationX(-w * (if (pal.isAndroid) 0.1f else 0.3f))?.alpha(if (pal.isAndroid) 0f else 0.6f)
             ?.setDuration(420)?.setInterpolator(ease)?.start()
+    }
+
+    /** Inhalte gleiten nacheinander hoch (Material, One UI, Glas) – iOS macht das nicht. */
+    private fun staggerIn(page: View) {
+        if (pal.isApple || pal.isNothing) return
+        val content = ((page as? FrameLayout)?.getChildAt(0) as? ScrollView)?.getChildAt(0) as? LinearLayout ?: return
+        for (i in 0 until minOf(content.childCount, 10)) {
+            val v = content.getChildAt(i)
+            v.alpha = 0f
+            v.translationY = dp(18f)
+            v.animate().alpha(1f).translationY(0f).setStartDelay(40L + i * 35L).setDuration(380)
+                .setInterpolator(ease).start()
+        }
     }
 
     private fun pop(): Boolean {
@@ -208,9 +231,12 @@ class MainActivity : Activity() {
     /** Seite mit großem Titel, der beim Scrollen in die Leiste wandert – je nach Look. */
     private fun page(title: String, back: Boolean, build: (LinearLayout) -> Unit): FrameLayout {
         val root = FrameLayout(this).apply {
-            setBackgroundColor(pal.bg)
+            if (pal.isGlass) background = MeshDrawable(pal) else setBackgroundColor(pal.bg)
             elevation = dp(10f)
             isClickable = true
+            // Fix: Suchfeld bekommt beim Öffnen nicht automatisch den Fokus (keine Tastatur)
+            isFocusableInTouchMode = true
+            descendantFocusability = android.view.ViewGroup.FOCUS_BEFORE_DESCENDANTS
         }
         val navH = dp(54f)
         val content = LinearLayout(this).apply {
@@ -257,7 +283,11 @@ class MainActivity : Activity() {
 
         val bar = FrameLayout(this)
         val barBg = View(this).apply {
-            setBackgroundColor(if (pal.isApple) (if (pal.dark) 0xF01C1C1E.toInt() else 0xF0F9F9F9.toInt()) else pal.bg)
+            setBackgroundColor(when {
+                pal.isApple -> if (pal.dark) 0xF01C1C1E.toInt() else 0xF0F9F9F9.toInt()
+                pal.isGlass -> Palette.mixC(pal.bg, 0x00000000, 0.12f)
+                else -> pal.bg
+            })
             alpha = 0f
         }
         bar.addView(barBg, FrameLayout.LayoutParams(-1, -1))
@@ -270,8 +300,11 @@ class MainActivity : Activity() {
             setTextColor(pal.label)
             alpha = 0f
             setSingleLine()
+            // Fix: lange Titel überlappen nicht mehr den Zurück-Knopf
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            maxWidth = resources.displayMetrics.widthPixels - dpi(if (pal.iosLike) 220f else 90f)
         }
-        if (pal.isApple) {
+        if (pal.iosLike) {
             bar.addView(small, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER))
         } else {
             bar.addView(small, FrameLayout.LayoutParams(-2, -2, Gravity.CENTER_VERTICAL or Gravity.START).apply {
@@ -280,9 +313,9 @@ class MainActivity : Activity() {
         }
         if (back) {
             val b = TextView(this).apply {
-                text = if (pal.isApple) "‹ Zurück" else "←"
-                textSize = if (pal.isApple) 17f else 24f
-                setTextColor(if (pal.isApple) pal.accent else pal.label)
+                text = if (pal.iosLike) "‹ Zurück" else "←"
+                textSize = if (pal.iosLike) 17f else 24f
+                setTextColor(if (pal.iosLike) pal.accent else pal.label)
                 gravity = Gravity.CENTER
                 setPadding(dpi(12f), dpi(6f), dpi(12f), dpi(6f))
                 setOnClickListener { pop() }
@@ -313,6 +346,7 @@ class MainActivity : Activity() {
         IslandConfig.DESIGN_ONEUI -> "One UI"
         IslandConfig.DESIGN_NOTHING -> "Nothing"
         IslandConfig.DESIGN_CUSTOM -> "Custom"
+        IslandConfig.DESIGN_GLASS -> "Liquid Glass"
         else -> "Apple"
     }
 
@@ -377,6 +411,7 @@ class MainActivity : Activity() {
             navRow("App-Symbol", GlyphIcon(this, 0xFF1C1C1E.toInt(), Glyph.APPICON, pal),
                 value = iconName(prefs.getString(PREF_ICON, "classic") ?: "classic")) { open("icons") },
             navRow("Größe & Position", GlyphIcon(this, 0xFF30B0C7.toInt(), Glyph.RULER, pal)) { open("geometry") },
+            navRow("Schriften", GlyphIcon(this, 0xFFFF9500.toInt(), Glyph.FONT, pal)) { open("fonts") },
             navRow("Animation", GlyphIcon(this, 0xFFBF5AF2.toInt(), Glyph.SPARKLE, pal)) { open("animation") },
         )))
         normal.addView(section("Inhalte", listOf(
@@ -384,10 +419,13 @@ class MainActivity : Activity() {
             navRow("Musik", GlyphIcon(this, 0xFFFF375F.toInt(), Glyph.NOTE, pal)) { open("music") },
             navRow("Mitteilungen", GlyphIcon(this, 0xFFFF453A.toInt(), Glyph.BELL, pal)) { open("notif") },
             navRow("System-Anzeigen", GlyphIcon(this, 0xFF5E5CE6.toInt(), Glyph.SPEAKER, pal)) { open("system") },
+            navRow("Timer & Stoppuhr", GlyphIcon(this, 0xFFFF9F0A.toInt(), Glyph.TIMER, pal)) { open("timer") },
+            navRow("Mitteilungs-Verlauf", GlyphIcon(this, 0xFF8E8E93.toInt(), Glyph.CLOCK, pal)) { open("history") },
         )))
         normal.addView(section("Bedienung", listOf(
             navRow("Gesten & Haptik", GlyphIcon(this, 0xFF32D74B.toInt(), Glyph.HAND, pal)) { open("behavior") },
-            navRow("Apps", GlyphIcon(this, 0xFF5856D6.toInt(), Glyph.GRID, pal)) { open("apps") },
+            navRow("Apps für Mitteilungen", GlyphIcon(this, 0xFF5856D6.toInt(), Glyph.GRID, pal)) { open("apps") },
+            navRow("In Apps ausblenden", GlyphIcon(this, 0xFF636366.toInt(), Glyph.EYE, pal)) { open("hidein") },
         )))
         normal.addView(section("App", listOf(
             navRow("Berechtigungen", GlyphIcon(this, 0xFF8E8E93.toInt(), Glyph.GEAR, pal)) { open("permissions") },
@@ -417,6 +455,10 @@ class MainActivity : Activity() {
         "permissions" -> "Berechtigungen"
         "info" -> "Info"
         "icons" -> "App-Symbol"
+        "fonts" -> "Schriften"
+        "timer" -> "Timer & Stoppuhr"
+        "history" -> "Mitteilungs-Verlauf"
+        "hidein" -> "In Apps ausblenden"
         else -> ""
     }
 
@@ -429,7 +471,7 @@ class MainActivity : Activity() {
             setHintTextColor(pal.secondary)
             typeface = pal.font(400)
             setPadding(dpi(40f), dpi(6f), dpi(14f), dpi(6f))
-            background = GradientDrawable().apply {
+            background = if (pal.isGlass) GlassDrawable(pal, dp(14f), dp(1f)) else GradientDrawable().apply {
                 cornerRadius = dp(if (pal.isApple) 10f else 28f)
                 setColor(if (pal.isApple) pal.fill else pal.card)
                 if (pal.isNothing) setStroke(dpi(1f), pal.outline)
@@ -441,7 +483,7 @@ class MainActivity : Activity() {
             })
         }
         val box = FrameLayout(this)
-        box.addView(et, FrameLayout.LayoutParams(-1, dpi(if (pal.isApple) 38f else 50f)))
+        box.addView(et, FrameLayout.LayoutParams(-1, dpi(if (pal.isApple) 38f else if (pal.isGlass) 44f else 50f)))
         box.addView(object : View(this) {
             private val pp = Paint(Paint.ANTI_ALIAS_FLAG)
             override fun onDraw(cv: Canvas) {
@@ -477,8 +519,8 @@ class MainActivity : Activity() {
 
     private val designList = listOf(
         IslandConfig.DESIGN_APPLE to "Apple", IslandConfig.DESIGN_ANDROID to "Android",
-        IslandConfig.DESIGN_ONEUI to "One UI", IslandConfig.DESIGN_NOTHING to "Nothing",
-        IslandConfig.DESIGN_CUSTOM to "Custom",
+        IslandConfig.DESIGN_GLASS to "Liquid Glass", IslandConfig.DESIGN_ONEUI to "One UI",
+        IslandConfig.DESIGN_NOTHING to "Nothing", IslandConfig.DESIGN_CUSTOM to "Custom",
     )
 
     private fun designStrip(): View {
@@ -535,7 +577,7 @@ class MainActivity : Activity() {
         c.addView(footerText("Eine Vorlage setzt Form, Farben, Schrift, Animation, Wellenform, Tasten und den Look dieser App. Danach kannst du trotzdem alles einzeln ändern – dann wird's automatisch „Custom“."))
 
         c.addView(section("Look dieser App", listOf(
-            segmentRow(listOf("iOS", "Material", "One UI", "Nothing"), prefs.getInt(Prefs.UI_LOOK, D.uiLook)) {
+            segmentRow(listOf("iOS", "Material", "One UI", "Nothing", "Glas"), prefs.getInt(Prefs.UI_LOOK, D.uiLook)) {
                 prefs.edit().putInt(Prefs.UI_LOOK, it).apply()
                 main.postDelayed({ recreate() }, 180)
             },
@@ -576,9 +618,8 @@ class MainActivity : Activity() {
             }),
         ), footer = "In der Vorschau auf die Musik gedrückt halten, um den großen Player zu sehen."))
 
-        c.addView(section("Schrift", choiceRows(Prefs.FONT_STYLE, D.fontStyle, listOf(
-            "System" to null, "Google Sans" to "Auf Pixel-Handys", "Schmal" to null, "Mono" to null, "Serif" to null,
-        )) + listOf(
+        c.addView(section("Schrift", listOf(
+            navRow("Schriftart", null, value = Fonts.ALL[prefs.getInt(Prefs.FONT_STYLE, D.fontStyle).coerceIn(0, Fonts.ALL.size - 1)].name) { open("fonts") },
             labeled("Größe", segmentRow(listOf("Klein", "Normal", "Groß"), prefs.getInt(Prefs.FONT_SCALE, D.fontScale)) {
                 prefs.edit().putInt(Prefs.FONT_SCALE, it).apply()
             }),
@@ -648,6 +689,13 @@ class MainActivity : Activity() {
 
     private fun animationPage() = page("Animation", true) { c ->
         c.addView(previewCard(big = false, root = c))
+        c.addView(section("Animationsstil", choiceRows(Prefs.ANIM_STYLE, D.animStyle, listOf(
+            "Apple" to "Federnd, Inhalt zoomt weich rein",
+            "Android" to "Material Motion: ruhig, Inhalt gleitet hoch",
+            "One UI" to "Sanft mit leichtem Nachschwingen",
+            "Nothing" to "Knackig & schnell, reines Einblenden",
+            "Jelly" to "Wackelpudding – extra verspielt",
+        ))))
         c.addView(section("Federung", listOf(
             sliderRow("Bounce", Prefs.BOUNCE, D.bounce, 0, 100) { "$it %" },
             sliderRow("Tempo", Prefs.SPEED, D.speed, 0, 100) { "$it %" },
@@ -672,6 +720,9 @@ class MainActivity : Activity() {
             switchRow("Laden", Prefs.CHARGING, D.showCharging, "Animation beim Einstecken"),
             switchRow("Laden dauerhaft anzeigen", Prefs.CHARGING_PERSISTENT, D.chargingPersistent),
             switchRow("Akku schwach", Prefs.LOW_BATTERY, D.showLowBattery, "Warnung bei 20 % und 10 %"),
+            switchRow("Lade-Details", Prefs.CHARGE_DETAILS, D.chargeDetails, "Antippen: Restzeit, Schnellladen, Temperatur"),
+            switchRow("Akku-Rand", Prefs.BATTERY_RING, D.batteryRing, "Ladestand als Linie um die Island"),
+            switchRow("Hitze-Warnung", Prefs.TEMP_WARNING, D.tempWarning, "Ab 42 °C Akkutemperatur"),
         )))
         c.addView(section("Mehrere gleichzeitig", listOf(
             switchRow("Zweite Aktivität als Bubble", Prefs.SPLIT, D.splitBubble),
@@ -686,9 +737,16 @@ class MainActivity : Activity() {
             switchRow("Flugmodus", Prefs.AIRPLANE, D.showAirplane),
             switchRow("Kopfhörer verbunden", Prefs.DEVICES, D.showDevices, "Mit Akkustand"),
             switchRow("Entsperren", Prefs.UNLOCK, D.showUnlock, "Schloss springt auf – wie Face ID"),
+            switchRow("Internet", Prefs.NETWORK, D.showNetwork, "WLAN verbunden / offline"),
+            switchRow("Wecker gestellt", Prefs.ALARM, D.showAlarm, "Zeigt kurz die Weckzeit"),
+        )))
+        c.addView(section("Akku sparen", listOf(
+            switchRow("Im Energiesparmodus reduzieren", Prefs.POWER_SAVE, D.powerSaveReduce,
+                "Keine Wellenform, kein Glow, ruhige Animationen"),
         )))
         c.addView(section("Leere Pille zeigt", choiceRows(Prefs.IDLE_CONTENT, D.idleContent, listOf(
             "Nichts" to "Wie beim iPhone", "Uhrzeit" to null, "Akku" to null, "Uhrzeit + Akku" to null,
+            "Datum" to null, "Nächster Wecker" to null, "Datum + Akku" to null,
         )), footer = "Nur sichtbar bei „Immer sichtbar“."))
         c.addView(section("Datenschutz-Punkte", listOf(
             switchRow("Kamera", Prefs.PRIV_CAMERA, D.privacyCamera, "Grüner Punkt, wenn eine App filmt"),
@@ -704,6 +762,7 @@ class MainActivity : Activity() {
             switchRow("Wellenform animieren", Prefs.WAVEFORM, D.waveform),
             switchRow("Wellenform in Akzentfarbe", Prefs.WAVEFORM_COVER, D.waveformCover),
             switchRow("App-Icon zeigen", Prefs.MUSIC_APP_ICON, D.musicAppIcon, "Spotify, YouTube Music … im großen Player"),
+            switchRow("Vinyl-Modus", Prefs.VINYL, D.vinyl, "Cover dreht sich wie eine Schallplatte"),
         )))
         c.addView(section("Player", listOf(
             switchRow("Spulen per Ziehen", Prefs.MUSIC_SEEK, D.musicSeek, "Fortschrittsbalken im großen Player ziehen"),
@@ -726,7 +785,17 @@ class MainActivity : Activity() {
             switchRow("Automatisch groß zeigen", Prefs.NOTIF_AUTO_EXPAND, D.notifAutoExpand, "Ganzer Text + Buttons sofort"),
             switchRow("Aktions-Buttons", Prefs.NOTIF_ACTIONS, D.notifActions, "z.B. „Als gelesen markieren“"),
             switchRow("Inhalt verbergen", Prefs.NOTIF_HIDE_CONTENT, D.notifHideContent, "Nur App-Name, kein Text"),
+            switchRow("Nacheinander zeigen", Prefs.NOTIF_QUEUE, D.notifQueue, "Mehrere Mitteilungen in einer Warteschlange („+2“)"),
         ), footer = "Runterziehen auf einer Mitteilung zeigt den ganzen Text und die Buttons."))
+        c.addView(section("Ruhezeiten", listOf(
+            switchRow("Ruhezeiten", Prefs.QUIET, D.quietHours, "Keine Mitteilungen in der Island"),
+            sliderRow("Von", Prefs.QUIET_START, D.quietStart, 0, 23) { "%02d:00".format(it) },
+            sliderRow("Bis", Prefs.QUIET_END, D.quietEnd, 0, 23) { "%02d:00".format(it) },
+        )))
+        c.addView(section("Verlauf", listOf(
+            switchRow("Verlauf speichern", Prefs.NOTIF_HISTORY, D.notifHistory, "Nur auf deinem Handy"),
+            navRow("Verlauf ansehen", null) { open("history") },
+        )))
     }
 
     private fun behaviorPage() = page("Gesten & Haptik", true) { c ->
@@ -735,6 +804,17 @@ class MainActivity : Activity() {
             switchRow("Runterziehen erweitert", Prefs.SWIPE_DOWN, D.swipeDownExpands),
             sliderRow("Automatisch einklappen", Prefs.AUTO_COLLAPSE, D.autoCollapseSec, 3, 30) { "$it s" },
         ), footer = "Gedrückt halten erweitert • Hochwischen klappt ein • Außerhalb tippen schließt."))
+        c.addView(section("Doppeltippen", choiceRows(Prefs.DOUBLE_TAP, D.doubleTapAction, listOf(
+            "Nichts" to null, "Play / Pause" to null, "App öffnen" to null, "Erweitern" to null, "Taschenlampe" to null,
+        ))))
+        c.addView(section("Seitlich wischen", choiceRows(Prefs.SWIPE_H, D.swipeHorizontal, listOf(
+            "Aus" to null,
+            "Aktivität wechseln" to "Zwischen Musik, Timer, Navi … blättern",
+            "Song wechseln" to "Bei Musik: nächster / vorheriger Song",
+        ))))
+        c.addView(section("Leere Pille gedrückt halten", choiceRows(Prefs.IDLE_LP, D.idleLongPress, listOf(
+            "Nichts" to null, "Timer starten" to null, "Stoppuhr" to null, "Taschenlampe" to null, "Isla öffnen" to null,
+        )), footer = "Funktioniert bei „Immer sichtbar“, wenn „Leere Pille durchklickbar“ aus ist."))
         c.addView(section("Haptik", listOf(
             switchRow("Haptisches Feedback", Prefs.HAPTICS, D.haptics),
             labeled("Stärke", segmentRow(listOf("Leicht", "Mittel", "Stark"), prefs.getInt(Prefs.HAPTIC_STRENGTH, D.hapticStrength)) {
@@ -745,6 +825,7 @@ class MainActivity : Activity() {
             switchRow("Auf dem Sperrbildschirm", Prefs.LOCKSCREEN, D.showOnLockscreen),
             switchRow("Im Querformat ausblenden", Prefs.HIDE_LANDSCAPE, D.hideLandscape, "Videos & Spiele bleiben frei"),
             switchRow("Leere Pille durchklickbar", Prefs.IDLE_TOUCH_THROUGH, D.idleTouchThrough, "Bei „Immer sichtbar“"),
+            navRow("In bestimmten Apps ausblenden", null) { open("hidein") },
         )))
     }
 
@@ -804,6 +885,27 @@ class MainActivity : Activity() {
             },
         ), footer = "Stürzt $APP_NAME ab, landet hier der genaue Grund. Kopieren und an mich schicken → ich fixe es."))
 
+        c.addView(section("Sichern", listOf(
+            actionRow("Einstellungen exportieren") {
+                val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("Isla Einstellungen", Prefs.export(this)))
+                Toast.makeText(this, "In die Zwischenablage kopiert 📋", Toast.LENGTH_SHORT).show()
+            },
+            actionRow("Einstellungen importieren") {
+                val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                val txt = cm.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString().orEmpty()
+                AlertDialog.Builder(this)
+                    .setTitle("Aus Zwischenablage importieren?")
+                    .setMessage("Deine aktuellen Einstellungen werden ersetzt.")
+                    .setNegativeButton("Abbrechen", null)
+                    .setPositiveButton("Importieren") { _, _ ->
+                        if (Prefs.import(this, txt)) recreate()
+                        else Toast.makeText(this, "Keine gültigen Isla-Einstellungen in der Zwischenablage", Toast.LENGTH_LONG).show()
+                    }
+                    .show()
+            },
+        ), footer = "Exportieren kopiert alles als Text – z.B. für ein neues Handy."))
+
         c.addView(section(null, listOf(
             actionRow("Alle Einstellungen zurücksetzen", destructive = true) {
                 AlertDialog.Builder(this)
@@ -821,7 +923,8 @@ class MainActivity : Activity() {
 
     // ---- App-Auswahl ----
 
-    private fun appsPage() = page("Apps", true) { c ->
+    private fun appsPage(hideMode: Boolean = false) = page(if (hideMode) "In Apps ausblenden" else "Apps", true) { c ->
+        val setKey = if (hideMode) Prefs.HIDDEN_IN_APPS else Prefs.EXCLUDED
         val listBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         var rows: List<View> = emptyList()
         c.addView(searchField { q ->
@@ -830,7 +933,9 @@ class MainActivity : Activity() {
                 r.visibility = if (ql.isEmpty() || (r.tag as? String)?.contains(ql) == true) View.VISIBLE else View.GONE
             }
         })
-        c.addView(footerText("Ausgeschaltete Apps erscheinen nicht in der Island – weder Mitteilungen noch Live-Aktivitäten."))
+        c.addView(footerText(if (hideMode)
+            "Ist eine eingeschaltete App im Vordergrund (z.B. Spiele, Videos), verschwindet die Island komplett."
+        else "Ausgeschaltete Apps erscheinen nicht in der Island – weder Mitteilungen noch Live-Aktivitäten."))
         c.addView(listBox)
         listBox.addView(TextView(this).apply {
             text = "Lädt Apps …"
@@ -854,7 +959,8 @@ class MainActivity : Activity() {
             main.post {
                 if (isFinishing || isDestroyed) return@post
                 listBox.removeAllViews()
-                val excluded = Prefs.load(this).excludedApps
+                val cfgNow = Prefs.load(this)
+                val chosen = if (hideMode) cfgNow.hiddenInApps else cfgNow.excludedApps
                 rows = apps.map { (pkg, label, info) ->
                     val row = baseRow()
                     val iv = ImageView(this)
@@ -862,8 +968,9 @@ class MainActivity : Activity() {
                     row.addView(iv, LinearLayout.LayoutParams(dpi(30f), dpi(30f)).apply { rightMargin = dpi(14f) })
                     row.addView(rowTitle(label), LinearLayout.LayoutParams(0, -2, 1f))
                     val sw = IosSwitch(this, pal)
-                    sw.set(pkg !in excluded)
-                    sw.onChange = { on -> Prefs.setExcluded(this, pkg, !on) }
+                    // Mitteilungen: an = erlaubt · Ausblenden: an = hier verstecken
+                    sw.set(if (hideMode) pkg in chosen else pkg !in chosen)
+                    sw.onChange = { on -> Prefs.setInSet(this, setKey, pkg, if (hideMode) on else !on) }
                     row.addView(sw)
                     row.setOnClickListener { sw.performClick() }
                     row.tag = label.lowercase()
@@ -910,6 +1017,13 @@ class MainActivity : Activity() {
             override fun haptic(strong: Boolean) {
                 view.performHapticFeedback(if (strong) HapticFeedbackConstants.LONG_PRESS else HapticFeedbackConstants.CONTEXT_CLICK)
             }
+            override fun setTorchLevel(level: Float) {
+                demoTorchLevel = level
+                if (demoLive.containsKey("torch")) {
+                    demoLive["torch"] = demoTorchContent()
+                    previews.forEach { it.setLive(demoLive.values.toList()) }
+                }
+            }
         })
         card.addView(view, FrameLayout.LayoutParams(-1, -1))
         ctl.cfg = previewCfg()
@@ -946,6 +1060,9 @@ class MainActivity : Activity() {
         chip("🔓  Entsperren") { demoTransient(UnlockContent()) }
         chip("🔕  Lautlos") { demoRinger() }
         chip("📍  Punkte") { demoPrivacy() }
+        chip("🌡  Hitze") { demoTransient(HeatContent(44f)) }
+        chip("📶  WLAN") { demoTransient(NetworkContent(1)) }
+        chip("⏰  Wecker") { demoTransient(AlarmContent("07:00")) }
         val hs = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
             addView(chips)
@@ -953,7 +1070,7 @@ class MainActivity : Activity() {
         card.addView(hs, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM).apply { bottomMargin = dpi(16f) })
 
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        box.addView(card, LinearLayout.LayoutParams(-1, dpi(if (big) 300f else 270f)))
+        box.addView(card, LinearLayout.LayoutParams(-1, dpi(if (big) 310f else 300f)))
         if (big) box.addView(TextView(this).apply {
             text = "Chips antippen → testet die Vorschau UND die echte Island. Gedrückt halten = groß."
             textSize = 13f
@@ -1127,11 +1244,14 @@ class MainActivity : Activity() {
         pushDemoLive()
     }
 
+    private var demoTorchLevel = 0.8f
+
+    private fun demoTorchContent(): TorchContent =
+        TorchContent({ demoLive.remove("torch"); pushDemoLive() }, demoTorchLevel, true)
+
     private fun demoTorch() {
         val key = "torch"
-        if (demoLive.remove(key) == null) {
-            demoLive[key] = TorchContent { demoLive.remove(key); pushDemoLive() }
-        }
+        if (demoLive.remove(key) == null) demoLive[key] = demoTorchContent()
         pushDemoLive()
     }
 
@@ -1214,7 +1334,7 @@ class MainActivity : Activity() {
     // ==================================================================
 
     private fun sectionHeader(title: String): View = TextView(this).apply {
-        text = if (pal.isApple || pal.isNothing) title.uppercase() else title
+        text = if (pal.iosLike || pal.isNothing) title.uppercase() else title
         textSize = if (pal.isAndroid) 14f else 13f
         typeface = pal.font(if (pal.isAndroid || pal.isOneUi) 600 else 400)
         setTextColor(if (pal.isAndroid) pal.accent else pal.secondary)
@@ -1254,7 +1374,7 @@ class MainActivity : Activity() {
         } else {
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                background = GradientDrawable().apply {
+                background = if (pal.isGlass) GlassDrawable(pal, r, dp(1f)) else GradientDrawable().apply {
                     cornerRadius = r
                     setColor(pal.card)
                     if (pal.isNothing) setStroke(dpi(1f), pal.separator)
@@ -1393,30 +1513,36 @@ class MainActivity : Activity() {
     }
 
     /** Auswahlliste mit Häkchen (iOS), Radio-Buttons (Material / One UI) oder Punkt (Nothing). */
-    private fun choiceRows(key: String, def: Int, options: List<Pair<String, String?>>, onPick: ((Int) -> Unit)? = null): List<View> {
+    private fun choiceRows(
+        key: String, def: Int, options: List<Pair<String, String?>>,
+        fontPreview: Boolean = false, offset: Int = 0, onPick: ((Int) -> Unit)? = null,
+    ): List<View> {
         val indicators = ArrayList<ChoiceMark>()
-        val rows = options.mapIndexed { i, (label, sub) ->
+        val rows = options.mapIndexed { idx, (label, sub) ->
+            val i = idx + offset
             val row = baseRow()
             val mark = ChoiceMark(this, pal)
             indicators.add(mark)
             if (pal.isAndroid || pal.isOneUi) {
                 row.addView(mark, LinearLayout.LayoutParams(dpi(24f), dpi(24f)).apply { rightMargin = dpi(16f) })
             }
-            row.addView(labelBlock(label, sub), LinearLayout.LayoutParams(0, -2, 1f))
-            if (pal.isApple || pal.isNothing) {
+            val lb = labelBlock(label, sub)
+            if (fontPreview && i >= 0) ((lb as LinearLayout).getChildAt(0) as TextView).typeface = Fonts.get(this, i, 500)
+            row.addView(lb, LinearLayout.LayoutParams(0, -2, 1f))
+            if (pal.iosLike || pal.isNothing) {
                 row.addView(mark, LinearLayout.LayoutParams(dpi(22f), dpi(22f)))
             }
             row.setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
                 setLook(key, i)
-                indicators.forEachIndexed { j, m -> m.setOn(j == i, true) }
+                indicators.forEachIndexed { j, m -> m.setOn(j + offset == i, true) }
                 onPick?.invoke(i)
             }
             row.background = pressable()
             row
         }
         val cur = try { prefs.getInt(key, def) } catch (_: ClassCastException) { def }
-        indicators.forEachIndexed { j, m -> m.setOn(j == cur, false) }
+        indicators.forEachIndexed { j, m -> m.setOn(j + offset == cur, false) }
         return rows
     }
 
@@ -1492,7 +1618,7 @@ class MainActivity : Activity() {
             setTextColor(if (pal.isOneUi) pal.accent else pal.secondary)
             setPadding(0, 0, dpi(6f), 0)
         })
-        if (pal.isApple || pal.isNothing) row.addView(TextView(this).apply {
+        if (pal.iosLike || pal.isNothing) row.addView(TextView(this).apply {
             text = if (pal.isNothing) "→" else "›"
             textSize = if (pal.isNothing) 17f else 22f
             setTextColor(if (pal.dark) 0x66EBEBF5 else 0x4D3C3C43)
@@ -1510,7 +1636,7 @@ class MainActivity : Activity() {
         row.addView(TextView(this).apply {
             text = if (pal.isNothing) label.uppercase() else label
             textSize = if (pal.isNothing) 14f else 17f
-            typeface = pal.font(if (pal.isApple) 400 else 500)
+            typeface = pal.font(if (pal.iosLike) 400 else 500)
             setTextColor(if (destructive) pal.red else pal.accent)
         }, LinearLayout.LayoutParams(0, -2, 1f))
         row.setOnClickListener { onClick() }
@@ -1538,6 +1664,131 @@ class MainActivity : Activity() {
     }
 
     private fun signed(v: Int) = if (v > 0) "+$v dp" else "$v dp"
+
+    // ==================================================================
+    // Schriften, Timer, Verlauf, Begrüßung
+    // ==================================================================
+
+    private fun fontsPage() = page("Schriften", true) { c ->
+        c.addView(previewCard(big = false, root = c))
+        c.addView(section("Island-Schrift", choiceRows(Prefs.FONT_STYLE, D.fontStyle,
+            Fonts.ALL.map { it.name to it.note }, fontPreview = true)))
+        c.addView(section("App-Schrift",
+            choiceRows(Prefs.APP_FONT, D.appFont, listOf("Automatisch" to "Passend zum Look") + Fonts.ALL.map { it.name to it.note },
+                fontPreview = true, offset = -1) { main.postDelayed({ recreate() }, 250) },
+            footer = "Ändert die Schrift dieser Einstellungen. Alle Schriften sind frei (SIL Open Font License)."))
+    }
+
+    private fun timerPage() = page("Timer & Stoppuhr", true) { c ->
+        val status = TextView(this).apply {
+            textSize = 15f
+            typeface = pal.font(500)
+            setTextColor(pal.secondary)
+            setPadding(dpi(16f), dpi(4f), dpi(16f), 0)
+        }
+        val update = {
+            status.text = buildString {
+                append(if (OwnTimers.timerRunning) "⏱ Timer läuft" else "Kein Timer aktiv")
+                append("   ·   ")
+                append(if (OwnTimers.stopwatchRunning) "⏲ Stoppuhr läuft" else "Stoppuhr aus")
+            }
+        }
+        update()
+        refreshers.add(update)
+        c.addView(status)
+        fun needService() {
+            if (!IslandBus.serviceRunning) Toast.makeText(this, "Isla ist noch nicht aktiv – erst die Bedienungshilfe einschalten", Toast.LENGTH_LONG).show()
+        }
+        c.addView(section("Timer", listOf(
+            sliderRow("Dauer", Prefs.TIMER_MINUTES, D.timerMinutes, 1, 120) { "$it min" },
+            actionRow("Timer starten") {
+                OwnTimers.startTimer(prefs.getInt(Prefs.TIMER_MINUTES, D.timerMinutes))
+                needService(); update()
+            },
+            actionRow("+1 Minute") { OwnTimers.addMinute(); update() },
+            actionRow("Timer stoppen", destructive = true) { OwnTimers.stopTimer(); update() },
+        ), footer = "Der Timer läuft in der Island. Am Ende vibriert dein Handy."))
+        c.addView(section("Stoppuhr", listOf(
+            actionRow("Stoppuhr starten / stoppen") {
+                if (OwnTimers.stopwatchRunning) OwnTimers.stopStopwatch() else { OwnTimers.startStopwatch(); needService() }
+                update()
+            },
+        ), footer = "Tipp: Bei „Immer sichtbar“ die leere Pille gedrückt halten startet sofort einen Timer (einstellbar unter Gesten)."))
+    }
+
+    private fun historyPage() = page("Mitteilungs-Verlauf", true) { c ->
+        val list = NotifHistory.all(this)
+        if (list.isEmpty()) {
+            c.addView(footerText("Noch nichts hier. Sobald Mitteilungen in der Island erscheinen, landen sie hier – nur auf deinem Handy."))
+        } else {
+            c.addView(section("Zuletzt", list.map { e ->
+                LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL
+                    setPadding(dpi(16f), dpi(10f), dpi(16f), dpi(10f))
+                    addView(TextView(this@MainActivity).apply {
+                        text = e.app + "  ·  " + android.text.format.DateUtils.getRelativeTimeSpanString(e.time)
+                        textSize = 12f
+                        typeface = pal.font(500)
+                        setTextColor(pal.secondary)
+                    })
+                    addView(rowTitle(e.title.ifBlank { e.app }).apply { typeface = pal.font(600) })
+                    if (e.text.isNotBlank()) addView(TextView(this@MainActivity).apply {
+                        text = e.text
+                        textSize = 14f
+                        typeface = pal.font(400)
+                        setTextColor(pal.secondary)
+                        maxLines = 3
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                    })
+                }
+            }))
+            c.addView(section(null, listOf(
+                actionRow("Verlauf löschen", destructive = true) { NotifHistory.clear(this); pop() },
+            )))
+        }
+    }
+
+    private fun welcomePage() = page("Willkommen", false) { c ->
+        val iv = ImageView(this).apply {
+            val res = resources.getIdentifier("ic_launcher_" + (prefs.getString(PREF_ICON, "classic") ?: "classic"), "mipmap", packageName)
+            if (res != 0) try { setImageDrawable(getDrawable(res)) } catch (_: Exception) {}
+            background = GradientDrawable().apply { cornerRadius = dp(26f); setColor(Color.TRANSPARENT) }
+            clipToOutline = true
+        }
+        val top = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(0, dpi(8f), 0, dpi(4f))
+        }
+        top.addView(iv, LinearLayout.LayoutParams(dpi(96f), dpi(96f)))
+        top.addView(TextView(this).apply {
+            text = "Deine Dynamic Island – in jedem Design.\nDrei kurze Schritte, dann geht's los ✨"
+            textSize = 16f
+            typeface = pal.font(400)
+            gravity = Gravity.CENTER
+            setTextColor(pal.secondary)
+            setPadding(0, dpi(14f), 0, 0)
+        })
+        c.addView(top)
+        c.addView(section("1 · Island anzeigen", listOf(
+            statusRow("Bedienungshilfe", "Damit Isla über der Statusleiste zeichnen darf", ::a11yEnabled) {
+                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            },
+        ), footer = "Ausgegraut? App-Info → ⋮ → „Eingeschränkte Einstellungen zulassen“."))
+        c.addView(section("2 · Musik & Mitteilungen", listOf(
+            statusRow("Mitteilungszugriff", "Für Musik, Timer, Anrufe, Navigation …", ::notifEnabled) {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            },
+        )))
+        c.addView(sectionHeader("3 · Design wählen"))
+        c.addView(designStrip())
+        c.addView(section(null, listOf(
+            actionRow("Los geht's ✨") {
+                prefs.edit().putBoolean(Prefs.ONBOARDED, true).apply()
+                pop()
+            },
+        )))
+    }
 
     // ==================================================================
     // App-Symbol
@@ -1624,11 +1875,12 @@ class MainActivity : Activity() {
     }
 
     companion object {
-        const val APP_NAME = "Atoll"
+        const val APP_NAME = "Isla"
         private const val PREF_ICON = "app_icon"
         private val ICONS = listOf(
             "classic" to "Klassisch", "light" to "Hell", "lagoon" to "Lagune", "sunset" to "Sunset",
             "midnight" to "Mitternacht", "glass" to "Glas", "neon" to "Neon", "dots" to "Punkte",
+            "aurora" to "Aurora", "rose" to "Rosé", "gold" to "Gold", "rainbow" to "Regenbogen", "trans" to "Trans Pride",
         )
         private const val STATE_PAGES = "pages"
         /** Eigene Tag-Keys (müssen wie Resource-IDs aussehen → 0x7f…) */
@@ -1661,6 +1913,17 @@ class MainActivity : Activity() {
             "Berechtigungen Bedienungshilfe Bluetooth Standort" to "permissions",
             "Info Version Fehlerbericht Absturz zurücksetzen" to "info",
             "App-Symbol Icon Logo Symbol Homescreen" to "icons",
+            "Schrift Schriftart Font Inter Outfit Nunito Doto Pacifico App-Schrift" to "fonts",
+            "Timer Stoppuhr Countdown eigener" to "timer",
+            "Verlauf Mitteilungen History" to "history",
+            "Ausblenden Spiele Videos Vordergrund Apps" to "hidein",
+            "Animationsstil Jelly Material Android Nothing" to "animation",
+            "Doppeltippen Wischen seitlich Song wechseln gedrückt halten" to "behavior",
+            "Ruhezeiten Warteschlange nacheinander" to "notif",
+            "Vinyl Schallplatte" to "music",
+            "Akku-Rand Hitze Temperatur Schnellladen Restzeit" to "live",
+            "Internet WLAN Wecker Energiesparmodus Datum" to "system",
+            "Export Import Sichern Backup" to "info",
         )
     }
 }
@@ -1687,7 +1950,7 @@ private class ChoiceMark(ctx: Context, private val pal: Palette) : View(ctx) {
         val h = height.toFloat()
         val d1 = resources.displayMetrics.density
         when {
-            pal.isApple -> {
+            pal.iosLike -> {
                 if (t > 0.01f) {
                     p.style = Paint.Style.STROKE
                     p.strokeWidth = 2.4f * d1

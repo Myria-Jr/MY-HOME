@@ -71,7 +71,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         view = v
         val c = IslandController(v, this)
         controller = c
-        c.cfg = cfg
+        c.cfg = effective()
 
         lp.type = WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY
         lp.format = PixelFormat.TRANSLUCENT
@@ -102,6 +102,10 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
         registerSystemReceivers()
         registerPrivacyWatchers()
+        registerNetwork()
+        OwnTimers.onChange = { pushLive() }
+        OwnTimers.onTimerDone = { timerDone() }
+        updateNextAlarm(false)
         landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         locked = (getSystemService(KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
         updateSuppressed()
@@ -109,7 +113,38 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         pushLive()
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
+    // ------------------------------------------------------------------
+    // Vordergrund-App → in bestimmten Apps ausblenden
+    // ------------------------------------------------------------------
+
+    private var foregroundHidden = false
+    private val ignoredPkgs by lazy {
+        val set = hashSetOf(packageName, "com.android.systemui", "android")
+        try {
+            val imm = getSystemService(INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            imm.enabledInputMethodList.forEach { set.add(it.packageName) }
+        } catch (_: Exception) {}
+        set
+    }
+
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        val pkg = event.packageName?.toString() ?: return
+        if (pkg in ignoredPkgs) return
+        val hide = pkg in cfg.hiddenInApps
+        if (hide != foregroundHidden) {
+            foregroundHidden = hide
+            updateSuppressed()
+        }
+    }
+
+    /** Einstellungen + Energiesparmodus (spart Akku: keine Wellenform, kein Glow, ruhige Animationen) */
+    private fun effective(): IslandConfig {
+        val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+        return if (cfg.powerSaveReduce && pm.isPowerSaveMode)
+            cfg.copy(waveform = false, glow = false, reduceMotion = true, vinyl = false)
+        else cfg
+    }
     override fun onInterrupt() {}
 
     override fun onDestroy() {
@@ -133,6 +168,9 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         try { unregisterReceiver(systemReceiver) } catch (_: Exception) {}
         try { unregisterReceiver(btReceiver) } catch (_: Exception) {}
         unregisterPrivacyWatchers()
+        unregisterNetwork()
+        OwnTimers.onChange = null
+        OwnTimers.onTimerDone = null
         controller?.release()
         controller = null
         view?.let { try { wm.removeView(it) } catch (_: Exception) {} }
@@ -149,8 +187,11 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         controller?.refresh()
     }
 
+    private var lastMode = IslandView.Mode.HIDDEN
+
     private fun updateSuppressed() {
-        controller?.suppressed = (cfg.hideLandscape && landscape) || screenOff ||
+        onModeChanged(lastMode)
+        controller?.suppressed = (cfg.hideLandscape && landscape) || screenOff || foregroundHidden ||
             (locked && !cfg.showOnLockscreen)
     }
 
@@ -252,7 +293,9 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     }
 
     override fun onModeChanged(mode: IslandView.Mode) {
-        val t = !(mode == IslandView.Mode.HIDDEN ||
+        lastMode = mode
+        // Fix Entsperren: auf dem Sperrbildschirm fängt die Island keine Berührungen ab
+        val t = !(locked || mode == IslandView.Mode.HIDDEN ||
             (mode == IslandView.Mode.IDLE && cfg.idleTouchThrough))
         if (t != touchable) {
             touchable = t
@@ -278,7 +321,43 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     }
 
     private fun pushLive() {
-        controller?.setLive(IslandBus.live + systemLive + testLive)
+        controller?.setLive(IslandBus.live + systemLive + OwnTimers.items() + testLive)
+    }
+
+    // ---- Host-Aktionen (leere Pille gedrückt halten / Doppeltipp) ----
+
+    override fun toggleTorch() {
+        val cm = getSystemService(CAMERA_SERVICE) as CameraManager
+        try {
+            if (torchesOn.isNotEmpty()) {
+                for (id in torchesOn.toList()) cm.setTorchMode(id, false)
+            } else {
+                val id = cm.cameraIdList.firstOrNull { id ->
+                    cm.getCameraCharacteristics(id).get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) == true
+                } ?: return
+                cm.setTorchMode(id, true)
+            }
+        } catch (_: Exception) {}
+    }
+
+    override fun startTimer() = OwnTimers.startTimer(cfg.timerMinutes.coerceIn(1, 120))
+
+    override fun startStopwatch() {
+        if (OwnTimers.stopwatchRunning) OwnTimers.stopStopwatch() else OwnTimers.startStopwatch()
+    }
+
+    override fun openSettings() {
+        try {
+            startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (_: Exception) {}
+    }
+
+    private fun timerDone() {
+        try {
+            @Suppress("DEPRECATION") val v = getSystemService(VIBRATOR_SERVICE) as android.os.Vibrator
+            v.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 300, 150, 300, 150, 500), -1))
+        } catch (_: Exception) {}
+        controller?.showTransient(Content.Notif(null, "Isla", "Timer abgelaufen ⏰", "Dein Timer ist fertig.", null))
     }
 
     override fun onLive(list: List<Content>) = pushLive()
@@ -307,7 +386,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
     override fun onSharedPreferenceChanged(sp: SharedPreferences?, key: String?) {
         cfg = Prefs.load(this)
-        controller?.cfg = cfg
+        controller?.cfg = effective()
         applyPosition()
         updateWindow()
         updateSuppressed()
@@ -325,13 +404,48 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     private val torchCallback = object : CameraManager.TorchCallback() {
         override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
             if (enabled) torchesOn.add(cameraId) else torchesOn.remove(cameraId)
-            systemLive = if (torchesOn.isEmpty()) emptyList() else listOf(TorchContent {
-                val cm = getSystemService(CAMERA_SERVICE) as CameraManager
-                for (id in torchesOn.toList()) try { cm.setTorchMode(id, false) } catch (_: Exception) {}
-            })
+            pushTorch()
             pushPrivacy()
             pushLive()
         }
+    }
+
+    /** Max. Helligkeitsstufe der Lampe (Android 13+), 1 = nicht regelbar */
+    private fun torchMax(id: String): Int = if (Build.VERSION.SDK_INT >= 33) try {
+        (getSystemService(CAMERA_SERVICE) as CameraManager).getCameraCharacteristics(id)
+            .get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_STRENGTH_MAXIMUM_LEVEL) ?: 1
+    } catch (_: Exception) { 1 } else 1
+
+    private fun torchLevel(id: String): Float {
+        val max = torchMax(id)
+        if (max <= 1 || Build.VERSION.SDK_INT < 33) return 1f
+        return try {
+            (getSystemService(CAMERA_SERVICE) as CameraManager).getTorchStrengthLevel(id).toFloat() / max
+        } catch (_: Exception) { 1f }
+    }
+
+    private fun pushTorch() {
+        val id = torchesOn.firstOrNull()
+        systemLive = if (id == null) emptyList() else listOf(TorchContent(
+            off = {
+                val cm = getSystemService(CAMERA_SERVICE) as CameraManager
+                for (tid in torchesOn.toList()) try { cm.setTorchMode(tid, false) } catch (_: Exception) {}
+            },
+            level = torchLevel(id),
+            adjustable = torchMax(id) > 1,
+        ))
+        pushLive()
+    }
+
+    override fun setTorchLevel(level: Float) {
+        val id = torchesOn.firstOrNull() ?: return
+        val max = torchMax(id)
+        if (max <= 1 || Build.VERSION.SDK_INT < 33) return
+        try {
+            (getSystemService(CAMERA_SERVICE) as CameraManager)
+                .turnOnTorchWithStrengthLevel(id, (level * max).toInt().coerceIn(1, max))
+        } catch (_: Exception) {}
+        handler.postDelayed({ pushTorch() }, 120)
     }
 
     private val cameraCallback = object : CameraManager.AvailabilityCallback() {
@@ -348,26 +462,45 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     private val recordingCallback = object : AudioManager.AudioRecordingCallback() {
         override fun onRecordingConfigChanged(configs: MutableList<AudioRecordingConfiguration>?) {
             privacy = privacy.copy(mic = !configs.isNullOrEmpty())
-            controller?.privacy = privacy
+            applyPrivacy()
         }
     }
 
     private val gnssCallback = object : GnssStatus.Callback() {
         override fun onStarted() {
             privacy = privacy.copy(location = true)
-            controller?.privacy = privacy
+            applyPrivacy()
         }
         override fun onStopped() {
             privacy = privacy.copy(location = false)
-            controller?.privacy = privacy
+            applyPrivacy()
         }
     }
 
     private fun pushPrivacy() {
         // Taschenlampe belegt auf manchen Geräten die Kamera → kein grüner Punkt dafür
         privacy = privacy.copy(camera = (camerasInUse - torchesOn).isNotEmpty())
-        controller?.privacy = privacy
+        applyPrivacy()
     }
+
+    /** Zeitpunkt des letzten Entsperrens (Gesichtsentsperrung nutzt kurz die Kamera) */
+    private var unlockedAt = 0L
+
+    /**
+     * Fix Entsperren: Während der Sperrbildschirm aktiv ist und kurz nach dem Entsperren
+     * wird die Kamera ignoriert – sonst ploppt bei Gesichtsentsperrung ein grüner Punkt auf.
+     */
+    private fun applyPrivacy() {
+        val faceWindow = locked || System.currentTimeMillis() - unlockedAt < 3000
+        val shown = if (faceWindow) privacy.copy(camera = false) else privacy
+        controller?.privacy = shown
+        if (faceWindow && privacy.camera) {
+            handler.removeCallbacks(reapplyPrivacy)
+            handler.postDelayed(reapplyPrivacy, 3100)
+        }
+    }
+
+    private val reapplyPrivacy = Runnable { applyPrivacy() }
 
     private fun registerPrivacyWatchers() {
         try {
@@ -475,6 +608,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     private var lastLevel = -1
     private var lastRinger: Int? = null
     private var lastFocus = false
+    private var lastHeatWarn = 0L
 
     private val systemReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
@@ -484,7 +618,18 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                     val scale = intent.getIntExtra(BatteryManager.EXTRA_SCALE, 100).coerceAtLeast(1)
                     val plugged = intent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
                     val pct = if (level >= 0) level * 100 / scale else 0
-                    val state = Content.Charging(pct, plugged)
+                    val tempC = intent.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE)
+                        .let { if (it == Int.MIN_VALUE) Float.NaN else it / 10f }
+                    val bm = getSystemService(BATTERY_SERVICE) as BatteryManager
+                    val timeLeft = if (plugged && Build.VERSION.SDK_INT >= 28) try { bm.computeChargeTimeRemaining() } catch (_: Exception) { -1L } else -1L
+                    val current = try { kotlin.math.abs(bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)) } catch (_: Exception) { 0 }
+                    // Manche Geräte melden µA, manche mA
+                    val fast = plugged && (current >= 1_800_000 || current in 1800..20000)
+                    val state = Content.Charging(pct, plugged, timeLeft, fast, tempC)
+                    if (!tempC.isNaN() && tempC >= 42f && System.currentTimeMillis() - lastHeatWarn > 10 * 60_000L) {
+                        lastHeatWarn = System.currentTimeMillis()
+                        controller?.showTransient(HeatContent(tempC))
+                    }
                     controller?.setCharging(state)
                     val was = lastPlugged
                     val prevLevel = lastLevel
@@ -531,6 +676,8 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                 Intent.ACTION_AIRPLANE_MODE_CHANGED -> {
                     controller?.showTransient(AirplaneContent(intent.getBooleanExtra("state", false)))
                 }
+                android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED -> controller?.cfg = effective()
+                android.app.AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED -> updateNextAlarm(true)
                 Intent.ACTION_SCREEN_OFF -> {
                     screenOff = true
                     locked = true
@@ -540,13 +687,17 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                     screenOff = false
                     locked = (getSystemService(KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
                     updateSuppressed()
+                    applyPrivacy()
                 }
                 Intent.ACTION_USER_PRESENT -> {
                     val wasLocked = locked
                     locked = false
                     screenOff = false
+                    unlockedAt = System.currentTimeMillis()
                     updateSuppressed()
-                    if (wasLocked) controller?.showTransient(UnlockContent())
+                    applyPrivacy()
+                    // Fix Entsperren: Animation erst, wenn die System-Entsperr-Animation läuft (kein Ruckeln)
+                    if (wasLocked) handler.postDelayed({ controller?.showTransient(UnlockContent()) }, 180)
                 }
             }
         }
@@ -562,6 +713,8 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
             addAction(ACTION_VOLUME)
             addAction(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED)
             addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
+            addAction(android.os.PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+            addAction(android.app.AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED)
         }
         lastFocus = try {
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).currentInterruptionFilter !=
@@ -572,6 +725,65 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         } else {
             registerReceiver(systemReceiver, f)
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Wecker
+    // ------------------------------------------------------------------
+
+    private var lastAlarmText: String? = null
+
+    private fun updateNextAlarm(announce: Boolean) {
+        val am = getSystemService(ALARM_SERVICE) as android.app.AlarmManager
+        val next = try { am.nextAlarmClock } catch (_: Exception) { null }
+        val text = next?.let {
+            android.text.format.DateFormat.getTimeFormat(this).format(java.util.Date(it.triggerTime))
+        }
+        controller?.nextAlarm = text
+        if (announce && text != null && text != lastAlarmText) controller?.showTransient(AlarmContent(text))
+        lastAlarmText = text
+    }
+
+    // ------------------------------------------------------------------
+    // Internet
+    // ------------------------------------------------------------------
+
+    private var netCallback: android.net.ConnectivityManager.NetworkCallback? = null
+    private var netKind = -1
+
+    private fun registerNetwork() {
+        val cm = getSystemService(CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val cb = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(n: android.net.Network, caps: android.net.NetworkCapabilities) {
+                val kind = when {
+                    caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI) -> 1
+                    caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR) -> 2
+                    else -> 1
+                }
+                handler.post { changeNet(kind) }
+            }
+            override fun onLost(n: android.net.Network) {
+                handler.postDelayed({
+                    if (cm.activeNetwork == null) changeNet(0)
+                }, 1500)
+            }
+        }
+        try {
+            cm.registerDefaultNetworkCallback(cb, handler)
+            netCallback = cb
+        } catch (_: Exception) {}
+    }
+
+    private fun changeNet(kind: Int) {
+        val old = netKind
+        netKind = kind
+        if (old != -1 && old != kind) controller?.showTransient(NetworkContent(kind))
+    }
+
+    private fun unregisterNetwork() {
+        val cb = netCallback ?: return
+        try { (getSystemService(CONNECTIVITY_SERVICE) as android.net.ConnectivityManager).unregisterNetworkCallback(cb) } catch (_: Exception) {}
+        netCallback = null
     }
 
     companion object {

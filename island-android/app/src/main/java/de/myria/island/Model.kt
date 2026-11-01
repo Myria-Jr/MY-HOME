@@ -57,10 +57,18 @@ sealed class Content {
         override val priority get() = 60
     }
 
-    class Charging(val level: Int, val plugged: Boolean) : Content() {
+    class Charging(
+        val level: Int,
+        val plugged: Boolean,
+        /** Restzeit bis voll in ms, -1 = unbekannt */
+        val timeLeftMs: Long = -1,
+        val fast: Boolean = false,
+        /** Akkutemperatur in °C, NaN = unbekannt */
+        val tempC: Float = Float.NaN,
+    ) : Content() {
         override val key get() = "charging"
         override val priority get() = 10
-        override val expandable get() = false
+        override val expandable get() = plugged
     }
 
     class Notif(
@@ -147,17 +155,41 @@ sealed class Content {
     }
 }
 
+/** Internet: 0 = offline, 1 = WLAN, 2 = Mobilfunk */
+class NetworkContent(val kind: Int) : Content() {
+    override val key get() = "network"
+    override val expandable get() = false
+}
+
+/** Akku zu heiß */
+class HeatContent(val tempC: Float) : Content() {
+    override val key get() = "heat"
+    override val priority get() = 120
+    override val expandable get() = false
+}
+
+/** Wecker gestellt */
+class AlarmContent(val text: String) : Content() {
+    override val key get() = "alarm"
+    override val expandable get() = false
+}
+
 /** Lautstärke geändert (0..1) */
 class VolumeContent(val level: Float, val muted: Boolean) : Content() {
     override val key get() = "volume"
     override val expandable get() = false
 }
 
-/** Taschenlampe an – Antippen schaltet sie aus */
-class TorchContent(val off: (() -> Unit)?) : Content() {
+/** Taschenlampe an – Antippen schaltet sie aus, Wischen regelt die Helligkeit (wie iOS) */
+class TorchContent(
+    val off: (() -> Unit)?,
+    /** Helligkeit 0..1 */
+    val level: Float = 1f,
+    /** Kann das Handy die Helligkeit regeln? (Android 13+) */
+    val adjustable: Boolean = false,
+) : Content() {
     override val key get() = "torch"
     override val priority get() = 40
-    override val expandable get() = false
 }
 
 /** Nicht stören / Fokus */
@@ -228,4 +260,121 @@ object IslandBus {
     fun event(c: Content) = listeners.forEach { it.onEvent(c) }
     fun testMusic(m: MusicInfo) = listeners.forEach { it.onTestMusic(m) }
     fun testLive(list: List<Content>) = listeners.forEach { it.onTestLive(list) }
+}
+
+
+/** Eigener Timer + Stoppuhr (laufen im App-Prozess, erscheinen als Live-Aktivität). */
+object OwnTimers {
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private var timerEnd = 0L
+    private var stopwatchStart = 0L
+    var onChange: (() -> Unit)? = null
+    var onTimerDone: (() -> Unit)? = null
+
+    val timerRunning get() = timerEnd > System.currentTimeMillis()
+    val stopwatchRunning get() = stopwatchStart > 0
+
+    private val done = Runnable {
+        timerEnd = 0
+        onChange?.invoke()
+        onTimerDone?.invoke()
+    }
+
+    fun startTimer(minutes: Int) {
+        timerEnd = System.currentTimeMillis() + minutes * 60_000L
+        main.removeCallbacks(done)
+        main.postDelayed(done, minutes * 60_000L)
+        onChange?.invoke()
+    }
+
+    fun addMinute() {
+        if (!timerRunning) return
+        timerEnd += 60_000L
+        main.removeCallbacks(done)
+        main.postDelayed(done, timerEnd - System.currentTimeMillis())
+        onChange?.invoke()
+    }
+
+    fun stopTimer() {
+        timerEnd = 0
+        main.removeCallbacks(done)
+        onChange?.invoke()
+    }
+
+    fun startStopwatch() {
+        stopwatchStart = System.currentTimeMillis()
+        onChange?.invoke()
+    }
+
+    fun stopStopwatch() {
+        stopwatchStart = 0
+        onChange?.invoke()
+    }
+
+    fun items(): List<Content> {
+        val out = ArrayList<Content>()
+        if (timerRunning) out.add(Content.Timer(
+            "own-timer", "Isla", "Timer", null, timerEnd, true, null,
+            listOf(NotifAction("+1 Min") { addMinute() }, NotifAction("Stopp") { stopTimer() }),
+        ))
+        if (stopwatchRunning) out.add(Content.Timer(
+            "own-stopwatch", "Isla", "Stoppuhr", null, stopwatchStart, false, null,
+            listOf(NotifAction("Stopp") { stopStopwatch() }),
+        ))
+        return out
+    }
+}
+
+/** Die letzten Mitteilungen, die in der Island waren (nur lokal auf dem Handy). */
+object NotifHistory {
+    class Entry(val time: Long, val app: String, val title: String, val text: String)
+
+    private const val MAX = 60
+    private val list = ArrayList<Entry>()
+    private var loaded = false
+
+    private fun file(c: android.content.Context) = java.io.File(c.filesDir, "notif_history.json")
+
+    @Synchronized
+    fun all(c: android.content.Context): List<Entry> {
+        load(c)
+        return list.toList()
+    }
+
+    @Synchronized
+    fun add(c: android.content.Context, app: String, title: String, text: String) {
+        load(c)
+        list.add(0, Entry(System.currentTimeMillis(), app, title, text))
+        while (list.size > MAX) list.removeAt(list.size - 1)
+        save(c)
+    }
+
+    @Synchronized
+    fun clear(c: android.content.Context) {
+        list.clear()
+        loaded = true
+        try { file(c).delete() } catch (_: Exception) {}
+    }
+
+    private fun load(c: android.content.Context) {
+        if (loaded) return
+        loaded = true
+        try {
+            val f = file(c)
+            if (!f.exists()) return
+            val a = org.json.JSONArray(f.readText())
+            for (i in 0 until a.length()) {
+                val o = a.getJSONObject(i)
+                list.add(Entry(o.getLong("t"), o.optString("a"), o.optString("ti"), o.optString("tx")))
+            }
+        } catch (_: Exception) {}
+    }
+
+    private fun save(c: android.content.Context) {
+        try {
+            val a = org.json.JSONArray()
+            for (e in list) a.put(org.json.JSONObject().put("t", e.time).put("a", e.app).put("ti", e.title).put("tx", e.text))
+            file(c).writeText(a.toString())
+        } catch (_: Exception) {}
+    }
 }
