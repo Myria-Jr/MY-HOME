@@ -288,8 +288,13 @@ class NotificationService : NotificationListenerService() {
         val open = openerFor(n, pkg, sbn.key, false)
 
         // --- Anruf ---
-        if (n.category == Notification.CATEGORY_CALL && (sbn.isOngoing || n.fullScreenIntent != null)) {
-            val incoming = !chrono && (n.fullScreenIntent != null || callIntent(n, "android.answerIntent") != null)
+        // Fix Anrufe: auch Samsung/WhatsApp & Co. erkennen (CallStyle-Extras, Annehmen-Knopf, Vollbild)
+        val callStyle = ex.containsKey("android.callType") || ex.containsKey("android.callPerson")
+        val hasAnswer = callIntent(n, "android.answerIntent") != null || actionMatching(n, ANSWER) != null
+        val isCall = (n.category == Notification.CATEGORY_CALL || callStyle) &&
+            (sbn.isOngoing || n.fullScreenIntent != null || hasAnswer || chrono)
+        if (isCall) {
+            val incoming = !chrono && (n.fullScreenIntent != null || hasAnswer)
             val accept = callIntent(n, "android.answerIntent") ?: actionMatching(n, ANSWER)
             val decline = callIntent(n, "android.declineIntent")
                 ?: callIntent(n, "android.hangUpIntent")
@@ -304,6 +309,7 @@ class NotificationService : NotificationListenerService() {
                 accept = accept?.let { pi -> { sendPending(this, pi) } },
                 decline = decline?.let { pi -> { sendPending(this, pi) } },
                 open = open,
+                pkg = pkg,
             )
         }
 
@@ -311,7 +317,7 @@ class NotificationService : NotificationListenerService() {
         if (n.category == "navigation" || (sbn.isOngoing && pkg in NAV_APPS)) {
             if (title.isBlank() && text.isBlank()) return null
             val arrow = try { n.getLargeIcon()?.loadDrawable(this)?.let { drawableToBitmap(it, dp(56)) } } catch (_: Exception) { null }
-            return Content.Nav(sbn.key, title.ifBlank { text }, if (title.isBlank()) "" else text, arrow, open)
+            return Content.Nav(sbn.key, title.ifBlank { text }, if (title.isBlank()) "" else text, arrow, open, pkg)
         }
 
         // --- Timer / Stoppuhr / Aufnahme ---

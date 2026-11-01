@@ -122,6 +122,8 @@ sealed class Content {
         val accept: (() -> Unit)?,
         val decline: (() -> Unit)?,
         val open: (() -> Unit)?,
+        /** App, die den Anruf zeigt (zum Ausblenden, wenn sie offen ist) */
+        val pkg: String = "",
     ) : Content() {
         override val priority get() = if (incoming) 100 else 90
     }
@@ -132,6 +134,7 @@ sealed class Content {
         val secondary: String,
         val arrow: Bitmap?,
         val open: (() -> Unit)?,
+        val pkg: String = "",
     ) : Content() {
         override val priority get() = 80
     }
@@ -325,11 +328,11 @@ object OwnTimers {
     fun items(): List<Content> {
         val out = ArrayList<Content>()
         if (timerRunning) out.add(Content.Timer(
-            "own-timer", "Isla", "Timer", null, timerEnd, true, null,
+            "own-timer", "Lumora", "Timer", null, timerEnd, true, null,
             listOf(NotifAction("+1 Min") { addMinute() }, NotifAction("Stopp") { stopTimer() }),
         ))
         if (stopwatchRunning) out.add(Content.Timer(
-            "own-stopwatch", "Isla", "Stoppuhr", null, stopwatchStart, false, null,
+            "own-stopwatch", "Lumora", "Stoppuhr", null, stopwatchStart, false, null,
             listOf(NotifAction("Stopp") { stopStopwatch() }),
         ))
         return out

@@ -131,6 +131,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         if (pkg in ignoredPkgs) return
+        controller?.foregroundPkg = pkg
         val hide = pkg in cfg.hiddenInApps
         if (hide != foregroundHidden) {
             foregroundHidden = hide
@@ -408,7 +409,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
             @Suppress("DEPRECATION") val v = getSystemService(VIBRATOR_SERVICE) as android.os.Vibrator
             v.vibrate(android.os.VibrationEffect.createWaveform(longArrayOf(0, 300, 150, 300, 150, 500), -1))
         } catch (_: Exception) {}
-        controller?.showTransient(Content.Notif(null, "Isla", "Timer abgelaufen ⏰", "Dein Timer ist fertig.", null))
+        controller?.showTransient(Content.Notif(null, "Lumora", "Timer abgelaufen ⏰", "Dein Timer ist fertig.", null))
     }
 
     override fun onLive(list: List<Content>) = pushLive()

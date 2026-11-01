@@ -94,7 +94,7 @@ data class IslandConfig(
     val notifAutoExpand: Boolean = false,
     val excludedApps: Set<String> = emptySet(),
 
-    // Neu in Isla 4
+    // Neu in Lumora 4
     val animStyle: Int = ANIM_APPLE,
     val swipeHorizontal: Int = SWIPE_SWITCH,
     val doubleTapAction: Int = DOUBLE_PLAYPAUSE,
@@ -125,6 +125,7 @@ data class IslandConfig(
     val notifIconRound: Boolean = false,
     val notifAppGlow: Boolean = false,
     val idleTap: Int = 1,
+    val hideInOwnerApp: Boolean = true,
 
     // Verhalten
     val tapExpands: Boolean = false,
@@ -339,6 +340,7 @@ object Prefs {
     const val NOTIF_ICON_ROUND = "notif_icon_round"
     const val NOTIF_APP_GLOW = "notif_app_glow"
     const val IDLE_TAP = "idle_tap"
+    const val HIDE_OWNER = "hide_in_owner_app"
 
     const val TAP_EXPANDS = "tap_expands_v2"
     const val SWIPE_DOWN = "swipe_down_expands"
@@ -463,6 +465,7 @@ object Prefs {
             notifIconRound = b(NOTIF_ICON_ROUND, d.notifIconRound),
             notifAppGlow = b(NOTIF_APP_GLOW, d.notifAppGlow),
             idleTap = i(IDLE_TAP, d.idleTap),
+            hideInOwnerApp = b(HIDE_OWNER, d.hideInOwnerApp),
 
             tapExpands = b(TAP_EXPANDS, d.tapExpands),
             swipeDownExpands = b(SWIPE_DOWN, d.swipeDownExpands),

@@ -23,7 +23,7 @@ class IslandApp : Application() {
                 } catch (_: Exception) { "?" }
                 val text = buildString {
                     append("Zeit: ").append(SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.GERMANY).format(Date())).append('\n')
-                    append("Isla: ").append(ver).append('\n')
+                    append("Lumora: ").append(ver).append('\n')
                     append("Gerät: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL)
                         .append(" · Android ").append(Build.VERSION.RELEASE).append(" (API ").append(Build.VERSION.SDK_INT).append(")\n")
                     append("Thread: ").append(t.name).append("\n\n")

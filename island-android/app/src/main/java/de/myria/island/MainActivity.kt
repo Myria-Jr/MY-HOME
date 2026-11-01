@@ -802,6 +802,8 @@ class MainActivity : Activity() {
         )))
         c.addView(section("Mehrere gleichzeitig", listOf(
             switchRow("Zweite Aktivität als Bubble", Prefs.SPLIT, D.splitBubble),
+            switchRow("In der eigenen App ausblenden", Prefs.HIDE_OWNER, D.hideInOwnerApp,
+                "Anruf in der Telefon-App, Musik im Player … wie beim iPhone"),
         ), footer = "Tippe auf die Bubble, um sie zur Haupt-Aktivität zu machen. Hochwischen blendet eine Aktivität kurz aus."))
     }
 
@@ -911,7 +913,7 @@ class MainActivity : Activity() {
             "Kontrollzentrum" to "Lautstärke, Helligkeit, Lampe, Timer, Kamera",
         ))))
         c.addView(section("Leere Pille gedrückt halten", choiceRows(Prefs.IDLE_LP, D.idleLongPress, listOf(
-            "Nichts" to null, "Timer starten" to null, "Stoppuhr" to null, "Taschenlampe" to null, "Isla öffnen" to null,
+            "Nichts" to null, "Timer starten" to null, "Stoppuhr" to null, "Taschenlampe" to null, "Lumora öffnen" to null,
         )), footer = "Funktioniert bei „Immer sichtbar“, wenn „Leere Pille durchklickbar“ aus ist."))
         c.addView(section("Haptik", listOf(
             switchRow("Haptisches Feedback", Prefs.HAPTICS, D.haptics),
@@ -991,7 +993,7 @@ class MainActivity : Activity() {
         c.addView(section("Sichern", listOf(
             actionRow("Einstellungen exportieren") {
                 val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-                cm.setPrimaryClip(ClipData.newPlainText("Isla Einstellungen", Prefs.export(this)))
+                cm.setPrimaryClip(ClipData.newPlainText("Lumora Einstellungen", Prefs.export(this)))
                 Toast.makeText(this, "In die Zwischenablage kopiert 📋", Toast.LENGTH_SHORT).show()
             },
             actionRow("Einstellungen importieren") {
@@ -1003,7 +1005,7 @@ class MainActivity : Activity() {
                     .setNegativeButton("Abbrechen", null)
                     .setPositiveButton("Importieren") { _, _ ->
                         if (Prefs.import(this, txt)) recreate()
-                        else Toast.makeText(this, "Keine gültigen Isla-Einstellungen in der Zwischenablage", Toast.LENGTH_LONG).show()
+                        else Toast.makeText(this, "Keine gültigen Lumora-Einstellungen in der Zwischenablage", Toast.LENGTH_LONG).show()
                     }
                     .show()
             },
@@ -1808,7 +1810,7 @@ class MainActivity : Activity() {
         refreshers.add(update)
         c.addView(status)
         fun needService() {
-            if (!IslandBus.serviceRunning) Toast.makeText(this, "Isla ist noch nicht aktiv – erst die Bedienungshilfe einschalten", Toast.LENGTH_LONG).show()
+            if (!IslandBus.serviceRunning) Toast.makeText(this, "Lumora ist noch nicht aktiv – erst die Bedienungshilfe einschalten", Toast.LENGTH_LONG).show()
         }
         c.addView(section("Timer", listOf(
             sliderRow("Dauer", Prefs.TIMER_MINUTES, D.timerMinutes, 1, 120) { "$it min" },
@@ -1882,7 +1884,7 @@ class MainActivity : Activity() {
         })
         c.addView(top)
         c.addView(section("1 · Island anzeigen", listOf(
-            statusRow("Bedienungshilfe", "Damit Isla über der Statusleiste zeichnen darf", ::a11yEnabled) {
+            statusRow("Bedienungshilfe", "Damit Lumora über der Statusleiste zeichnen darf", ::a11yEnabled) {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
             },
         ), footer = "Ausgegraut? App-Info → ⋮ → „Eingeschränkte Einstellungen zulassen“."))
@@ -1987,7 +1989,7 @@ class MainActivity : Activity() {
     }
 
     companion object {
-        const val APP_NAME = "Isla"
+        const val APP_NAME = "Lumora"
         private const val PREF_ICON = "app_icon"
         private const val PREF_SMART = "smart_result"
         private val ICONS = listOf(

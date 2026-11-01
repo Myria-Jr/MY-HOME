@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Isla Home: 2×2 App-Raster, oben eine Kapsel (die Island) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M45,34h18a4,4 0 0 1 0,8h-18a4,4 0 0 1 0,-8z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M36,47h13a4,4 0 0 1 4,4v13a4,4 0 0 1 -4,4h-13a4,4 0 0 1 -4,-4v-13a4,4 0 0 1 4,-4z" />
+    <path android:fillColor="#B3FFFFFF" android:pathData="M59,47h13a4,4 0 0 1 4,4v13a4,4 0 0 1 -4,4h-13a4,4 0 0 1 -4,-4v-13a4,4 0 0 1 4,-4z" />
+    <path android:fillColor="#B3FFFFFF" android:pathData="M36,70h13a4,4 0 0 1 4,4v1a4,4 0 0 1 -4,4h-13a4,4 0 0 1 -4,-4v-1a4,4 0 0 1 4,-4z" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M59,70h13a4,4 0 0 1 4,4v1a4,4 0 0 1 -4,4h-13a4,4 0 0 1 -4,-4v-1a4,4 0 0 1 4,-4z" />
+</vector>

@@ -72,6 +72,26 @@ class IslandController(
             }
         }
 
+    /** App im Vordergrund – deren eigene Aktivität wird ausgeblendet (wie iOS) */
+    var foregroundPkg: String? = null
+        set(v) {
+            if (field != v) {
+                field = v
+                refresh()
+            }
+        }
+
+    private fun ownedByForeground(c: Content): Boolean {
+        val fg = foregroundPkg ?: return false
+        if (!cfg.hideInOwnerApp) return false
+        return when (c) {
+            is Content.Call -> c.pkg == fg
+            is Content.Nav -> c.pkg == fg
+            is Content.Music -> c.info.id.substringBefore('|') == fg
+            else -> false
+        }
+    }
+
     private var music: MusicInfo? = null
     private var pausedSince = 0L
     private var live: List<Content> = emptyList()
@@ -244,7 +264,7 @@ class IslandController(
         val ch = charging
         if (cfg.showCharging && cfg.chargingPersistent && ch != null && ch.plugged) out.add(ch)
         return out
-            .filter { it.key != snoozedKey }
+            .filter { it.key != snoozedKey && !ownedByForeground(it) }
             .sortedWith(compareByDescending<Content> { if (it.key == pinnedKey) 1000 else 0 }.thenByDescending { it.priority })
     }
 

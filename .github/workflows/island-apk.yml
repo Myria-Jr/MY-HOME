@@ -1,4 +1,4 @@
-name: Isla APK bauen
+name: Lumora APK bauen
 
 on:
   push:
@@ -30,21 +30,21 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk Isla.apk
+          cp app/build/outputs/apk/release/app-release.apk Lumora.apk
 
       - name: APK als Artifact hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: Isla-APK
-          path: island-android/Isla.apk
+          name: Lumora-APK
+          path: island-android/Lumora.apk
 
       - name: Release mit APK erstellen
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: isla-v4.0.${{ github.run_number }}
-          name: Isla 4.0.${{ github.run_number }}
+          tag_name: lumora-v4.1.${{ github.run_number }}
+          name: Lumora 4.1.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          files: island-android/Isla.apk
+          files: island-android/Lumora.apk
           body: |
-            📱 **Isla.apk** unten herunterladen → auf dem Handy öffnen → installieren.
+            📱 **Lumora.apk** unten herunterladen → auf dem Handy öffnen → installieren.
             Danach in der App: Bedienungshilfe + Mitteilungszugriff einschalten.
