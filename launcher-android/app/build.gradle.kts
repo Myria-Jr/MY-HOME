@@ -12,7 +12,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = "1.1." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
+        versionName = "2.0." + (System.getenv("GITHUB_RUN_NUMBER") ?: "0")
     }
 
     // Fester Schlüssel, damit neue Versionen einfach drüber-installiert werden können.

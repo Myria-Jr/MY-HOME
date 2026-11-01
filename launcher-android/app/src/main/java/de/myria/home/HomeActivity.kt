@@ -74,6 +74,7 @@ class HomeActivity : Activity() {
     // Fix: GestureDetector braucht einen fertigen Context → erst in onCreate anlegen
     // (vorher stürzte der Launcher direkt beim Start ab)
     private lateinit var gestures: GestureDetector
+    private lateinit var doubleTapDetector: GestureDetector
 
     private fun dp(v: Float) = v * resources.displayMetrics.density
     private fun dpi(v: Float) = dp(v).toInt()
@@ -87,6 +88,19 @@ class HomeActivity : Activity() {
         super.onCreate(savedInstanceState)
         prefs = HomePrefs(this)
         gestures = GestureDetector(this, gestureListener).apply { setIsLongpressEnabled(false) }
+        doubleTapDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: MotionEvent): Boolean {
+                if (editMode) return false
+                when (prefs.doubleTap) {
+                    1 -> expandNotifications()
+                    2 -> openDrawer(focusSearch = true)
+                    3 -> startActivity(Intent(this@HomeActivity, SettingsActivity::class.java))
+                    4 -> openDrawer()
+                    else -> return false
+                }
+                return true
+            }
+        }).apply { setIsLongpressEnabled(false) }
         applySystemBars()
 
         root = FrameLayout(this)
@@ -122,6 +136,7 @@ class HomeActivity : Activity() {
         var flags = View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
             View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
         if (prefs.darkText) flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        if (prefs.hideStatusBar) flags = flags or View.SYSTEM_UI_FLAG_FULLSCREEN
         window.decorView.systemUiVisibility = flags
     }
 
@@ -179,9 +194,7 @@ class HomeActivity : Activity() {
         }
     }
 
-    private fun signature() = listOf(prefs.look, prefs.columns, prefs.iconDp, prefs.labels, prefs.dock, prefs.clock,
-        prefs.search, prefs.monoIcons, prefs.favorites, prefs.dockApps, prefs.darkText, prefs.allOnHome,
-        prefs.hidden, Apps.all.size).joinToString()
+    private fun signature() = prefs.signature(Apps.all.size)
 
     private fun loadApps() {
         Thread {
@@ -212,9 +225,12 @@ class HomeActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setPadding(0, insetTop + dpi(8f), 0, insetBottom + dpi(8f))
         }
+        if (prefs.dim > 0) root.addView(View(this).apply {
+            setBackgroundColor(Color.argb((prefs.dim * 2.55f).toInt().coerceIn(0, 200), 0, 0, 0))
+        }, FrameLayout.LayoutParams(-1, -1))
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
 
-        pager = Pager(this) { updateDots(it) }
+        pager = Pager(this, prefs.pageEffect) { updateDots(it) }
         home.addView(pager, LinearLayout.LayoutParams(-1, 0, 1f))
 
         dots = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
@@ -266,6 +282,8 @@ class HomeActivity : Activity() {
         Look.GALAXY -> GradientDrawable().apply { cornerRadius = dp(22f); setColor(0x26FFFFFF) }
         Look.COLOROS -> GradientDrawable().apply { cornerRadius = dp(30f); setColor(0x30FFFFFF) }
         Look.ONEUI -> GradientDrawable().apply { cornerRadius = dp(28f); setColor(0x1AFFFFFF) }
+        Look.MAGICOS -> GradientDrawable().apply { cornerRadius = dp(30f); setColor(0x33FFFFFF); setStroke(dpi(1f), 0x22FFFFFF) }
+        Look.ORIGINOS -> GradientDrawable().apply { cornerRadius = dp(32f); setColor(0x2BFFFFFF) }
         else -> null
     }
 
@@ -320,15 +338,17 @@ class HomeActivity : Activity() {
         frame.addView(col, FrameLayout.LayoutParams(-1, -2))
         val px = dpi(sizeDp.toFloat())
         val iv = ImageView(this).apply {
-            setImageBitmap(Looks.icon(app.key, app.icon, px, look, prefs.monoIcons || look == Look.NOTHING))
+            setImageBitmap(Looks.icon(app.key, app.icon, px, prefs.effectiveShape, prefs.iconStyle, prefs.tint,
+                prefs.monoIcons || (look == Look.NOTHING && prefs.iconStyle == IconStyle.STANDARD)))
             elevation = if (inDock || look == Look.APPLE || look == Look.NOTHING) 0f else dp(2f)
         }
         col.addView(iv, LinearLayout.LayoutParams(px, px))
         if (showLabel) col.addView(TextView(this).apply {
-            text = app.label
+            text = prefs.label(app.key, app.label)
             setTextColor(if (inDock || !onHome) Color.WHITE else textColor)
-            textSize = if (look == Look.NOTHING) 11f else 12f
-            typeface = Looks.font(this@HomeActivity, look, if (look == Look.ONEUI || look == Look.GALAXY) 500 else 400)
+            textSize = prefs.labelSize.toFloat() - (if (look == Look.NOTHING) 1f else 0f)
+            typeface = if (prefs.labelFont >= 0) Looks.namedFont(this@HomeActivity, Looks.labelFonts[prefs.labelFont.coerceIn(0, Looks.labelFonts.size - 1)], 500)
+                else Looks.font(this@HomeActivity, look, if (look == Look.ONEUI || look == Look.GALAXY) 500 else 400)
             if (look == Look.NOTHING) letterSpacing = 0.04f
             maxLines = 1
             ellipsize = android.text.TextUtils.TruncateAt.END
@@ -390,6 +410,7 @@ class HomeActivity : Activity() {
         if (app.key in dock) pm.menu.add(0, 3, 1, "Aus dem Dock entfernen") else pm.menu.add(0, 4, 1, "Ins Dock")
         pm.menu.add(0, 7, 2, "Startbildschirm bearbeiten")
         pm.menu.add(0, 8, 3, "App ausblenden")
+        pm.menu.add(0, 9, 4, "Umbenennen")
         pm.menu.add(0, 5, 4, "App-Info")
         pm.menu.add(0, 6, 5, "Deinstallieren")
         pm.setOnMenuItemClickListener { item ->
@@ -397,7 +418,8 @@ class HomeActivity : Activity() {
                 1 -> prefs.favorites = fav - app.key
                 2 -> prefs.favorites = fav + app.key
                 3 -> prefs.dockApps = dock - app.key
-                4 -> prefs.dockApps = (dock + app.key).takeLast(prefs.columns.coerceAtMost(5))
+                4 -> prefs.dockApps = (dock + app.key).takeLast(prefs.dockCount)
+                9 -> renameDialog(app)
                 5 -> Apps.appInfo(this, app)
                 6 -> Apps.uninstall(this, app)
                 7 -> setEditMode(true)
@@ -411,6 +433,24 @@ class HomeActivity : Activity() {
             true
         }
         pm.show()
+    }
+
+    private fun renameDialog(app: AppInfo) {
+        val et = EditText(this).apply {
+            setText(prefs.label(app.key, app.label))
+            setSelectAllOnFocus(true)
+            setSingleLine()
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("App umbenennen")
+            .setView(et.also { it.setPadding(dpi(20f), dpi(12f), dpi(20f), dpi(12f)) })
+            .setNegativeButton("Abbrechen", null)
+            .setNeutralButton("Original") { _, _ -> prefs.setLabel(app.key, null); fillHome(); refreshDrawer(); builtFor = signature() }
+            .setPositiveButton("Speichern") { _, _ ->
+                prefs.setLabel(app.key, et.text.toString().trim())
+                fillHome(); refreshDrawer(); builtFor = signature()
+            }
+            .show()
     }
 
     /** Wie viele Icon-Reihen passen auf eine Seite? */
@@ -447,12 +487,13 @@ class HomeActivity : Activity() {
 
         // Seite 1: Widget + Favoriten
         val first = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        clockView = if (prefs.clock) ClockView(this, look, prefs.darkText).also {
-            first.addView(it, LinearLayout.LayoutParams(-1, dpi(ClockView.heightDp(look))).apply {
+        val wLook = Look.values().getOrNull(prefs.widgetStyle) ?: look
+        clockView = if (prefs.clock) ClockView(this, wLook, prefs.darkText).also {
+            first.addView(it, LinearLayout.LayoutParams(-1, dpi(ClockView.heightDp(wLook))).apply {
                 leftMargin = dpi(14f); rightMargin = dpi(14f)
             })
         } else null
-        val widgetRows = if (prefs.clock) ((ClockView.heightDp(look) + 10) / (prefs.iconDp + if (prefs.labels) 30 else 16)).roundToInt() else 0
+        val widgetRows = if (prefs.clock) ((ClockView.heightDp(wLook) + 10) / (prefs.iconDp + if (prefs.labels) 30 else 16)).roundToInt() else 0
         val firstRows = (rows - widgetRows).coerceAtLeast(1)
         first.addView(gridOf(favApps, firstRows), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(10f) })
         pages.add(first)
@@ -474,12 +515,13 @@ class HomeActivity : Activity() {
                 true
             }
             p.setOnClickListener { if (editMode) setEditMode(false) }
+            p.setOnTouchListener { _, e -> doubleTapDetector.onTouchEvent(e); false }
         }
         pager.setPages(pages)
         updateDots(pager.current)
 
         dockRow.removeAllViews()
-        prefs.dockApps.mapNotNull { Apps.byKey(it) }.filter { it.key !in hidden }.forEach { a ->
+        prefs.dockApps.mapNotNull { Apps.byKey(it) }.filter { it.key !in hidden }.take(prefs.dockCount).forEach { a ->
             dockRow.addView(iconView(a, prefs.iconDp, false, true, false), LinearLayout.LayoutParams(0, -2, 1f))
         }
         if (editMode) setEditMode(true)
@@ -528,15 +570,18 @@ class HomeActivity : Activity() {
     // App-Übersicht
     // ------------------------------------------------------------------
 
-    private fun drawerColor() = when (look) {
-        Look.APPLE -> 0xE6101014.toInt()
-        Look.ANDROID -> if (Build.VERSION.SDK_INT >= 31) try {
-            (getColor(android.R.color.system_neutral1_900) and 0x00FFFFFF) or 0xF5000000.toInt()
-        } catch (_: Exception) { 0xF21B1B1F.toInt() } else 0xF21B1B1F.toInt()
-        Look.ONEUI -> 0xEB000000.toInt()
-        Look.GALAXY -> 0xD9000000.toInt()
-        Look.NOTHING -> 0xF5000000.toInt()
-        Look.COLOROS -> 0xE61A1A1E.toInt()
+    private fun drawerColor(): Int {
+        val base = when (look) {
+            Look.APPLE -> 0xFF101014.toInt()
+            Look.ANDROID -> if (Build.VERSION.SDK_INT >= 31) try { getColor(android.R.color.system_neutral1_900) } catch (_: Exception) { 0xFF1B1B1F.toInt() } else 0xFF1B1B1F.toInt()
+            Look.ONEUI, Look.GALAXY, Look.NOTHING -> 0xFF000000.toInt()
+            Look.COLOROS -> 0xFF1A1A1E.toInt()
+            Look.HYPEROS -> 0xFF121214.toInt()
+            Look.MAGICOS -> 0xFF15131C.toInt()
+            Look.ORIGINOS -> 0xFF101820.toInt()
+        }
+        val a = (prefs.drawerOpacity.coerceIn(40, 100) * 2.55f).toInt()
+        return (base and 0x00FFFFFF) or (a shl 24)
     }
 
     private fun buildDrawer() {
@@ -604,7 +649,7 @@ class HomeActivity : Activity() {
         suggestRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dpi(8f), 0, dpi(8f), dpi(6f)) }
         col.addView(suggestRow)
         drawerGrid = GridView(this).apply {
-            numColumns = prefs.columns
+            numColumns = if (prefs.drawerList) 1 else prefs.columns
             verticalSpacing = dpi(4f)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             setPadding(dpi(8f), 0, dpi(8f), dpi(20f))
@@ -657,8 +702,8 @@ class HomeActivity : Activity() {
         fun filter(q: String) {
             val qq = q.trim().lowercase()
             val all = visibleApps()
-            items = if (qq.isEmpty()) all else all.filter { it.label.lowercase().contains(qq) }
-                .sortedBy { if (it.label.lowercase().startsWith(qq)) 0 else 1 }
+            items = if (qq.isEmpty()) all else all.filter { prefs.label(it.key, it.label).lowercase().contains(qq) }
+                .sortedBy { if (prefs.label(it.key, it.label).lowercase().startsWith(qq)) 0 else 1 }
             notifyDataSetChanged()
         }
 
@@ -669,6 +714,29 @@ class HomeActivity : Activity() {
         override fun getItemId(position: Int) = position.toLong()
         override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
             val a = items[position]
+            if (prefs.drawerList) {
+                // Listen-Ansicht: Icon + Name nebeneinander
+                return LinearLayout(this@HomeActivity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER_VERTICAL
+                    setPadding(dpi(18f), dpi(8f), dpi(18f), dpi(8f))
+                    val px = dpi(42f)
+                    addView(ImageView(this@HomeActivity).apply {
+                        setImageBitmap(Looks.icon(a.key, a.icon, px, prefs.effectiveShape, prefs.iconStyle, prefs.tint, prefs.monoIcons))
+                    }, LinearLayout.LayoutParams(px, px))
+                    addView(TextView(this@HomeActivity).apply {
+                        text = prefs.label(a.key, a.label)
+                        textSize = 16f
+                        setTextColor(Color.WHITE)
+                        typeface = Looks.font(this@HomeActivity, look, 500)
+                        setPadding(dpi(16f), 0, 0, 0)
+                    })
+                    setOnClickListener {
+                        Apps.launch(this@HomeActivity, a, this)
+                        main.postDelayed({ closeDrawer(animate = false) }, 300)
+                    }
+                }
+            }
             return iconView(a, (prefs.iconDp * 0.92f).toInt(), true, false, false).apply {
                 getChildAt(0).setOnClickListener {
                     Apps.launch(this@HomeActivity, a, this)
@@ -750,7 +818,7 @@ class HomeActivity : Activity() {
 
 /** Seitenweise blättern (mit Einrasten). */
 @SuppressLint("ViewConstructor", "ClickableViewAccessibility")
-class Pager(ctx: Context, private val onPage: (Int) -> Unit) : HorizontalScrollView(ctx) {
+class Pager(ctx: Context, private val effect: Int, private val onPage: (Int) -> Unit) : HorizontalScrollView(ctx) {
     private val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
     var current = 0
         private set
@@ -792,6 +860,41 @@ class Pager(ctx: Context, private val onPage: (Int) -> Unit) : HorizontalScrollV
     /** Eigenes Einrasten statt freiem Schwung */
     override fun fling(velocityX: Int) {}
 
+    /** Blätter-Effekte: 0 Schieben · 1 Zoom · 2 Würfel · 3 Stapel */
+    override fun onScrollChanged(l: Int, t: Int, oldl: Int, oldt: Int) {
+        super.onScrollChanged(l, t, oldl, oldt)
+        if (effect == 0) return
+        val w = pageWidth().toFloat()
+        for (i in 0 until row.childCount) {
+            val c = row.getChildAt(i)
+            val f = ((c.left - l) / w).coerceIn(-1f, 1f) // -1 = links weg, 0 = sichtbar, 1 = rechts
+            val af = kotlin.math.abs(f)
+            when (effect) {
+                1 -> {
+                    val sc = 1f - 0.18f * af
+                    c.scaleX = sc; c.scaleY = sc
+                    c.alpha = 1f - 0.7f * af
+                }
+                2 -> {
+                    c.cameraDistance = w * 8
+                    c.pivotX = if (f < 0) w else 0f
+                    c.pivotY = c.height / 2f
+                    c.rotationY = 70f * f
+                }
+                3 -> {
+                    if (f < 0) {
+                        c.translationX = -f * w * 0.85f
+                        val sc = 1f - 0.12f * af
+                        c.scaleX = sc; c.scaleY = sc
+                        c.alpha = 1f - 0.6f * af
+                    } else {
+                        c.translationX = 0f; c.scaleX = 1f; c.scaleY = 1f; c.alpha = 1f
+                    }
+                }
+            }
+        }
+    }
+
     override fun onTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> downScroll = scrollX
@@ -826,6 +929,9 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
             Look.GALAXY -> 200f
             Look.NOTHING -> 150f
             Look.COLOROS -> 140f
+            Look.HYPEROS -> 140f
+            Look.MAGICOS -> 140f
+            Look.ORIGINOS -> 150f
         }
     }
 
@@ -913,6 +1019,31 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
             Look.COLOROS -> {
                 text(time, 10 * d, 84 * d, 72f, 200)
                 text(SimpleDateFormat("EEEE, d. MMMM", de).format(now), 12 * d, 116 * d, 16f, 400)
+            }
+            Look.HYPEROS -> {
+                // Xiaomi: kräftige Uhr links, Datum + Akku klein darunter
+                text(time, 8 * d, 86 * d, 78f, 800)
+                text(SimpleDateFormat("EEEE, d. MMMM", de).format(now) + if (battery >= 0) "   ▮ $battery %" else "",
+                    12 * d, 120 * d, 15f, 500)
+            }
+            Look.MAGICOS -> {
+                // Honor: zentrierte, leichte Uhr mit Datum in Pille
+                text(time, w / 2, 86 * d, 70f, 300, align = Paint.Align.CENTER)
+                val dt = SimpleDateFormat("EEE, d. MMM", de).format(now)
+                p.textSize = 14 * d
+                val tw = p.measureText(dt) + 28 * d
+                r.set(w / 2 - tw / 2, 102 * d, w / 2 + tw / 2, 128 * d)
+                p.clearShadowLayer()
+                p.color = 0x33FFFFFF
+                c.drawRoundRect(r, 13 * d, 13 * d, p)
+                text(dt, w / 2, 120 * d, 14f, 500, align = Paint.Align.CENTER, shadow = false)
+            }
+            Look.ORIGINOS -> {
+                // vivo: große, dünne Uhr links, Datum fett rechts daneben
+                text(SimpleDateFormat("HH", de).format(now), 10 * d, 92 * d, 92f, 200)
+                text(SimpleDateFormat("mm", de).format(now), w * 0.42f, 92 * d, 92f, 200)
+                text(SimpleDateFormat("EEEE", de).format(now), 12 * d, 128 * d, 16f, 700)
+                text(SimpleDateFormat("d. MMMM", de).format(now), 12 * d, 148 * d, 14f, 400)
             }
         }
         cv = null
