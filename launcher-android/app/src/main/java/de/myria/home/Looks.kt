@@ -446,13 +446,14 @@ object Looks {
             dr.draw(c)
             dr.colorFilter = null
         }
-        // Maske
-        val mp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
-        }
-        c.drawPath(maskPath(shape, sf), mp)
         c.restoreToCount(layer)
-
+        // Maske – Fix: vorher DST_IN mit einem Pfad, das ließ alles AUSSERHALB der Form stehen
+        // (→ eckige Kästen hinter den Icons). Jetzt: Form zeichnen, Icon mit SRC_IN hineinlegen.
+        val masked = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val mc = Canvas(masked)
+        mc.drawPath(maskPath(shape, sf), Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK })
+        mc.drawBitmap(bmp, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG).apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN) })
+        bmp.recycle()
         // Glanzkante (Klar/Glas) bzw. feiner Rand (Dunkel)
         if (style == IconStyle.CLEAR || style == IconStyle.DARK) {
             val rp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -461,14 +462,14 @@ object Looks {
                 shader = LinearGradient(0f, 0f, 0f, sf,
                     if (style == IconStyle.CLEAR) 0xCCFFFFFF.toInt() else 0x40FFFFFF, 0x1AFFFFFF, Shader.TileMode.CLAMP)
             }
-            c.save()
+            mc.save()
             val ins = s * 0.0125f
-            c.translate(ins, ins)
-            c.scale((sf - 2 * ins) / sf, (sf - 2 * ins) / sf)
-            c.drawPath(maskPath(shape, sf), rp)
-            c.restore()
+            mc.translate(ins, ins)
+            mc.scale((sf - 2 * ins) / sf, (sf - 2 * ins) / sf)
+            mc.drawPath(maskPath(shape, sf), rp)
+            mc.restore()
         }
-        val out = if (mono) monochrome(bmp) else bmp
+        val out = if (mono) monochrome(masked) else masked
         cache.put(ck, out)
         return out
     }

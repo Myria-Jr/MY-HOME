@@ -27,7 +27,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.SeekBar
-import android.widget.Switch
 import android.widget.TextView
 import android.widget.Toast
 
@@ -480,17 +479,12 @@ class SettingsActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
-    @Suppress("UseSwitchCompatOrMaterialCode")
     private fun switch(t: String, value: Boolean, onChange: (Boolean) -> Unit): View = rowBase().apply {
         addView(title(t), LinearLayout.LayoutParams(0, -2, 1f))
-        val sw = Switch(this@SettingsActivity).apply {
-            isChecked = value
-            thumbTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(Color.WHITE, Color.WHITE))
-            trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                intArrayOf(accent, if (dark) 0xFF48484C.toInt() else 0xFFCFCFD4.toInt()))
-            setOnCheckedChangeListener { v, b -> v.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK); onChange(b) }
-        }
-        addView(sw)
+        // Fix: eigener Schalter – der System-Switch zeichnete auf manchen Handys einen grauen Balken
+        val sw = Toggle(this@SettingsActivity, value, accent, if (dark) 0xFF39393D.toInt() else 0xFFE3E3E8.toInt())
+        sw.onChange = { v -> sw.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK); onChange(v) }
+        addView(sw, LinearLayout.LayoutParams(dpi(51f), dpi(31f)))
         setOnClickListener { sw.toggle() }
     }
 
@@ -584,6 +578,43 @@ class SettingsActivity : Activity() {
         }
         mark()
         return row
+    }
+}
+
+/** iOS-Schalter (gezeichnet, mit Feder-Animation) */
+@SuppressLint("ViewConstructor")
+class Toggle(ctx: Context, private var on: Boolean, private val onColor: Int, private val offColor: Int) : View(ctx) {
+    var onChange: ((Boolean) -> Unit)? = null
+    private var pos = if (on) 1f else 0f
+    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val r = RectF()
+
+    init { setOnClickListener { toggle() } }
+
+    fun toggle() {
+        on = !on
+        android.animation.ValueAnimator.ofFloat(pos, if (on) 1f else 0f).apply {
+            duration = 260
+            interpolator = android.view.animation.OvershootInterpolator(1.4f)
+            addUpdateListener { pos = it.animatedValue as Float; invalidate() }
+            start()
+        }
+        onChange?.invoke(on)
+    }
+
+    override fun onDraw(c: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat()
+        val t = pos.coerceIn(0f, 1f)
+        p.color = android.animation.ArgbEvaluator().evaluate(t, offColor, onColor) as Int
+        r.set(0f, 0f, w, h)
+        c.drawRoundRect(r, h / 2, h / 2, p)
+        val pad = h * 0.07f
+        val d = h - 2 * pad
+        val x = pad + (w - 2 * pad - d) * pos
+        p.color = 0x33000000
+        c.drawCircle(x + d / 2, h / 2 + h * 0.03f, d / 2, p)
+        p.color = Color.WHITE
+        c.drawCircle(x + d / 2, h / 2, d / 2, p)
     }
 }
 
