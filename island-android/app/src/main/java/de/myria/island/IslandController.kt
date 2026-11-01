@@ -118,6 +118,7 @@ class IslandController(
 
     fun setCharging(c: Content.Charging) {
         charging = c
+        view.idleBattery = c.level
         refresh()
     }
 
@@ -132,11 +133,18 @@ class IslandController(
         is Content.Progress -> cfg.showProgress
         is Content.Device -> cfg.showDevices
         is UnlockContent -> cfg.showUnlock
+        is VolumeContent -> cfg.showVolume
+        is TorchContent -> cfg.showTorch
+        is FocusContent -> cfg.showFocus
+        is AirplaneContent -> cfg.showAirplane
     }
 
     fun showTransient(c: Content) {
         if (!allowed(c) || !cfg.enabled || suppressed) return
+        val quiet = c is VolumeContent && transient is VolumeContent
         val ms = when (c) {
+            is VolumeContent -> 1600L
+            is FocusContent, is AirplaneContent -> 2200L
             is Content.Notif -> cfg.notifSeconds * 1000L + if (cfg.notifAutoExpand) 3000L else 0L
             is Content.Ringer -> 2200L
             is UnlockContent -> 1500L
@@ -149,7 +157,7 @@ class IslandController(
         expandedKey = if (c is Content.Notif && cfg.notifAutoExpand && c.expandable) c.key else null
         handler.removeCallbacks(clearTransient)
         handler.postDelayed(clearTransient, ms)
-        if (cfg.haptics && c !is UnlockContent) host.haptic(false)
+        if (cfg.haptics && c !is UnlockContent && c !is VolumeContent && !quiet) host.haptic(false)
         refresh()
     }
 
@@ -257,7 +265,12 @@ class IslandController(
                 dismissTransient()
             }
             is Content.Call -> if (c.incoming) open(c) else tapPersistent(c)
-            is Content.Charging, is Content.Ringer, is Content.Device, is UnlockContent -> dismissTransient()
+            is TorchContent -> {
+                if (cfg.haptics) host.haptic(true)
+                c.off?.invoke()
+            }
+            is Content.Charging, is Content.Ringer, is Content.Device, is UnlockContent,
+            is VolumeContent, is FocusContent, is AirplaneContent -> dismissTransient()
             else -> tapPersistent(c)
         }
     }

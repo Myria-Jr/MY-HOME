@@ -10,6 +10,9 @@ import android.graphics.LinearGradient
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
+import android.graphics.SweepGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -74,10 +77,21 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
     var cfg = IslandConfig()
         set(v) {
+            val fontChanged = v.fontStyle != field.fontStyle
             field = v
+            if (fontChanged) applyFonts()
             applySpringParams()
             retarget()
             kick()
+        }
+
+    /** Akkustand für die leere Pille */
+    var idleBattery = -1
+        set(v) {
+            if (field != v) {
+                field = v
+                kick()
+            }
         }
 
     var privacy = Privacy()
@@ -121,7 +135,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     private val island = RectF()
     private val bubble = RectF()
     private val islandPath = Path()
+    private val linePath = Path()
     private val tmp = RectF()
+    private val tmp2 = RectF()
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -137,15 +153,8 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         typeface = font(600)
         fontFeatureSettings = "tnum"
     }
-    private val glassFill = LinearGradient(
-        0f, 0f, 0f, 1f,
-        intArrayOf(0xC8323238.toInt(), 0xDC141416.toInt()), null, Shader.TileMode.CLAMP,
-    )
-    private val glassStroke = LinearGradient(
-        0f, 0f, 0f, 1f,
-        intArrayOf(0x80FFFFFF.toInt(), 0x14FFFFFF, 0x38FFFFFF), floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP,
-    )
     private val shaderMatrix = Matrix()
+    private val whiteFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
 
     private val shaderCache = HashMap<Bitmap, BitmapShader>()
     private val artMatrix = Matrix()
@@ -181,9 +190,25 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         setLayerType(LAYER_TYPE_HARDWARE, null)
     }
 
-    private fun font(weight: Int): Typeface =
-        if (Build.VERSION.SDK_INT >= 28) Typeface.create(Typeface.SANS_SERIF, weight, false)
-        else Typeface.create("sans-serif-medium", if (weight >= 600) Typeface.BOLD else Typeface.NORMAL)
+    private fun font(weight: Int): Typeface {
+        val family = when (cfg.fontStyle) {
+            IslandConfig.FONT_GOOGLE -> "google-sans"
+            IslandConfig.FONT_CONDENSED -> "sans-serif-condensed"
+            IslandConfig.FONT_MONO -> "monospace"
+            IslandConfig.FONT_SERIF -> "serif"
+            else -> "sans-serif"
+        }
+        val base = Typeface.create(family, Typeface.NORMAL)
+        return if (Build.VERSION.SDK_INT >= 28) Typeface.create(base, weight, false)
+        else Typeface.create(base, if (weight >= 600) Typeface.BOLD else Typeface.NORMAL)
+    }
+
+    private fun applyFonts() {
+        textPaint.typeface = font(500)
+        boldPaint.typeface = font(650)
+        numPaint.typeface = font(600)
+        notifLayoutKey = null
+    }
 
     private fun applySpringParams() {
         val k = cfg.stiffness
@@ -263,7 +288,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         fun exp(hh: Float) = Size(full, hh, min(big, hh / 2))
         return when (m) {
             Mode.HIDDEN -> Size(h * 1.1f, h * 0.8f, h * 0.4f)
-            Mode.IDLE -> Size(w, h, h / 2)
+            Mode.IDLE -> Size(if (cfg.idleContent != IslandConfig.IDLE_NONE) w + 58 * d else w, h, h / 2)
             Mode.COMPACT -> when (c) {
                 is Content.Notif -> banner(max(72 * d, h + 32 * d))
                 is Content.Call -> if (c.incoming) banner(max(80 * d, h + 40 * d)) else compact(124f)
@@ -274,6 +299,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is Content.Progress -> compact(100f)
                 is Content.Device -> compact(128f)
                 is UnlockContent -> Size(w + h * 1.5f, h, h / 2)
+                is VolumeContent -> compact(150f)
+                is TorchContent -> compact(96f)
+                is FocusContent -> compact(130f)
+                is AirplaneContent -> compact(110f)
                 else -> compact(116f)
             }
             Mode.EXPANDED -> when (c) {
@@ -292,12 +321,12 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val s = sizeFor(mode, target)
         if (!initialized) {
             initialized = true
-            sW.snap(s.w); sH.snap(s.h); sR.snap(s.r)
+            sW.snap(s.w); sH.snap(s.h); sR.snap(min(s.r, s.h / 2 * roundness()))
             sAlpha.snap(if (mode == Mode.HIDDEN) 0f else 1f)
         }
         sW.target = s.w
         sH.target = s.h
-        sR.target = s.r
+        sR.target = min(s.r, s.h / 2 * roundness())
         sAlpha.target = if (mode == Mode.HIDDEN) 0f else 1f
         sBubble.target = if (bubbleWanted()) 1f else 0f
     }
@@ -305,6 +334,8 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     fun kick() {
         invalidate()
     }
+
+    private fun roundness() = (cfg.compactRoundPct.coerceIn(20, 100) / 100f)
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
@@ -352,6 +383,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         if (alpha <= 0.003f) return 0
         var best = 0L
         fun want(ms: Long) { if (best == 0L || ms < best) best = ms }
+        if (mode == Mode.IDLE && (cfg.idleContent == IslandConfig.IDLE_TIME || cfg.idleContent == IslandConfig.IDLE_BOTH)) {
+            want(60_000L - System.currentTimeMillis() % 60_000L + 50)
+        }
         for (c in listOf(drawn, if (sBubble.value > 0.01f) bubbleDrawn else null)) {
             when (c) {
                 is Content.Music -> {
@@ -362,6 +396,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is Content.Call -> want(if (c.incoming) 33 else 250)
                 is Content.Progress -> if (c.progress < 0) want(33)
                 is UnlockContent -> if (c === drawn) want(16)
+                is VolumeContent -> {}
                 is Content.Charging -> if (c.plugged && c === drawn &&
                     System.nanoTime() - chargeStart < 4_500_000_000L) want(33)
                 else -> {}
@@ -383,6 +418,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     private fun accentOf(c: Content?): Int = when (cfg.accentMode) {
         IslandConfig.ACCENT_CUSTOM -> cfg.accentColor
         IslandConfig.ACCENT_WHITE -> Color.WHITE
+        IslandConfig.ACCENT_SYSTEM -> systemColor(android.R.color.system_accent1_200, cfg.accentColor)
         else -> (c as? Content.Music)?.info?.accent ?: cfg.accentColor
     }
 
@@ -421,7 +457,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         }
 
         // --- Form ---
-        paintShape(canvas, island, r, h, top, c)
+        paintShape(canvas, island, r, c)
 
         // --- Grüne Welle beim Einstecken (außerhalb der Form) ---
         if (c is Content.Charging && c.plugged && !cfg.reduceMotion) {
@@ -438,7 +474,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         }
 
         // --- Inhalt ---
-        if (mode == Mode.IDLE && privacy.any) drawPrivacy(canvas)
+        if (mode == Mode.IDLE) {
+            drawIdleContent(canvas)
+            if (privacy.any) drawPrivacy(canvas)
+        }
         if (c != null && ca > 0.01f) {
             islandPath.reset()
             islandPath.addRoundRect(island, r, r, Path.Direction.CW)
@@ -465,6 +504,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is Content.Progress -> if (big) drawProgressExpanded(canvas, c, ca) else drawProgressCompact(canvas, c, ca)
                 is Content.Device -> drawDevice(canvas, c, ca)
                 is UnlockContent -> drawUnlock(canvas, ca)
+                is VolumeContent -> drawVolume(canvas, c, ca)
+                is TorchContent -> drawTorch(canvas, ca)
+                is FocusContent -> drawFocus(canvas, c, ca)
+                is AirplaneContent -> drawAirplane(canvas, c, ca)
             }
             canvas.restore()
         }
@@ -473,44 +516,114 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         if (layered) canvas.restore()
     }
 
-    private fun paintShape(canvas: Canvas, rect: RectF, r: Float, h: Float, top: Float, c: Content?) {
+    private fun systemColor(id: Int, fallback: Int): Int =
+        if (Build.VERSION.SDK_INT >= 31) try { context.getColor(id) } catch (_: Exception) { fallback } else fallback
+
+    private fun paintShape(canvas: Canvas, rect: RectF, r: Float, c: Content?) {
+        bgPaint.shader = null
         when (cfg.style) {
-            IslandConfig.STYLE_GLASS -> {
-                shaderMatrix.reset()
-                shaderMatrix.setScale(1f, h)
-                shaderMatrix.postTranslate(0f, top)
-                glassFill.setLocalMatrix(shaderMatrix)
-                glassStroke.setLocalMatrix(shaderMatrix)
-                bgPaint.shader = glassFill
-                bgPaint.color = Color.WHITE
-                canvas.drawRoundRect(rect, r, r, bgPaint)
-                if (cfg.glassBorder) {
-                    strokePaint.shader = glassStroke
-                    strokePaint.strokeWidth = 1f * d
-                    tmp.set(rect)
-                    tmp.inset(0.5f * d, 0.5f * d)
-                    canvas.drawRoundRect(tmp, r, r, strokePaint)
-                }
-                gapPaint.color = 0xFF1E1E21.toInt()
-            }
+            IslandConfig.STYLE_GLASS -> paintGlass(canvas, rect, r, c)
             IslandConfig.STYLE_TINT -> {
                 val a = accentOf(c)
                 bgPaint.shader = LinearGradient(
-                    0f, top, 0f, top + h,
+                    0f, rect.top, 0f, rect.bottom,
                     intArrayOf(mix(a, Color.BLACK, 0.62f), mix(a, Color.BLACK, 0.86f)), null, Shader.TileMode.CLAMP,
                 )
                 bgPaint.color = Color.WHITE
                 canvas.drawRoundRect(rect, r, r, bgPaint)
                 gapPaint.color = mix(a, Color.BLACK, 0.75f)
             }
+            IslandConfig.STYLE_MATERIAL -> {
+                // Material You: dunkle, leicht eingefärbte Fläche
+                val base = systemColor(android.R.color.system_neutral1_900, 0xFF1D1B20.toInt())
+                val col = mix(base, accentOf(c), 0.08f)
+                bgPaint.color = col
+                canvas.drawRoundRect(rect, r, r, bgPaint)
+                gapPaint.color = col
+            }
+            IslandConfig.STYLE_GRAPHITE -> {
+                bgPaint.color = 0xFF1B1B1D.toInt()
+                canvas.drawRoundRect(rect, r, r, bgPaint)
+                strokePaint.shader = null
+                strokePaint.strokeWidth = 0.8f * d
+                strokePaint.color = 0x22FFFFFF
+                tmp2.set(rect); tmp2.inset(0.4f * d, 0.4f * d)
+                canvas.drawRoundRect(tmp2, r, r, strokePaint)
+                gapPaint.color = 0xFF1B1B1D.toInt()
+            }
+            IslandConfig.STYLE_OUTLINE -> {
+                bgPaint.color = Color.BLACK
+                canvas.drawRoundRect(rect, r, r, bgPaint)
+                strokePaint.shader = null
+                strokePaint.strokeWidth = 1.2f * d
+                strokePaint.color = 0x40FFFFFF
+                tmp2.set(rect); tmp2.inset(0.6f * d, 0.6f * d)
+                canvas.drawRoundRect(tmp2, r, r, strokePaint)
+                gapPaint.color = Color.BLACK
+            }
             else -> {
-                bgPaint.shader = null
                 bgPaint.color = Color.BLACK
                 canvas.drawRoundRect(rect, r, r, bgPaint)
                 gapPaint.color = Color.BLACK
             }
         }
         bgPaint.shader = null
+    }
+
+    /**
+     * Liquid Glass: durchscheinende Fläche + Glanz oben + Lichtkante
+     * (oben hell, unten Reflex) + optionaler Regenbogen-Farbsaum.
+     */
+    private fun paintGlass(canvas: Canvas, rect: RectF, r: Float, c: Content?) {
+        val opacity = cfg.glassOpacity.coerceIn(0, 100) / 100f
+        val shine = cfg.glassShine.coerceIn(0, 100) / 100f
+        val tint = cfg.glassTint.coerceIn(0, 100) / 100f
+        val accent = accentOf(c)
+        val baseTop = mix(0xFF3A3A40.toInt(), accent, tint * 0.6f)
+        val baseBottom = mix(0xFF101012.toInt(), accent, tint * 0.35f)
+        val aTop = 0.18f + 0.72f * opacity
+        val aBottom = 0.30f + 0.65f * opacity
+
+        // 1) Körper
+        bgPaint.shader = LinearGradient(0f, rect.top, 0f, rect.bottom,
+            intArrayOf(withAlpha(baseTop, aTop), withAlpha(baseBottom, aBottom)), null, Shader.TileMode.CLAMP)
+        bgPaint.color = Color.WHITE
+        canvas.drawRoundRect(rect, r, r, bgPaint)
+        bgPaint.shader = null
+
+        // 2) Glanz (obere Hälfte)
+        if (shine > 0.01f) {
+            p.shader = LinearGradient(0f, rect.top, 0f, rect.top + rect.height() * 0.55f,
+                intArrayOf(withAlpha(Color.WHITE, 0.22f * shine), 0x00FFFFFF), null, Shader.TileMode.CLAMP)
+            tmp2.set(rect.left + r * 0.15f, rect.top + 1.2f * d, rect.right - r * 0.15f, rect.top + rect.height() * 0.6f)
+            canvas.drawRoundRect(tmp2, r * 0.9f, r * 0.9f, p)
+            p.shader = null
+        }
+
+        // 3) Lichtkante
+        if (cfg.glassBorder) {
+            val bw = (cfg.glassBorderWidth.coerceIn(3, 30) / 10f) * d
+            strokePaint.strokeWidth = bw
+            strokePaint.shader = LinearGradient(rect.left, rect.top, rect.right, rect.bottom,
+                intArrayOf(
+                    withAlpha(Color.WHITE, 0.25f + 0.65f * shine),
+                    withAlpha(Color.WHITE, 0.06f),
+                    withAlpha(Color.WHITE, 0.10f + 0.35f * shine),
+                ), floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+            tmp2.set(rect); tmp2.inset(bw / 2, bw / 2)
+            canvas.drawRoundRect(tmp2, r, r, strokePaint)
+            // 4) Farbsaum (Lichtbrechung)
+            if (cfg.glassRainbow) {
+                strokePaint.strokeWidth = bw * 0.9f
+                strokePaint.shader = SweepGradient(rect.centerX(), rect.centerY(),
+                    intArrayOf(0x5564D2FF, 0x40FF6AD5, 0x45FFD60A, 0x4030D158, 0x5564D2FF), null)
+                tmp2.set(rect); tmp2.inset(bw * 1.4f, bw * 1.4f)
+                val rr = (r - bw).coerceAtLeast(0f)
+                canvas.drawRoundRect(tmp2, rr, rr, strokePaint)
+            }
+            strokePaint.shader = null
+        }
+        gapPaint.color = mix(baseBottom, Color.BLACK, 0.3f)
     }
 
     // ---- Bubble ----
@@ -527,10 +640,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         if (bp < 0.75f) {
             val bh = bs * 0.8f * (1f - bp / 0.75f)
             tmp.set(island.right - bs / 2, cy - bh / 2, bx, cy + bh / 2)
-            paintShape(canvas, tmp, bh / 2, bs, island.top, c)
+            paintShape(canvas, tmp, bh / 2, c)
         }
         bubble.set(bx - rad, cy - rad, bx + rad, cy + rad)
-        paintShape(canvas, bubble, rad, bs, island.top, c)
+        paintShape(canvas, bubble, rad * roundness(), c)
         val a = bp.coerceIn(0f, 1f) * bp.coerceIn(0f, 1f)
         if (a > 0.05f) drawMini(canvas, c, bx, cy, rad * 2, a)
     }
@@ -620,12 +733,31 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val gap = 2.3f * d
         val t = System.nanoTime() / 1e9f
         p.color = withAlpha(color ?: waveColor(c), a)
+        val animated = info.playing && cfg.waveform
+        if (cfg.waveStyle == IslandConfig.WAVE_LINE) {
+            // Sinus-Linie (Material-Look)
+            val w = bars * bw + (bars - 1) * gap
+            ringPaint.strokeWidth = 2.2f * d
+            ringPaint.color = p.color
+            linePath.reset()
+            val steps = 24
+            for (i in 0..steps) {
+                val f = i / steps.toFloat()
+                val env = sin(f * Math.PI.toFloat())
+                val amp = if (animated) maxH * 0.42f * (0.55f + 0.45f * sin(t * 3.1f)) else if (info.playing) maxH * 0.3f else maxH * 0.05f
+                val y = cy + sin(f * 12.5f + (if (animated) t * 9f else 0f)) * amp * env
+                val x = right - w + w * f
+                if (i == 0) linePath.moveTo(x, y) else linePath.lineTo(x, y)
+            }
+            canvas.drawPath(linePath, ringPaint)
+            return
+        }
         val freq = floatArrayOf(5.1f, 7.3f, 6.2f, 8.4f, 5.7f)
         val phase = floatArrayOf(0f, 1.3f, 2.1f, 0.7f, 2.9f)
         val still = floatArrayOf(0.5f, 0.85f, 0.6f, 1f, 0.45f)
         for (i in 0 until bars) {
             val amp = when {
-                info.playing && cfg.waveform -> {
+                animated -> {
                     val s1 = 0.5f + 0.5f * sin(t * freq[i] + phase[i])
                     val s2 = 0.65f + 0.35f * sin(t * freq[(i + 2) % 5] * 0.53f + phase[i] * 1.7f)
                     0.22f + 0.78f * s1 * s2
@@ -635,8 +767,62 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             }
             val bh = max(bw, maxH * amp)
             val x = right - (bars - i) * bw - (bars - 1 - i) * gap
-            tmp.set(x, cy - bh / 2, x + bw, cy + bh / 2)
-            canvas.drawRoundRect(tmp, bw / 2, bw / 2, p)
+            if (cfg.waveStyle == IslandConfig.WAVE_DOTS) {
+                // Punkt-Matrix
+                val step = bw + 1.4f * d
+                val n = max(1, (bh / step).toInt())
+                val start = cy - (n - 1) * step / 2
+                for (k in 0 until n) canvas.drawCircle(x + bw / 2, start + k * step, bw / 2, p)
+            } else {
+                tmp.set(x, cy - bh / 2, x + bw, cy + bh / 2)
+                canvas.drawRoundRect(tmp, bw / 2, bw / 2, p)
+            }
+        }
+    }
+
+    /** Fortschrittsbalken in drei Stilen: Linie, Welle (Material), Punkte (Nothing) */
+    private fun drawBar(canvas: Canvas, l: Float, r: Float, cy: Float, frac: Float, color: Int, a: Float, thick: Float, moving: Boolean) {
+        val f = frac.coerceIn(0f, 1f)
+        val split = l + (r - l) * f
+        when (cfg.progressStyle) {
+            IslandConfig.PROGRESS_SQUIGGLE -> {
+                ringPaint.strokeWidth = max(2.5f * d, thick * 0.55f)
+                ringPaint.color = withAlpha(Color.WHITE, a * 0.25f)
+                if (r > split + 6 * d) canvas.drawLine(split + 6 * d, cy, r, cy, ringPaint)
+                ringPaint.color = withAlpha(color, a)
+                linePath.reset()
+                val t = if (moving && !cfg.reduceMotion) System.nanoTime() / 1e9f * 6f else 0f
+                val amp = 3f * d
+                val wl = 22 * d
+                var x = l
+                linePath.moveTo(l, cy)
+                while (x <= split) {
+                    linePath.lineTo(x, cy + sin((x - l) / wl * 6.283f - t) * amp)
+                    x += 2 * d
+                }
+                if (split > l) canvas.drawPath(linePath, ringPaint)
+                p.color = withAlpha(color, a)
+                tmp.set(split - 2.5f * d, cy - 9 * d, split + 2.5f * d, cy + 9 * d)
+                canvas.drawRoundRect(tmp, 2.5f * d, 2.5f * d, p)
+            }
+            IslandConfig.PROGRESS_DOTS -> {
+                val step = 6.5f * d
+                val rad = max(1.4f * d, thick * 0.32f)
+                var x = l
+                while (x <= r) {
+                    p.color = withAlpha(color, if (x <= split) a else a * 0.25f)
+                    canvas.drawCircle(x, cy, rad, p)
+                    x += step
+                }
+            }
+            else -> {
+                tmp.set(l, cy - thick / 2, r, cy + thick / 2)
+                p.color = withAlpha(Color.WHITE, a * 0.22f)
+                canvas.drawRoundRect(tmp, thick / 2, thick / 2, p)
+                tmp.set(l, cy - thick / 2, split, cy + thick / 2)
+                p.color = withAlpha(color, a)
+                canvas.drawRoundRect(tmp, thick / 2, thick / 2, p)
+            }
         }
     }
 
@@ -747,28 +933,23 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val bl = island.left + pad + tw
         val br = island.right - pad - tw
         val bh = if (seeking) 9 * d else 5.5f * d
-        tmp.set(bl, py - bh / 2, br, py + bh / 2)
-        p.color = withAlpha(Color.WHITE, a * 0.22f)
-        canvas.drawRoundRect(tmp, bh / 2, bh / 2, p)
         if (info.durationMs > 0) {
             val f = (pos.toFloat() / info.durationMs).coerceIn(0f, 1f)
-            tmp.set(bl, py - bh / 2, bl + (br - bl) * f, py + bh / 2)
-            p.color = withAlpha(Color.WHITE, a)
-            canvas.drawRoundRect(tmp, bh / 2, bh / 2, p)
+            val barColor = if (cfg.progressStyle == IslandConfig.PROGRESS_LINE) Color.WHITE else accentOf(c)
+            drawBar(canvas, bl, br, py, f, barColor, a, bh, info.playing)
             if (interactive && cfg.musicSeek && info.canSeek) {
                 seekRect.set(bl, py - 16 * d, br, py + 16 * d)
                 seekActive = true
             }
+        } else {
+            drawBar(canvas, bl, br, py, 0f, Color.WHITE, a, bh, false)
         }
 
         // Steuerung
         val cy = py + 46 * d
         val cx = island.centerX()
         val spacing = 80 * d
-        p.color = withAlpha(Color.WHITE, a)
-        Icons.skip(canvas, cx - spacing, cy, 30 * d, -1, p)
-        if (info.playing) Icons.pause(canvas, cx, cy, 30 * d, p) else Icons.play(canvas, cx, cy, 30 * d, p)
-        Icons.skip(canvas, cx + spacing, cy, 30 * d, 1, p)
+        drawControls(canvas, info, accentOf(c), cx, cy, spacing, a)
         if (interactive) {
             val hit = 28 * d
             info.actions?.let { act ->
@@ -777,6 +958,51 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 hits.add(Hit(RectF(cx + spacing - hit, cy - hit, cx + spacing + hit, cy + hit)) { act.next() })
             }
         }
+    }
+
+    private fun isLight(c: Int): Boolean =
+        (Color.red(c) * 0.299f + Color.green(c) * 0.587f + Color.blue(c) * 0.114f) > 150f
+
+    /** ⏮ ⏯ ⏭ in vier Stilen */
+    private fun drawControls(canvas: Canvas, info: MusicInfo, accent: Int, cx: Float, cy: Float, spacing: Float, a: Float) {
+        val s = 30 * d
+        when (cfg.controlStyle) {
+            IslandConfig.CONTROL_FILLED -> {
+                // Material: Play in gefüllter, abgerundeter Fläche
+                val bw = 64 * d
+                val bh = 48 * d
+                tmp.set(cx - bw / 2, cy - bh / 2, cx + bw / 2, cy + bh / 2)
+                p.color = withAlpha(accent, a)
+                val rad = if (info.playing) 16 * d else bh / 2
+                canvas.drawRoundRect(tmp, rad, rad, p)
+                p.color = withAlpha(if (isLight(accent)) 0xFF1C1B1F.toInt() else Color.WHITE, a)
+                if (info.playing) Icons.pause(canvas, cx, cy, s * 0.8f, p) else Icons.play(canvas, cx, cy, s * 0.8f, p)
+            }
+            IslandConfig.CONTROL_CIRCLE -> {
+                p.color = withAlpha(Color.WHITE, a)
+                canvas.drawCircle(cx, cy, 26 * d, p)
+                p.color = withAlpha(Color.BLACK, a)
+                if (info.playing) Icons.pause(canvas, cx, cy, s * 0.75f, p) else Icons.play(canvas, cx, cy, s * 0.75f, p)
+            }
+            IslandConfig.CONTROL_OUTLINE -> {
+                strokePaint.shader = null
+                strokePaint.strokeWidth = 1.2f * d
+                strokePaint.color = withAlpha(Color.WHITE, a * 0.45f)
+                for (x in floatArrayOf(cx - spacing, cx, cx + spacing)) canvas.drawCircle(x, cy, 23 * d, strokePaint)
+                p.color = withAlpha(Color.WHITE, a)
+                if (info.playing) Icons.pause(canvas, cx, cy, s * 0.62f, p) else Icons.play(canvas, cx, cy, s * 0.62f, p)
+                Icons.skip(canvas, cx - spacing, cy, s * 0.7f, -1, p)
+                Icons.skip(canvas, cx + spacing, cy, s * 0.7f, 1, p)
+                return
+            }
+            else -> {
+                p.color = withAlpha(Color.WHITE, a)
+                if (info.playing) Icons.pause(canvas, cx, cy, s, p) else Icons.play(canvas, cx, cy, s, p)
+            }
+        }
+        p.color = withAlpha(Color.WHITE, a)
+        Icons.skip(canvas, cx - spacing, cy, s, -1, p)
+        Icons.skip(canvas, cx + spacing, cy, s, 1, p)
     }
 
     // ---- Laden ----
@@ -956,7 +1182,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         if (bmp != null && !bmp.isRecycled) {
             tmp.set(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2)
             artPaint.alpha = (a * 255).toInt()
+            // Pfeil-Bilder sind meist einfarbig → weiß einfärben, damit sie auf Schwarz sichtbar sind
+            artPaint.colorFilter = whiteFilter
             canvas.drawBitmap(bmp, null, tmp, artPaint)
+            artPaint.colorFilter = null
         } else {
             p.color = withAlpha(Color.WHITE, a)
             Icons.turnArrow(canvas, cx, cy, s, p)
@@ -1029,16 +1258,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         textPaint.color = withAlpha(GRAY, a)
         canvas.drawText(ellipsize(c.app, textPaint, avail), tx, top + 37 * d, textPaint)
         val by = island.bottom - pad - 3 * d
-        val bh = 6 * d
-        tmp.set(island.left + pad, by - bh / 2, island.right - pad, by + bh / 2)
-        p.color = withAlpha(Color.WHITE, a * 0.2f)
-        canvas.drawRoundRect(tmp, bh / 2, bh / 2, p)
         val f = if (c.done) 1f else if (c.progress < 0) {
             0.25f + 0.25f * sin(System.nanoTime() / 1e9f * 3f)
         } else c.progress
-        tmp.right = tmp.left + (tmp.width()) * f
-        p.color = withAlpha(if (c.done) GREEN else BLUE, a)
-        canvas.drawRoundRect(tmp, bh / 2, bh / 2, p)
+        drawBar(canvas, island.left + pad, island.right - pad, by, f, if (c.done) GREEN else BLUE, a, 6 * d, !c.done)
     }
 
     // ---- Entsperren ----
@@ -1066,6 +1289,68 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         if (x >= 1f) return 1f
         val inv = 1f - x
         return 1f - inv * inv * inv * kotlin.math.cos(x * Math.PI.toFloat() * 1.5f)
+    }
+
+    // ---- Lautstärke / Taschenlampe / Fokus / Flugmodus ----
+
+    private fun drawVolume(canvas: Canvas, c: VolumeContent, a: Float) {
+        val h = island.height()
+        val lvl = if (c.muted) 0f else c.level.coerceIn(0f, 1f)
+        p.color = withAlpha(Color.WHITE, a)
+        val waves = if (c.muted || lvl == 0f) 0 else if (lvl < 0.34f) 1 else if (lvl < 0.67f) 2 else 3
+        Icons.speaker(canvas, leftX(h) + 2 * d, island.centerY(), h * 0.58f, waves, c.muted, p)
+        val r = rightEdge(h)
+        val bwid = min(78 * d, island.width() / 2 - cfg.widthDp * d / 2 + 4 * d)
+        drawBar(canvas, r - bwid, r, island.centerY(), lvl, Color.WHITE, a, 6 * d, false)
+    }
+
+    private fun drawTorch(canvas: Canvas, a: Float) {
+        val h = island.height()
+        val y = 0xFFFFD60A.toInt()
+        p.color = withAlpha(y, a)
+        Icons.flashlight(canvas, leftX(h), island.centerY(), h * 0.56f, p)
+        boldPaint.textSize = h * 0.4f * cfg.textScale
+        rightText(canvas, "An", boldPaint, y, a)
+    }
+
+    private fun drawFocus(canvas: Canvas, c: FocusContent, a: Float) {
+        val h = island.height()
+        val col = if (c.on) 0xFF7D7AFF.toInt() else GRAY
+        p.color = withAlpha(col, a)
+        Icons.moon(canvas, leftX(h), island.centerY(), h * 0.56f, p)
+        boldPaint.textSize = h * 0.4f * cfg.textScale
+        rightText(canvas, if (c.on) "Fokus an" else "Fokus aus", boldPaint, col, a)
+    }
+
+    private fun drawAirplane(canvas: Canvas, c: AirplaneContent, a: Float) {
+        val h = island.height()
+        val col = if (c.on) ORANGE else GRAY
+        p.color = withAlpha(col, a)
+        Icons.airplane(canvas, leftX(h), island.centerY(), h * 0.56f, p)
+        boldPaint.textSize = h * 0.4f * cfg.textScale
+        rightText(canvas, if (c.on) "An" else "Aus", boldPaint, col, a)
+    }
+
+    // ---- Leere Pille: Uhrzeit / Akku ----
+
+    private fun drawIdleContent(canvas: Canvas) {
+        val ic = cfg.idleContent
+        if (ic == IslandConfig.IDLE_NONE) return
+        val h = island.height()
+        val a = (sW.value / max(1f, sW.target)).coerceIn(0f, 1f).let { it * it }
+        if (a < 0.2f) return
+        numPaint.textSize = h * 0.38f * cfg.textScale
+        if (ic == IslandConfig.IDLE_TIME || ic == IslandConfig.IDLE_BOTH) {
+            numPaint.color = withAlpha(Color.WHITE, a)
+            val t = android.text.format.DateFormat.getTimeFormat(context).format(java.util.Date())
+            canvas.drawText(t, island.left + h * 0.45f, island.centerY() + numPaint.textSize * 0.36f, numPaint)
+        }
+        if ((ic == IslandConfig.IDLE_BATTERY || ic == IslandConfig.IDLE_BOTH) && idleBattery >= 0 && !privacy.any) {
+            val col = if (idleBattery <= 20) RED else Color.WHITE
+            val txt = "$idleBattery%"
+            numPaint.color = withAlpha(col, a)
+            canvas.drawText(txt, island.right - h * 0.45f - numPaint.measureText(txt), island.centerY() + numPaint.textSize * 0.36f, numPaint)
+        }
     }
 
     // ---- Kopfhörer ----

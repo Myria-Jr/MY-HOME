@@ -3,6 +3,7 @@ package de.myria.island
 import android.Manifest
 import android.accessibilityservice.AccessibilityService
 import android.app.KeyguardManager
+import android.app.NotificationManager
 import android.bluetooth.BluetoothClass
 import android.bluetooth.BluetoothDevice
 import android.content.BroadcastReceiver
@@ -105,7 +106,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         locked = (getSystemService(KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
         updateSuppressed()
         c.setMusic(IslandBus.music)
-        c.setLive(IslandBus.live)
+        pushLive()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
@@ -269,18 +270,22 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     }
 
     private var testLive: List<Content> = emptyList()
+    /** Live-Aktivitäten, die der Service selbst erzeugt (Taschenlampe) */
+    private var systemLive: List<Content> = emptyList()
     private val clearTestLive = Runnable {
         testLive = emptyList()
-        controller?.setLive(IslandBus.live)
+        pushLive()
     }
 
-    override fun onLive(list: List<Content>) {
-        controller?.setLive(list + testLive)
+    private fun pushLive() {
+        controller?.setLive(IslandBus.live + systemLive + testLive)
     }
+
+    override fun onLive(list: List<Content>) = pushLive()
 
     override fun onTestLive(list: List<Content>) {
         testLive = list
-        controller?.setLive(IslandBus.live + list)
+        pushLive()
         handler.removeCallbacks(clearTestLive)
         if (list.isNotEmpty()) handler.postDelayed(clearTestLive, 20_000)
     }
@@ -315,6 +320,20 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     // Kamera / Mikrofon / Standort
     // ------------------------------------------------------------------
 
+    private val torchesOn = HashSet<String>()
+
+    private val torchCallback = object : CameraManager.TorchCallback() {
+        override fun onTorchModeChanged(cameraId: String, enabled: Boolean) {
+            if (enabled) torchesOn.add(cameraId) else torchesOn.remove(cameraId)
+            systemLive = if (torchesOn.isEmpty()) emptyList() else listOf(TorchContent {
+                val cm = getSystemService(CAMERA_SERVICE) as CameraManager
+                for (id in torchesOn.toList()) try { cm.setTorchMode(id, false) } catch (_: Exception) {}
+            })
+            pushPrivacy()
+            pushLive()
+        }
+    }
+
     private val cameraCallback = object : CameraManager.AvailabilityCallback() {
         override fun onCameraUnavailable(cameraId: String) {
             camerasInUse.add(cameraId)
@@ -345,13 +364,16 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     }
 
     private fun pushPrivacy() {
-        privacy = privacy.copy(camera = camerasInUse.isNotEmpty())
+        // Taschenlampe belegt auf manchen Geräten die Kamera → kein grüner Punkt dafür
+        privacy = privacy.copy(camera = (camerasInUse - torchesOn).isNotEmpty())
         controller?.privacy = privacy
     }
 
     private fun registerPrivacyWatchers() {
         try {
-            (getSystemService(CAMERA_SERVICE) as CameraManager).registerAvailabilityCallback(cameraCallback, handler)
+            val cm = getSystemService(CAMERA_SERVICE) as CameraManager
+            cm.registerAvailabilityCallback(cameraCallback, handler)
+            cm.registerTorchCallback(torchCallback, handler)
         } catch (_: Exception) {}
         try {
             val am = getSystemService(AUDIO_SERVICE) as AudioManager
@@ -373,7 +395,11 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     }
 
     private fun unregisterPrivacyWatchers() {
-        try { (getSystemService(CAMERA_SERVICE) as CameraManager).unregisterAvailabilityCallback(cameraCallback) } catch (_: Exception) {}
+        try {
+            val cm = getSystemService(CAMERA_SERVICE) as CameraManager
+            cm.unregisterAvailabilityCallback(cameraCallback)
+            cm.unregisterTorchCallback(torchCallback)
+        } catch (_: Exception) {}
         try { (getSystemService(AUDIO_SERVICE) as AudioManager).unregisterAudioRecordingCallback(recordingCallback) } catch (_: Exception) {}
         if (gnssRegistered) {
             try { (getSystemService(LOCATION_SERVICE) as LocationManager).unregisterGnssStatusCallback(gnssCallback) } catch (_: Exception) {}
@@ -448,6 +474,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     private var lastPlugged: Boolean? = null
     private var lastLevel = -1
     private var lastRinger: Int? = null
+    private var lastFocus = false
 
     private val systemReceiver = object : BroadcastReceiver() {
         override fun onReceive(ctx: Context, intent: Intent) {
@@ -483,6 +510,27 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                         )
                     }
                 }
+                ACTION_VOLUME -> {
+                    val stream = intent.getIntExtra(EXTRA_VOLUME_STREAM, -1)
+                    if (stream != AudioManager.STREAM_MUSIC || screenOff) return
+                    val am = getSystemService(AUDIO_SERVICE) as AudioManager
+                    val vol = intent.getIntExtra(EXTRA_VOLUME_VALUE, am.getStreamVolume(stream))
+                    val max = am.getStreamMaxVolume(stream).coerceAtLeast(1)
+                    val prev = intent.getIntExtra(EXTRA_VOLUME_PREV, -1)
+                    if (prev == vol) return
+                    controller?.showTransient(VolumeContent(vol.toFloat() / max, vol == 0))
+                }
+                NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED -> {
+                    val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                    val on = nm.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL
+                    if (on != lastFocus) {
+                        lastFocus = on
+                        controller?.showTransient(FocusContent(on))
+                    }
+                }
+                Intent.ACTION_AIRPLANE_MODE_CHANGED -> {
+                    controller?.showTransient(AirplaneContent(intent.getBooleanExtra("state", false)))
+                }
                 Intent.ACTION_SCREEN_OFF -> {
                     screenOff = true
                     locked = true
@@ -511,7 +559,14 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
+            addAction(ACTION_VOLUME)
+            addAction(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED)
+            addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
         }
+        lastFocus = try {
+            (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).currentInterruptionFilter !=
+                NotificationManager.INTERRUPTION_FILTER_ALL
+        } catch (_: Exception) { false }
         if (Build.VERSION.SDK_INT >= 33) {
             registerReceiver(systemReceiver, f, Context.RECEIVER_NOT_EXPORTED)
         } else {
@@ -520,6 +575,10 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     }
 
     companion object {
+        private const val ACTION_VOLUME = "android.media.VOLUME_CHANGED_ACTION"
+        private const val EXTRA_VOLUME_STREAM = "android.media.EXTRA_VOLUME_STREAM_TYPE"
+        private const val EXTRA_VOLUME_VALUE = "android.media.EXTRA_VOLUME_STREAM_VALUE"
+        private const val EXTRA_VOLUME_PREV = "android.media.EXTRA_PREV_VOLUME_STREAM_VALUE"
         private const val ACTION_BATTERY_LEVEL = "android.bluetooth.device.action.BATTERY_LEVEL_CHANGED"
         private const val EXTRA_BATTERY_LEVEL = "android.bluetooth.device.extra.BATTERY_LEVEL"
     }

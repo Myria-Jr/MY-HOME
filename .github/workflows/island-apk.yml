@@ -1,4 +1,4 @@
-name: Island APK bauen
+name: Atoll APK bauen
 
 on:
   push:
@@ -30,21 +30,21 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk Island.apk
+          cp app/build/outputs/apk/release/app-release.apk Atoll.apk
 
       - name: APK als Artifact hochladen
         uses: actions/upload-artifact@v4
         with:
-          name: Island-APK
-          path: island-android/Island.apk
+          name: Atoll-APK
+          path: island-android/Atoll.apk
 
       - name: Release mit APK erstellen
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: island-v1.0.${{ github.run_number }}
-          name: Island 1.0.${{ github.run_number }}
+          tag_name: atoll-v3.0.${{ github.run_number }}
+          name: Atoll 3.0.${{ github.run_number }}
           target_commitish: ${{ github.sha }}
-          files: island-android/Island.apk
+          files: island-android/Atoll.apk
           body: |
-            📱 **Island.apk** unten herunterladen → auf dem Handy öffnen → installieren.
+            📱 **Atoll.apk** unten herunterladen → auf dem Handy öffnen → installieren.
             Danach in der App: Bedienungshilfe + Mitteilungszugriff einschalten.

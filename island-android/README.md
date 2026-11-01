@@ -1,27 +1,29 @@
-# Island 🏝️ – Dynamic Island für Android
+# Atoll 🏝️ – Dynamic Island für Android
 
-Native Android-App (Kotlin, keine Libraries) mit einer Dynamic Island im Apple-Stil.
+Native Android-App (Kotlin, ohne Libraries). Eine Dynamic Island in **jedem Design**:
+Apple, Android (Material You), One UI, Nothing – oder komplett Custom.
 
-## Features
-**Live-Aktivitäten (wie iPhone)**
-- 🎵 Musik: Album-Cover mit Pop-Animation, Wellenform in Cover-Farbe, Glow, großer Player mit Spulen, ⏮ ⏯ ⏭, App-Icon
-- 📞 Anrufe: Annehmen / Ablehnen direkt in der Island, laufendes Gespräch mit Dauer + Auflegen
-- ⏱ Timer, Stoppuhr, Sprachaufnahmen (Live-Countdown)
-- 🧭 Navigation (Google Maps, Waze, OsmAnd …)
-- ⬆️ Uploads & Downloads mit Fortschrittsring + Häkchen wenn fertig
-- ⚡ Laden mit Animation (Akku füllt sich, Prozent zählen hoch, grüne Welle), Akku-schwach-Warnung
-- 💬 Jede Mitteilung, runterziehen = ganzer Text + Aktions-Buttons
-- 🎧 Kopfhörer mit Akkustand · 🔓 Entsperr-Animation · 🔕 Lautlos/Klingeln
-- 🟢🟠🔵 Kamera-, Mikrofon- und Standort-Punkte
-- Zwei Aktivitäten gleichzeitig → zweite als Bubble (antippen tauscht)
+## Designs
+| Design | Island | Einstellungs-App |
+|---|---|---|
+| **Apple** | Schwarz, Cover-Glow, federnde Animation | iOS-Einstellungen |
+| **Android** | Material-You-Fläche, Wellen-Fortschritt, gefüllter Play-Button | Material 3 |
+| **One UI** | Graphit mit Rand, blauer Akzent, runder Play-Button | One UI |
+| **Nothing** | Umriss, Punkt-Wellenform, Mono-Schrift, rot | Nothing OS |
+| **Custom** | alles frei | frei wählbar |
 
-**Einstellungen im iOS-Stil** mit Unterseiten: Erscheinungsbild (Schwarz / Liquid Glass / Farbig, Akzentfarbe, Glow, Schrift),
-Größe & Position, Animation (Bounce, Tempo, Bewegung reduzieren), Live-Aktivitäten, Musik, Mitteilungen,
-App-Auswahl mit Suche, Gesten & Haptik, Datenschutz-Anzeigen, Berechtigungen, Fehlerbericht.
+**Liquid Glass** mit Reglern für Milchigkeit, Glanz, Tönung, Kanten-Stärke und Farbsaum.
+
+## Live-Aktivitäten
+🎵 Musik (Cover-Pop, Spulen, 3 Wellenform-Stile) · 📞 Anrufe annehmen/ablehnen · ⏱ Timer & Stoppuhr ·
+🧭 Navigation · ⬆️ Uploads/Downloads · ⚡ Laden mit Animation · 🔦 Taschenlampe (antippen = aus) ·
+🔊 Lautstärke · 🌙 Fokus · ✈️ Flugmodus · 🎧 Kopfhörer + Akku · 🔓 Entsperren · 🔕 Lautlos ·
+💬 jede Mitteilung mit Aktionen · 🟢🟠🔵 Kamera/Mikro/Standort-Punkte · Uhrzeit/Akku in der leeren Pille ·
+zwei Aktivitäten gleichzeitig als Bubble.
 
 ## Installieren
-1. Unter **Releases** (oder Actions → Artifact) `Island.apk` laden und installieren.
-2. App öffnen → **Bedienungshilfe** einschalten (zeichnet die Island über der Statusleiste).
+1. Unter **Releases** `Atoll.apk` laden und installieren (über ältere „Island“-Versionen drüber).
+2. App öffnen → **Bedienungshilfe** einschalten.
    - Android 13+: ausgegraut? → App-Info → ⋮ → „Eingeschränkte Einstellungen zulassen“.
 3. **Mitteilungen & Musik** einschalten.
 

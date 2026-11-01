@@ -308,6 +308,93 @@ object Icons {
         p.strokeCap = oldCap
     }
 
+    /** Lautsprecher; waves = 0..3 Schallbögen, muted = durchgestrichen */
+    fun speaker(c: Canvas, cx: Float, cy: Float, s: Float, waves: Int, muted: Boolean, p: Paint) {
+        val x = cx - s / 2
+        path.reset()
+        path.moveTo(x + s * 0.08f, cy - s * 0.14f)
+        path.lineTo(x + s * 0.24f, cy - s * 0.14f)
+        path.lineTo(x + s * 0.48f, cy - s * 0.36f)
+        path.lineTo(x + s * 0.48f, cy + s * 0.36f)
+        path.lineTo(x + s * 0.24f, cy + s * 0.14f)
+        path.lineTo(x + s * 0.08f, cy + s * 0.14f)
+        path.close()
+        roundJoin(p) { c.drawPath(path, p) }
+        val oldStyle = p.style
+        val oldW = p.strokeWidth
+        val oldCap = p.strokeCap
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = s * 0.08f
+        p.strokeCap = Paint.Cap.ROUND
+        if (muted) {
+            c.drawLine(x + s * 0.62f, cy - s * 0.14f, x + s * 0.9f, cy + s * 0.14f, p)
+            c.drawLine(x + s * 0.9f, cy - s * 0.14f, x + s * 0.62f, cy + s * 0.14f, p)
+        } else {
+            for (i in 1..waves.coerceIn(0, 3)) {
+                val r = s * (0.1f + 0.13f * i)
+                rect.set(x + s * 0.48f - r, cy - r, x + s * 0.48f + r, cy + r)
+                c.drawArc(rect, -45f, 90f, false, p)
+            }
+        }
+        p.style = oldStyle
+        p.strokeWidth = oldW
+        p.strokeCap = oldCap
+    }
+
+    /** Mond (Nicht stören / Fokus) */
+    fun moon(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        val a = Path().apply { addCircle(cx, cy, s * 0.42f, Path.Direction.CW) }
+        val b = Path().apply { addCircle(cx + s * 0.24f, cy - s * 0.2f, s * 0.36f, Path.Direction.CW) }
+        a.op(b, Path.Op.DIFFERENCE)
+        c.drawPath(a, p)
+    }
+
+    fun airplane(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        c.save()
+        c.rotate(45f, cx, cy)
+        val x = cx - s / 2
+        val y = cy - s / 2
+        path.reset()
+        path.moveTo(x + s * 0.5f, y + s * 0.02f)
+        path.cubicTo(x + s * 0.56f, y + s * 0.02f, x + s * 0.57f, y + s * 0.12f, x + s * 0.57f, y + s * 0.2f)
+        path.lineTo(x + s * 0.57f, y + s * 0.38f)
+        path.lineTo(x + s * 0.96f, y + s * 0.6f)
+        path.lineTo(x + s * 0.96f, y + s * 0.7f)
+        path.lineTo(x + s * 0.57f, y + s * 0.58f)
+        path.lineTo(x + s * 0.57f, y + s * 0.8f)
+        path.lineTo(x + s * 0.7f, y + s * 0.9f)
+        path.lineTo(x + s * 0.7f, y + s * 0.97f)
+        path.lineTo(x + s * 0.5f, y + s * 0.92f)
+        path.lineTo(x + s * 0.3f, y + s * 0.97f)
+        path.lineTo(x + s * 0.3f, y + s * 0.9f)
+        path.lineTo(x + s * 0.43f, y + s * 0.8f)
+        path.lineTo(x + s * 0.43f, y + s * 0.58f)
+        path.lineTo(x + s * 0.04f, y + s * 0.7f)
+        path.lineTo(x + s * 0.04f, y + s * 0.6f)
+        path.lineTo(x + s * 0.43f, y + s * 0.38f)
+        path.lineTo(x + s * 0.43f, y + s * 0.2f)
+        path.cubicTo(x + s * 0.43f, y + s * 0.12f, x + s * 0.44f, y + s * 0.02f, x + s * 0.5f, y + s * 0.02f)
+        path.close()
+        c.drawPath(path, p)
+        c.restore()
+    }
+
+    fun flashlight(c: Canvas, cx: Float, cy: Float, s: Float, p: Paint) {
+        val x = cx - s / 2
+        val y = cy - s / 2
+        path.reset()
+        path.moveTo(x + s * 0.26f, y + s * 0.06f)
+        path.lineTo(x + s * 0.74f, y + s * 0.06f)
+        path.lineTo(x + s * 0.74f, y + s * 0.2f)
+        path.lineTo(x + s * 0.62f, y + s * 0.4f)
+        path.lineTo(x + s * 0.62f, y + s * 0.94f)
+        path.lineTo(x + s * 0.38f, y + s * 0.94f)
+        path.lineTo(x + s * 0.38f, y + s * 0.4f)
+        path.lineTo(x + s * 0.26f, y + s * 0.2f)
+        path.close()
+        roundJoin(p) { c.drawPath(path, p) }
+    }
+
     private inline fun roundJoin(p: Paint, block: () -> Unit) {
         val oldJoin = p.strokeJoin
         val oldStyle = p.style

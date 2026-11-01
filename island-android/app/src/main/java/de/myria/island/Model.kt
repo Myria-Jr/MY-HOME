@@ -147,6 +147,31 @@ sealed class Content {
     }
 }
 
+/** Lautstärke geändert (0..1) */
+class VolumeContent(val level: Float, val muted: Boolean) : Content() {
+    override val key get() = "volume"
+    override val expandable get() = false
+}
+
+/** Taschenlampe an – Antippen schaltet sie aus */
+class TorchContent(val off: (() -> Unit)?) : Content() {
+    override val key get() = "torch"
+    override val priority get() = 40
+    override val expandable get() = false
+}
+
+/** Nicht stören / Fokus */
+class FocusContent(val on: Boolean) : Content() {
+    override val key get() = "focus"
+    override val expandable get() = false
+}
+
+/** Flugmodus */
+class AirplaneContent(val on: Boolean) : Content() {
+    override val key get() = "airplane"
+    override val expandable get() = false
+}
+
 /** Schloss-Animation beim Entsperren (wie Face ID) */
 class UnlockContent : Content() {
     override val key get() = "unlock"

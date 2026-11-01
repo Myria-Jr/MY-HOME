@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themen-Icon (Android 13+) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M38,36h32a18,18 0 0 1 0,36h-32a18,18 0 0 1 0,-36z"
+        android:strokeWidth="4"
+        android:strokeColor="#FFFFFFFF"
+        android:fillColor="#00000000" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M41,45h26a9,9 0 0 1 0,18h-26a9,9 0 0 1 0,-18z" />
+</vector>
