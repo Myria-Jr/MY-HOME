@@ -293,7 +293,7 @@ class HomeActivity : Activity() {
                 background = GradientDrawable().apply {
                     cornerRadius = dp(22f)
                     setColor(if (prefs.darkText) 0x1AFFFFFF else 0x24FFFFFF)
-                    setStroke(dp(1f), if (prefs.darkText) 0x22111114 else 0x33FFFFFF)
+                    setStroke(dpi(1f), if (prefs.darkText) 0x22111114 else 0x33FFFFFF)
                 }
                 isClickable = true
                 isFocusable = true
