@@ -812,7 +812,13 @@ class GlyphIcon(ctx: Context, private val color: Int, private val glyph: Glyph, 
 @SuppressLint("ViewConstructor")
 class DesignTile(ctx: Context, private val pal: Palette, private val design: Int, private val title: String) : View(ctx) {
     var chosen = false
-        set(v) { field = v; invalidate() }
+        set(v) {
+            if (field == v) return
+            field = v
+            animate().scaleX(if (v) 1.025f else 1f).scaleY(if (v) 1.025f else 1f)
+                .setDuration(180).setInterpolator(android.view.animation.OvershootInterpolator(0.65f)).start()
+            invalidate()
+        }
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val r = RectF()
     private val ar = RectF()
@@ -935,8 +941,8 @@ class GlassDrawable(private val pal: Palette, private val radius: Float, private
         r.set(b)
         val rad = radius.coerceAtMost(r.height() / 2)
         // Tönung (bei „strong“ etwas Frost für Lesbarkeit, wie der Menu-Tier)
-        val topA = if (strong) (if (pal.dark) 0x2E else 0x8C) else (if (pal.dark) 0x0F else 0x59)
-        val botA = if (strong) (if (pal.dark) 0x24 else 0x73) else (if (pal.dark) 0x0F else 0x40)
+        val topA = if (strong) (if (pal.dark) 0x42 else 0x96) else (if (pal.dark) 0x24 else 0x59)
+        val botA = if (strong) (if (pal.dark) 0x34 else 0x7A) else (if (pal.dark) 0x1A else 0x40)
         p.style = Paint.Style.FILL
         p.shader = LinearGradient(0f, r.top, 0f, r.bottom,
             Color.argb(topA, 255, 255, 255), Color.argb(botA, 179, 179, 179), Shader.TileMode.CLAMP)

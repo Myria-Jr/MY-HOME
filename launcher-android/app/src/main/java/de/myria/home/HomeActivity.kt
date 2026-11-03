@@ -1417,11 +1417,11 @@ class Pager(ctx: Context, private val effect: Int, private val motionScale: Int,
 
     fun toPage(i: Int) {
         current = i.coerceIn(0, max(0, pageCount - 1))
-        smoothScrollTo(current * pageWidth(), 0)
+        animatePageScrollTo(current * pageWidth(), 0)
         onPage(current)
     }
 
-    override fun smoothScrollTo(x: Int, y: Int) {
+    private fun animatePageScrollTo(x: Int, y: Int) {
         val target = x.coerceIn(0, max(0, (pageCount - 1) * pageWidth()))
         pageAnimator?.cancel()
         if (motionScale == 0 || target == scrollX) {

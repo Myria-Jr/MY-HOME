@@ -67,6 +67,12 @@ class MainActivity : Activity() {
 
     private fun dp(v: Float) = (v * resources.displayMetrics.density)
     private fun dpi(v: Float) = dp(v).toInt()
+    private val reduceMotion get() = prefs.getBoolean(Prefs.REDUCE_MOTION, D.reduceMotion)
+    private fun motionFactor(): Float = if (reduceMotion) 0f else
+        1.3f - 0.75f * (prefs.getInt(Prefs.SPEED, D.speed).coerceIn(0, 100) / 100f)
+    private fun motionDuration(base: Long): Long = if (reduceMotion) 0L else
+        (base * motionFactor()).toLong().coerceAtLeast(80L)
+    private fun motionDelay(base: Long): Long = (base * motionFactor()).toLong().coerceAtLeast(0L)
 
     // ==================================================================
     // Lebenszyklus
@@ -233,32 +239,50 @@ class MainActivity : Activity() {
             prev?.visibility = View.INVISIBLE
             return
         }
-        staggerIn(page)
         val w = host.width.toFloat().takeIf { it > 0 } ?: resources.displayMetrics.widthPixels.toFloat()
-        if (pal.isNothing) {
-            page.alpha = 0f
-            page.animate().alpha(1f).setDuration(220).withEndAction { prev?.visibility = View.INVISIBLE }.start()
+        val duration = motionDuration(when {
+            pal.isNothing -> 220L
+            pal.isGlass -> 440L
+            pal.isAndroid -> 300L
+            else -> 420L
+        })
+        if (duration == 0L) {
+            page.alpha = 1f
+            page.translationX = 0f
+            page.scaleX = 1f
+            page.scaleY = 1f
+            prev?.visibility = View.INVISIBLE
             return
         }
-        page.translationX = if (pal.isAndroid) w * 0.25f else w
-        if (pal.isAndroid) page.alpha = 0f
-        page.animate().translationX(0f).alpha(1f).setDuration(if (pal.isAndroid) 300 else 420).setInterpolator(ease)
+        staggerIn(page)
+        if (pal.isNothing) {
+            page.alpha = 0f
+            page.animate().alpha(1f).setDuration(duration).withEndAction { prev?.visibility = View.INVISIBLE }.start()
+            return
+        }
+        val glass = pal.isGlass
+        page.translationX = if (pal.isAndroid) w * 0.25f else if (glass) w * 0.14f else w
+        if (pal.isAndroid || glass) page.alpha = 0f
+        if (glass) { page.scaleX = 0.97f; page.scaleY = 0.97f }
+        val enter = page.animate().translationX(0f).alpha(1f).scaleX(1f).scaleY(1f)
+            .setDuration(duration)
             .withEndAction { prev?.visibility = View.INVISIBLE } // Seiten dahinter nicht mehr zeichnen (spart Akku)
-            .start()
-        prev?.animate()?.translationX(-w * (if (pal.isAndroid) 0.1f else 0.3f))?.alpha(if (pal.isAndroid) 0f else 0.6f)
-            ?.setDuration(420)?.setInterpolator(ease)?.start()
+        enter.setInterpolator(if (glass) android.view.animation.OvershootInterpolator(0.35f) else ease).start()
+        prev?.animate()?.translationX(-w * (if (pal.isAndroid) 0.1f else if (glass) 0.06f else 0.3f))
+            ?.alpha(if (pal.isAndroid || glass) 0f else 0.6f)
+            ?.setDuration(duration)?.setInterpolator(ease)?.start()
     }
 
     /** Inhalte gleiten nacheinander hoch (Material, One UI, Glas) – iOS macht das nicht. */
     private fun staggerIn(page: View) {
-        if (pal.isApple || pal.isNothing) return
+        if (pal.isApple || pal.isNothing || reduceMotion) return
         val content = ((page as? FrameLayout)?.getChildAt(0) as? ScrollView)?.getChildAt(0) as? LinearLayout ?: return
         for (i in 0 until minOf(content.childCount, 10)) {
             val v = content.getChildAt(i)
             v.alpha = 0f
             v.translationY = dp(18f)
-            v.animate().alpha(1f).translationY(0f).setStartDelay(40L + i * 35L).setDuration(380)
-                .setInterpolator(ease).start()
+            v.animate().alpha(1f).translationY(0f).setStartDelay(motionDelay(28L + i * 26L))
+                .setDuration(motionDuration(340L)).setInterpolator(ease).start()
         }
     }
 
@@ -274,14 +298,24 @@ class MainActivity : Activity() {
             host.removeView(top)
             (top.getTag(TAG_PREVIEW) as? IslandController)?.let { previews.remove(it); it.release() }
         }
-        if (pal.isNothing) {
-            top.animate().alpha(0f).setDuration(180).withEndAction(end).start()
+        if (reduceMotion) {
+            top.animate().cancel()
+            prev.animate().cancel()
+            prev.translationX = 0f
+            prev.alpha = 1f
+            end.run()
+        } else if (pal.isNothing) {
+            top.animate().alpha(0f).setDuration(motionDuration(180L)).withEndAction(end).start()
             prev.translationX = 0f
             prev.alpha = 1f
         } else {
-            top.animate().translationX(if (pal.isAndroid) w * 0.25f else w).alpha(if (pal.isAndroid) 0f else 1f)
-                .setDuration(320).setInterpolator(ease).withEndAction(end).start()
-            prev.animate().translationX(0f).alpha(1f).setDuration(320).setInterpolator(ease).start()
+            val duration = motionDuration(if (pal.isGlass) 400L else 320L)
+            top.animate().translationX(if (pal.isAndroid) w * 0.25f else if (pal.isGlass) w * 0.14f else w)
+                .alpha(if (pal.isAndroid || pal.isGlass) 0f else 1f)
+                .scaleX(if (pal.isGlass) 0.97f else 1f).scaleY(if (pal.isGlass) 0.97f else 1f)
+                .setDuration(duration).setInterpolator(ease).withEndAction(end).start()
+            prev.animate().translationX(0f).alpha(1f).scaleX(1f).scaleY(1f)
+                .setDuration(duration).setInterpolator(ease).start()
         }
         refreshers.forEach { it() }
         return true
