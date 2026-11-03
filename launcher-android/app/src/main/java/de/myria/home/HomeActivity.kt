@@ -64,6 +64,8 @@ class HomeActivity : Activity() {
     private lateinit var doneButton: TextView
     private var clockView: ClockView? = null
     private var todayClock: ClockView? = null
+    private var minimalClock: TextView? = null
+    private var minimalDate: TextView? = null
     private val main = Handler(Looper.getMainLooper())
     private val ease = PathInterpolator(0.2f, 0.9f, 0.1f, 1f)
     private var drawerOpen = false
@@ -190,6 +192,7 @@ class HomeActivity : Activity() {
             fillHome()
         }
         clockView?.invalidate(); todayClock?.invalidate()
+        updateMinimalClock()
     }
 
     override fun onPause() {
@@ -234,6 +237,7 @@ class HomeActivity : Activity() {
                 ClockView.charging = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
             }
             clockView?.invalidate(); todayClock?.invalidate()
+            updateMinimalClock()
         }
     }
 
@@ -279,11 +283,11 @@ class HomeActivity : Activity() {
         home.addView(pager, LinearLayout.LayoutParams(-1, 0, 1f))
 
         dots = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
-        if (look == Look.APPLE && prefs.search) {
+        if (!prefs.minimalMode && look == Look.APPLE && prefs.search) {
             home.addView(searchPill(), LinearLayout.LayoutParams(-2, -2).apply {
                 gravity = Gravity.CENTER_HORIZONTAL; bottomMargin = dpi(12f); topMargin = dpi(4f)
             })
-        } else {
+        } else if (!prefs.minimalMode) {
             home.addView(dots, LinearLayout.LayoutParams(-1, dpi(22f)))
         }
 
@@ -294,10 +298,10 @@ class HomeActivity : Activity() {
             val pv = if (background != null) dpi(12f) else dpi(4f)
             setPadding(dpi(8f), pv, dpi(8f), pv)
         }
-        if (prefs.dock) home.addView(dockRow, LinearLayout.LayoutParams(-1, -2).apply {
+        if (prefs.dock && !prefs.minimalMode) home.addView(dockRow, LinearLayout.LayoutParams(-1, -2).apply {
             leftMargin = dpi(12f); rightMargin = dpi(12f)
         })
-        if (prefs.search && look in listOf(Look.ANDROID, Look.COLOROS, Look.LIQUID_GLASS)) {
+        if (!prefs.minimalMode && prefs.search && look in listOf(Look.ANDROID, Look.COLOROS, Look.LIQUID_GLASS)) {
             home.addView(searchPill(), LinearLayout.LayoutParams(-1, dpi(52f)).apply {
                 topMargin = dpi(12f); leftMargin = dpi(16f); rightMargin = dpi(16f)
             })
@@ -958,6 +962,102 @@ class HomeActivity : Activity() {
         return g
     }
 
+    private fun fillMinimalHome(favorites: List<Any>) {
+        homeIcons.clear()
+        clockView = null
+        todayClock = null
+        pager.home = 0
+        val apps: List<Any> = (favorites.ifEmpty { visibleApps().take(12) }).take(12)
+        val page = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dpi(28f), dpi(22f), dpi(28f), dpi(18f))
+        }
+
+        minimalClock = TextView(this).apply {
+            textSize = 64f
+            typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
+            setTextColor(textColor)
+            includeFontPadding = false
+            gravity = Gravity.START
+        }
+        page.addView(minimalClock, LinearLayout.LayoutParams(-1, -2))
+        minimalDate = TextView(this).apply {
+            textSize = 15f
+            typeface = Looks.font(this@HomeActivity, look, 500)
+            setTextColor(if (prefs.darkText) 0xAA111114.toInt() else 0xCCFFFFFF.toInt())
+            setPadding(dpi(2f), dpi(2f), 0, dpi(24f))
+        }
+        page.addView(minimalDate, LinearLayout.LayoutParams(-1, -2))
+        val separator = if (prefs.darkText) 0x22111114 else 0x33FFFFFF
+        apps.forEachIndexed { index, entry ->
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                isClickable = true
+                isFocusable = true
+                val selectable = android.util.TypedValue()
+                theme.resolveAttribute(android.R.attr.selectableItemBackground, selectable, true)
+                background = if (selectable.resourceId != 0) getDrawable(selectable.resourceId) else null
+                minimumHeight = dpi(54f)
+                contentDescription = when (entry) {
+                    is AppInfo -> prefs.label(entry.key, entry.label)
+                    else -> prefs.folderName(entry as String)
+                }
+            }
+            val title = TextView(this).apply {
+                text = when (entry) {
+                    is AppInfo -> prefs.label(entry.key, entry.label)
+                    else -> prefs.folderName(entry as String)
+                }
+                textSize = 19f
+                typeface = Looks.font(this@HomeActivity, look, 500)
+                setTextColor(textColor)
+                maxLines = 1
+                ellipsize = android.text.TextUtils.TruncateAt.END
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            row.addView(title, LinearLayout.LayoutParams(0, -1, 1f))
+            row.setOnClickListener {
+                when (entry) {
+                    is AppInfo -> Apps.launch(this, entry, row)
+                    else -> openFolder(entry as String, row)
+                }
+            }
+            row.setOnLongClickListener {
+                it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                if (entry is AppInfo) appMenu(it, entry) else homeMenu(it)
+                true
+            }
+            page.addView(row, LinearLayout.LayoutParams(-1, dpi(54f)))
+            if (index < apps.lastIndex) page.addView(View(this).apply { setBackgroundColor(separator) },
+                LinearLayout.LayoutParams(-1, dpi(1f)))
+        }
+        val scroll = ScrollView(this).apply {
+            isFillViewport = true
+            overScrollMode = View.OVER_SCROLL_NEVER
+            addView(page, ScrollView.LayoutParams(-1, -2))
+        }
+        scroll.setOnLongClickListener {
+            homeMenu(it)
+            true
+        }
+        scroll.setOnClickListener { if (editMode) setEditMode(false) }
+        scroll.setOnTouchListener { _, e -> doubleTapDetector.onTouchEvent(e); false }
+        pager.setPages(listOf(scroll))
+        updateDots(0)
+        dockRow.removeAllViews()
+        updateMinimalClock()
+    }
+
+    private fun updateMinimalClock() {
+        val now = Date()
+        val time = SimpleDateFormat("HH:mm", Locale.GERMANY).format(now)
+        val date = SimpleDateFormat("EEEE, d. MMMM", Locale.GERMANY).format(now)
+            .replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.GERMANY) else it.toString() }
+        if (minimalClock?.text != time) minimalClock?.text = time
+        if (minimalDate?.text != date) minimalDate?.text = date
+    }
+
     private fun fillHome() {
         if (!::pager.isInitialized) return
         homeIcons.clear()
@@ -969,6 +1069,12 @@ class HomeActivity : Activity() {
             if (k.startsWith("folder:")) k.removePrefix("folder:").takeIf { prefs.folderApps(it).isNotEmpty() }
             else Apps.byKey(k)?.takeIf { it.key !in hidden }
         }
+        if (prefs.minimalMode) {
+            fillMinimalHome(favApps)
+            return
+        }
+        minimalClock = null
+        minimalDate = null
 
         // Seite 1: Widget + Favoriten
         val first = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }

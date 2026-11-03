@@ -149,6 +149,14 @@ class SettingsActivity : Activity() {
             setPadding(dpi(4f), dpi(2f), 0, dpi(14f))
         })
         col.addView(preview())
+        header(col, "Startbildschirm")
+        col.addView(card(listOf(
+            labeled("Modus", chips(listOf("Minimalistisch", "Normal"), if (prefs.minimalMode) 0 else 1) {
+                prefs.minimalMode = it == 0
+                changed()
+            }),
+        )))
+        hint(col, "Minimalistisch zeigt Uhrzeit und deine Favoriten als schlichte Textliste. Nach oben wischen öffnet weiter die App-Übersicht.")
         header(col, "Schnellstart")
         col.addView(card(listOf(
             action("Apple-Look anwenden", 0xFF55555A.toInt()) { applyLookPreset(Look.APPLE) },
@@ -517,6 +525,39 @@ class SettingsActivity : Activity() {
         previewRow.removeAllViews()
         val apps = (prefs.dockApps + prefs.favorites).mapNotNull { Apps.byKey(it) }.distinctBy { it.key }.take(5)
             .ifEmpty { Apps.all.take(5) }
+        if (prefs.minimalMode) {
+            previewRow.orientation = LinearLayout.VERTICAL
+            previewRow.gravity = Gravity.CENTER_VERTICAL
+            previewRow.setPadding(dpi(22f), dpi(12f), dpi(22f), dpi(12f))
+            previewRow.addView(TextView(this).apply {
+                text = "9:41"
+                textSize = 34f
+                typeface = android.graphics.Typeface.create("sans-serif-light", android.graphics.Typeface.NORMAL)
+                setTextColor(Color.WHITE)
+                includeFontPadding = false
+            })
+            previewRow.addView(TextView(this).apply {
+                text = "Dienstag, 3. November"
+                textSize = 11f
+                setTextColor(0xCCFFFFFF.toInt())
+                setPadding(0, 0, 0, dpi(8f))
+            })
+            apps.take(4).forEach { app ->
+                previewRow.addView(TextView(this).apply {
+                    text = prefs.label(app.key, app.label)
+                    textSize = 13f
+                    typeface = Looks.font(this@SettingsActivity, prefs.look, 500)
+                    setTextColor(Color.WHITE)
+                    gravity = Gravity.CENTER_VERTICAL
+                    maxLines = 1
+                    ellipsize = android.text.TextUtils.TruncateAt.END
+                }, LinearLayout.LayoutParams(-1, dpi(26f)))
+            }
+            return
+        }
+        previewRow.orientation = LinearLayout.HORIZONTAL
+        previewRow.gravity = Gravity.CENTER
+        previewRow.setPadding(dpi(10f), dpi(22f), dpi(10f), dpi(22f))
         if (apps.isEmpty()) {
             previewRow.addView(TextView(this).apply { text = "Lädt Vorschau …"; setTextColor(Color.WHITE) })
             return

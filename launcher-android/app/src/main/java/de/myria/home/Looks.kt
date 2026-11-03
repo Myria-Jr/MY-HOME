@@ -106,6 +106,9 @@ class HomePrefs(ctx: Context) {
     var clock: Boolean
         get() = b("clock", true)
         set(v) = pb("clock", v)
+    var minimalMode: Boolean
+        get() = b("minimal_mode", false)
+        set(v) = pb("minimal_mode", v)
     /** -1 = Widget passend zum Look, sonst Look-Index */
     var widgetStyle: Int
         get() = i("widget_style", -1)
