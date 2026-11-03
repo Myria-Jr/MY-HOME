@@ -124,11 +124,10 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         try {
             wm.addView(v, lp)
             wm.addView(tv, tlp)
-        } catch (e: Exception) {
-            try { wm.removeView(v) } catch (_: Exception) {}
-            view = null
-            touchView = null
-            return
+        } catch (_: Exception) {
+            try { if (v.parent != null) wm.removeView(v) } catch (_: Exception) {}
+            try { if (tv.parent != null) wm.removeView(tv) } catch (_: Exception) {}
+            handler.postDelayed({ restoreOverlay() }, 350L)
         }
 
         Prefs.sp(this).registerOnSharedPreferenceChangeListener(this)
