@@ -149,9 +149,11 @@ class SettingsActivity : Activity() {
         col.addView(preview())
         header(col, "Schnellstart")
         col.addView(card(listOf(
-            action("Pixel-/Lawnchair-Layout anwenden", 0xFF6750A4.toInt()) { applyPixelPreset() },
+            action("Apple-Look anwenden", 0xFF55555A.toInt()) { applyLookPreset(Look.APPLE) },
+            action("Pixel-/Lawnchair-Look anwenden", 0xFF6750A4.toInt()) { applyLookPreset(Look.ANDROID) },
+            action("Nothing-Look anwenden", 0xFF202124.toInt()) { applyLookPreset(Look.NOTHING) },
         )))
-        hint(col, "Rundes App-Raster, System-Icons, Suchleiste und klare App-Übersicht. Alle Werte bleiben einzeln anpassbar.")
+        hint(col, "Jedes Preset richtet Raster, Icons, Dock, Suche und Gesten passend ein. Danach kannst du jede Option einzeln ändern.")
 
         if (!isDefaultHome()) col.addView(card(listOf(
             action("Als Standard-Startbildschirm festlegen", accent) {
@@ -198,36 +200,75 @@ class SettingsActivity : Activity() {
         hint(col, "Tipps: App gedrückt halten → Shortcuts, Ordner, Umbenennen · Nach links wischen → Heute-Seite mit Widgets · Nach oben wischen → alle Apps")
     }
 
-    private fun applyPixelPreset() {
-        prefs.look = Look.ANDROID
-        prefs.shape = Shape.SYSTEM.ordinal
+    private fun applyLookPreset(target: Look) {
+        prefs.look = target
         prefs.iconStyle = IconStyle.STANDARD
-        prefs.monoIcons = false
-        prefs.columns = 5
-        prefs.iconDp = 52
         prefs.labels = true
         prefs.labelSize = 12
         prefs.labelFont = -1
         prefs.dock = true
-        prefs.dockCount = 5
-        prefs.dockIconDp = 48
-        prefs.dockLabels = false
-        prefs.dockBackground = true
         prefs.search = true
         prefs.clock = true
         prefs.todayPage = true
-        prefs.allOnHome = false
-        prefs.pageEffect = 0
-        prefs.drawerColumns = 5
-        prefs.drawerIconDp = 48
         prefs.drawerList = false
         prefs.drawerSort = 0
         prefs.drawerOpacity = 100
         prefs.doubleTap = 1
         prefs.swipeUpAction = 4
-        prefs.swipeDownSearch = false
+        prefs.pageEffect = 0
+
+        when (target) {
+            Look.APPLE -> {
+                prefs.shape = Shape.SQUIRCLE.ordinal
+                prefs.monoIcons = false
+                prefs.columns = 4
+                prefs.iconDp = 58
+                prefs.allOnHome = true
+                prefs.dockCount = 4
+                prefs.dockIconDp = 52
+                prefs.dockLabels = false
+                prefs.dockBackground = true
+                prefs.drawerColumns = 4
+                prefs.drawerIconDp = 54
+                prefs.swipeDownSearch = true
+            }
+            Look.NOTHING -> {
+                prefs.shape = Shape.CIRCLE.ordinal
+                prefs.monoIcons = true
+                prefs.columns = 4
+                prefs.iconDp = 52
+                prefs.allOnHome = false
+                prefs.dockCount = 5
+                prefs.dockIconDp = 48
+                prefs.dockLabels = false
+                prefs.dockBackground = false
+                prefs.drawerColumns = 4
+                prefs.drawerIconDp = 50
+                prefs.swipeDownSearch = false
+            }
+            else -> {
+                prefs.shape = Shape.SYSTEM.ordinal
+                prefs.monoIcons = false
+                prefs.columns = 5
+                prefs.iconDp = 52
+                prefs.allOnHome = false
+                prefs.dockCount = 5
+                prefs.dockIconDp = 48
+                prefs.dockLabels = false
+                prefs.dockBackground = true
+                prefs.drawerColumns = 5
+                prefs.drawerIconDp = 48
+                prefs.swipeDownSearch = false
+            }
+        }
+
         Looks.clearCache()
-        Toast.makeText(this, "Pixel-Startbildschirm aktiviert", Toast.LENGTH_SHORT).show()
+        val styleName = when (target) {
+            Look.APPLE -> "Apple"
+            Look.NOTHING -> "Nothing"
+            else -> "Pixel-/Lawnchair"
+        }
+        Toast.makeText(this, "$styleName-Layout aktiviert", Toast.LENGTH_SHORT).show()
         open(null, animate = false)
     }
 
