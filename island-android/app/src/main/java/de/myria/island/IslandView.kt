@@ -219,6 +219,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     private var torchDragging = false
     private var torchDragLevel = 1f
     private var torchStartLevel = 1f
+    private var torchActivationStartNanos = 0L
     private var pendingTap: Runnable? = null
     private val longPress = Runnable {
         if (pressed && !swiped && !seeking) {
@@ -276,6 +277,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
     fun show(m: Mode, c: Content?, second: Content? = null) {
         val kindChanged = target?.key != c?.key
+        if (c is TorchContent && target !is TorchContent) torchActivationStartNanos = System.nanoTime()
         if (c is Content.Charging) {
             if (target !is Content.Charging || (c.plugged && !(target as Content.Charging).plugged)) {
                 sFill.snap(0f)
@@ -462,7 +464,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is Content.Call -> want(if (c.incoming) 33 else 250)
                 is Content.Progress -> if (c.progress < 0) want(33)
                 is UnlockContent -> if (c === drawn) want(16)
-                is TorchContent -> want(if (mode == Mode.EXPANDED) 16 else 50)
+                is TorchContent -> if (torchActivationProgress() < 1f) want(16)
                 is VolumeContent -> {}
                 is Content.Charging -> if (c.plugged && c === drawn &&
                     System.nanoTime() - chargeStart < 4_500_000_000L) want(33)
@@ -1514,32 +1516,39 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         drawBar(canvas, r - bwid, r, island.centerY(), lvl, Color.WHITE, a, 6 * d, false)
     }
 
+    private fun torchActivationProgress(): Float {
+        if (cfg.reduceMotion || torchActivationStartNanos == 0L) return 1f
+        val elapsed = (System.nanoTime() - torchActivationStartNanos).coerceAtLeast(0L)
+        val t = (elapsed / 480_000_000f).coerceIn(0f, 1f)
+        val inv = 1f - t
+        return 1f - inv * inv * inv
+    }
+
     private fun drawTorch(canvas: Canvas, a: Float) {
         val h = island.height()
         val y = 0xFFFFD60A.toInt()
-        // sanft pulsierendes Glühen hinter dem Symbol
-        val t = System.nanoTime() / 1e9f
-        val glowR = h * (0.42f + 0.06f * sin(t * 3f))
+        val reveal = torchActivationProgress()
+        val glowR = h * (0.28f + 0.22f * reveal)
         p.shader = android.graphics.RadialGradient(leftX(h), island.centerY(), glowR,
-            withAlpha(y, a * 0.45f), withAlpha(y, 0f), Shader.TileMode.CLAMP)
+            withAlpha(y, a * (0.18f + 0.38f * reveal)), withAlpha(y, 0f), Shader.TileMode.CLAMP)
         canvas.drawCircle(leftX(h), island.centerY(), glowR, p)
         p.shader = null
         p.color = withAlpha(y, a)
-        Icons.flashlight(canvas, leftX(h), island.centerY(), h * 0.56f, p)
+        Icons.flashlight(canvas, leftX(h), island.centerY(), h * (0.46f + 0.1f * reveal), p)
         boldPaint.textSize = h * 0.4f * cfg.textScale
         rightText(canvas, "An", boldPaint, y, a)
     }
 
+
     /** Wie iOS: Lichtkegel strahlt aus der Kamera, Breite/Helligkeit folgt dem Regler. */
     private fun drawTorchExpanded(canvas: Canvas, c: TorchContent, a: Float, interactive: Boolean) {
         val lvl = (if (torchDragging) torchDragLevel else c.level).coerceIn(0.05f, 1f)
-        val t = System.nanoTime() / 1e9f
+        val reveal = torchActivationProgress()
+        val beamAlpha = a * (0.18f + 0.82f * reveal)
         val cx = island.centerX()
         val top = island.top + cfg.heightDp * d * 0.5f
         val bottom = island.bottom - 8 * d
-        // sanftes „Atmen“ statt Flackern (wirkte wie Zittern)
-        val flicker = 1f + 0.012f * sin(t * 2.2f)
-        val halfW = (island.width() * (0.16f + 0.3f * lvl)) * flicker
+        val halfW = island.width() * (0.08f + (0.16f + 0.3f * lvl) * reveal)
         val warm = 0xFFFFF4D6.toInt()
 
         // Lichtkegel
@@ -1550,14 +1559,13 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         linePath.quadTo(cx, bottom + 18 * d, cx - halfW, bottom)
         linePath.close()
         p.shader = LinearGradient(0f, top, 0f, bottom,
-            intArrayOf(withAlpha(warm, a * (0.5f + 0.45f * lvl)), withAlpha(warm, a * (0.12f + 0.2f * lvl)), withAlpha(warm, 0f)),
+            intArrayOf(withAlpha(warm, beamAlpha * (0.5f + 0.45f * lvl)), withAlpha(warm, beamAlpha * (0.12f + 0.2f * lvl)), withAlpha(warm, 0f)),
             floatArrayOf(0f, 0.55f, 1f), Shader.TileMode.CLAMP)
         canvas.drawPath(linePath, p)
         // weiche Lichtstrahlen
         for (i in -2..2) {
-            val sway = sin(t * 1.7f + i) * 4 * d
-            val x = cx + i * halfW * 0.38f + sway
-            p.shader = LinearGradient(0f, top, 0f, bottom, withAlpha(Color.WHITE, a * 0.10f * lvl), withAlpha(Color.WHITE, 0f), Shader.TileMode.CLAMP)
+            val x = cx + i * halfW * 0.38f
+            p.shader = LinearGradient(0f, top, 0f, bottom, withAlpha(Color.WHITE, beamAlpha * 0.10f * lvl), withAlpha(Color.WHITE, 0f), Shader.TileMode.CLAMP)
             linePath.reset()
             linePath.moveTo(cx - 2 * d, top)
             linePath.lineTo(cx + 2 * d, top)
@@ -1568,7 +1576,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         }
         // Glühen an der Kamera
         val gr = (22 + 14 * lvl) * d
-        p.shader = android.graphics.RadialGradient(cx, top, gr, withAlpha(Color.WHITE, a * (0.6f + 0.4f * lvl)), withAlpha(warm, 0f), Shader.TileMode.CLAMP)
+        p.shader = android.graphics.RadialGradient(cx, top, gr, withAlpha(Color.WHITE, beamAlpha * (0.6f + 0.4f * lvl)), withAlpha(warm, 0f), Shader.TileMode.CLAMP)
         canvas.drawCircle(cx, top, gr, p)
         p.shader = null
 

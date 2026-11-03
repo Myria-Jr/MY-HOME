@@ -108,6 +108,8 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        val currentPreviewConfig = previewCfg()
+        previews.forEach { it.cfg = currentPreviewConfig }
         refreshers.forEach { it() }
         if (stackNames.lastOrNull() == "geometry") IslandBus.calibrate(true)
     }
@@ -442,6 +444,7 @@ class MainActivity : Activity() {
         IslandConfig.DESIGN_GLASS -> "Liquid Glass"
         IslandConfig.DESIGN_CAPSULE -> "Kapsel"
         IslandConfig.DESIGN_PIXEL -> "Pixel 11"
+        IslandConfig.DESIGN_COLOROS -> "ColorOS"
         else -> "Apple"
     }
 
@@ -638,7 +641,8 @@ class MainActivity : Activity() {
         IslandConfig.DESIGN_ANDROID to "Android",
         IslandConfig.DESIGN_GLASS to "Liquid Glass", IslandConfig.DESIGN_CAPSULE to "Kapsel",
         IslandConfig.DESIGN_ONEUI to "One UI",
-        IslandConfig.DESIGN_NOTHING to "Nothing", IslandConfig.DESIGN_CUSTOM to "Custom",
+        IslandConfig.DESIGN_NOTHING to "Nothing", IslandConfig.DESIGN_COLOROS to "ColorOS",
+        IslandConfig.DESIGN_CUSTOM to "Custom",
     )
 
     private fun designStrip(): View {

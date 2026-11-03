@@ -150,7 +150,7 @@ data class IslandConfig(
     val stiffness: Float get() = 160f + speed / 100f * 560f
     /** Tatsächlicher Symbol-Stil (Apple / Material / One UI / Nothing) */
     val symbols: Int get() = if (iconFamily in 0..3) iconFamily else when (design) {
-        DESIGN_ANDROID, DESIGN_PIXEL, DESIGN_CAPSULE -> Icons.MATERIAL
+        DESIGN_ANDROID, DESIGN_PIXEL, DESIGN_CAPSULE, DESIGN_COLOROS -> Icons.MATERIAL
         DESIGN_ONEUI -> Icons.ONEUI
         DESIGN_NOTHING -> Icons.NOTHING
         else -> Icons.APPLE
@@ -214,6 +214,7 @@ data class IslandConfig(
         const val STYLE_CAPSULE = 6
         const val DESIGN_PIXEL = 7
         const val STYLE_PIXEL = 7
+        const val DESIGN_COLOROS = 8
 
         const val NOTIF_BANNER = 0
         const val NOTIF_COMPACT = 1
@@ -557,6 +558,12 @@ object Prefs {
                     C.WAVE_BARS, C.PROGRESS_LINE, C.CONTROL_PLAIN, Fonts.INTER, C.LOOK_GLASS, true, C.ANIM_APPLE)
                 e.putInt(GLASS_OPACITY, 45).putInt(GLASS_SHINE, 80).putBoolean(GLASS_BORDER, true).putBoolean(GLASS_RAINBOW, true)
             }
+            C.DESIGN_COLOROS -> {
+                look(C.STYLE_TINT, C.ACCENT_CUSTOM, 0xFF36C7A0.toInt(), 34, 100, 24, 58,
+                    C.WAVE_LINE, C.PROGRESS_SQUIGGLE, C.CONTROL_FILLED, C.FONT_GOOGLE, C.LOOK_ANDROID, true, C.ANIM_ANDROID)
+                e.putInt(GLOW_STRENGTH, 34).putInt(GLASS_OPACITY, 36).putInt(GLASS_SHINE, 58)
+                    .putBoolean(GLASS_BORDER, true).putBoolean(GLASS_RAINBOW, false)
+            }
             C.DESIGN_CUSTOM -> {
                 // Eigener Custom-Look: deine gespeicherten Werte – oder beim ersten Mal ein eigener Startlook
                 val snap = sp(c).getString(CUSTOM_SNAPSHOT, null)
@@ -573,8 +580,9 @@ object Prefs {
 
     /** Werte, die einen Look ausmachen (für Custom gemerkt). */
     val LOOK_INT_KEYS = listOf(STYLE, ACCENT_MODE, ACCENT_COLOR, EXPANDED_RADIUS, COMPACT_ROUND, BOUNCE, SPEED,
-        WAVE_STYLE, PROGRESS_STYLE, CONTROL_STYLE, FONT_STYLE, UI_LOOK, ANIM_STYLE)
-    val LOOK_BOOL_KEYS = listOf(GLOW)
+        WAVE_STYLE, PROGRESS_STYLE, CONTROL_STYLE, FONT_STYLE, FONT_SCALE, UI_LOOK, ANIM_STYLE,
+        GLASS_OPACITY, GLASS_SHINE, GLASS_BORDER_WIDTH, GLASS_TINT, GLOW_STRENGTH)
+    val LOOK_BOOL_KEYS = listOf(GLOW, GLASS_BORDER, GLASS_RAINBOW, SHADOW)
 
     /** Merkt sich den aktuellen Look als „Custom“ – nur wenn Custom gerade aktiv ist. */
     fun rememberCustom(c: Context) {

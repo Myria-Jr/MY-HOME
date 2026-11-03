@@ -105,6 +105,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         val tv = object : View(this) {
             @android.annotation.SuppressLint("ClickableViewAccessibility")
             override fun onTouchEvent(e: MotionEvent): Boolean {
+                syncScreenState()
                 val iv = view ?: return false
                 val ev = MotionEvent.obtain(e)
                 ev.offsetLocation((iv.width - width) / 2f, 0f)
@@ -158,7 +159,9 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        if (event == null) return
+        syncScreenState()
+        if (event.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
         val pkg = event.packageName?.toString() ?: return
         if (pkg in ignoredPkgs) return
         controller?.foregroundPkg = pkg
@@ -167,6 +170,41 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
             foregroundHidden = hide
             updateSuppressed()
         }
+    }
+
+    private fun syncForegroundState() {
+        val pkg = try { rootInActiveWindow?.packageName?.toString() } catch (_: Exception) { null } ?: return
+        if (pkg in ignoredPkgs) return
+        controller?.foregroundPkg = pkg
+        val hidden = pkg in cfg.hiddenInApps
+        if (hidden != foregroundHidden) {
+            foregroundHidden = hidden
+            updateSuppressed()
+        }
+    }
+
+    /** Reconciles missed screen broadcasts with the state Android currently reports. */
+    private fun syncScreenState() {
+        val interactive = try {
+            (getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive
+        } catch (_: Exception) {
+            !screenOff
+        }
+        val keyguardLocked = try {
+            (getSystemService(KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
+        } catch (_: Exception) {
+            locked
+        }
+        val nextScreenOff = !interactive
+        val nextLocked = !interactive || keyguardLocked
+        if (nextScreenOff == screenOff && nextLocked == locked) return
+
+        val becameUnlocked = locked && !nextLocked
+        screenOff = nextScreenOff
+        locked = nextLocked
+        if (becameUnlocked) unlockedAt = System.currentTimeMillis()
+        updateSuppressed()
+        if (!locked) applyPrivacy()
     }
 
     /** Einstellungen + Energiesparmodus (spart Akku: keine Wellenform, kein Glow, ruhige Animationen) */
@@ -768,10 +806,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                     updateSuppressed()
                 }
                 Intent.ACTION_SCREEN_ON -> {
-                    screenOff = false
-                    locked = (getSystemService(KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
-                    updateSuppressed()
-                    applyPrivacy()
+                    handler.postDelayed({ syncScreenState() }, 250)
                 }
                 Intent.ACTION_USER_PRESENT -> {
                     onUnlockedChecks()
@@ -781,6 +816,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                     unlockedAt = System.currentTimeMillis()
                     updateSuppressed()
                     applyPrivacy()
+                    handler.postDelayed({ syncForegroundState() }, 350)
                     if (wasLocked) handler.postDelayed({ controller?.showTransient(UnlockContent()) }, 180)
                 }
             }
