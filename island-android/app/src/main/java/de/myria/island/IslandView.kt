@@ -251,24 +251,42 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         var kH = k
         var contentZ = 1f
         var contentK = k * 2.2f
+        var pressZ = 0.72f
+        var bubbleZ = 0.62f
+        var alphaK = k * 1.4f
         when (cfg.animStyle) {
-            IslandConfig.ANIM_ANDROID -> { z = max(z, 0.9f); zH = z; k *= 1.1f; kH = k }
-            IslandConfig.ANIM_ONEUI -> { z = max(z, 0.78f); zH = z }
-            IslandConfig.ANIM_NOTHING -> { z = 1f; zH = 1f; k *= 1.4f; kH = k; contentK = k * 3f }
+            IslandConfig.ANIM_APPLE -> { z = max(z, 0.68f); zH = z; pressZ = 0.55f; bubbleZ = 0.55f }
+            IslandConfig.ANIM_ANDROID -> {
+                z = max(z, 0.92f); zH = z; k *= 1.12f; kH = k
+                contentK = k * 2.8f; alphaK = k * 2.2f; pressZ = 0.9f; bubbleZ = 0.88f
+            }
+            IslandConfig.ANIM_ONEUI -> {
+                z = max(z, 0.82f); zH = z; k *= 0.92f; kH = k
+                contentK = k * 1.8f; alphaK = k * 1.2f; pressZ = 0.84f; bubbleZ = 0.78f
+            }
+            IslandConfig.ANIM_NOTHING -> {
+                z = 1f; zH = 1f; k *= 1.45f; kH = k
+                contentK = k * 3.4f; alphaK = k * 2.8f; pressZ = 1f; bubbleZ = 1f
+            }
             IslandConfig.ANIM_JELLY -> {
-                // Breite und Höhe schwingen versetzt → „Wackelpudding“
                 z = (z * 0.75f).coerceAtLeast(0.32f); zH = (z * 0.8f).coerceAtLeast(0.28f)
-                kH = k * 0.75f; contentZ = 0.6f
+                kH = k * 0.75f; contentZ = 0.6f; pressZ = 0.5f; bubbleZ = 0.45f
             }
         }
         if (cfg.reduceMotion) { z = 1f; zH = 1f; contentZ = 1f }
         sW.stiffness = k; sW.dampingRatio = z
         sH.stiffness = kH; sH.dampingRatio = zH
         sR.stiffness = kH; sR.dampingRatio = zH
-        sAlpha.stiffness = k * 1.4f; sAlpha.dampingRatio = 1f
+        sAlpha.stiffness = alphaK; sAlpha.dampingRatio = 1f
         sContent.stiffness = contentK; sContent.dampingRatio = contentZ
-        sPress.stiffness = 600f; sPress.dampingRatio = if (cfg.reduceMotion) 1f else 0.55f
-        sBubble.stiffness = k * 0.9f; sBubble.dampingRatio = if (cfg.reduceMotion) 1f else 0.7f
+        sPress.stiffness = if (cfg.animStyle == IslandConfig.ANIM_NOTHING) 900f else 600f
+        sPress.dampingRatio = if (cfg.reduceMotion) 1f else pressZ
+        sBubble.stiffness = k * if (cfg.animStyle == IslandConfig.ANIM_NOTHING) 1.2f else 0.9f
+        sBubble.dampingRatio = if (cfg.reduceMotion) 1f else bubbleZ
+        sFill.stiffness = contentK
+        sFill.dampingRatio = if (cfg.reduceMotion) 1f else contentZ
+        sArtPop.stiffness = k * if (cfg.animStyle == IslandConfig.ANIM_NOTHING) 1.3f else 0.85f
+        sArtPop.dampingRatio = if (cfg.reduceMotion) 1f else z
     }
 
     // =====================================================================
@@ -567,25 +585,29 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             canvas.save()
             canvas.clipPath(islandPath)
             if (!cfg.reduceMotion) {
-                val raw = sContent.value
+                val motion = motionProgress(ca)
                 when (cfg.animStyle) {
                     IslandConfig.ANIM_ANDROID -> {
-                        canvas.translate(0f, (1f - ca) * 10 * d)
-                        val sc = 0.97f + 0.03f * ca
-                        canvas.scale(sc, sc, island.centerX(), island.centerY())
+                        canvas.translate(0f, (1f - motion) * 8 * d)
+                        val scale = 0.975f + 0.025f * motion
+                        canvas.scale(scale, scale, island.centerX(), island.centerY())
                     }
                     IslandConfig.ANIM_ONEUI -> {
-                        val sc = 0.95f + 0.05f * ca
-                        canvas.scale(sc, sc, island.centerX(), island.centerY())
+                        val scale = 0.96f + 0.04f * motion
+                        canvas.scale(scale, scale, island.centerX(), island.centerY())
                     }
-                    IslandConfig.ANIM_NOTHING -> {}
+                    IslandConfig.ANIM_NOTHING -> {
+                        canvas.translate(0f, (1f - motion) * 2 * d)
+                        val scale = 0.99f + 0.01f * motion
+                        canvas.scale(scale, scale, island.centerX(), island.centerY())
+                    }
                     IslandConfig.ANIM_JELLY -> {
-                        val sc = 0.8f + 0.2f * raw
-                        canvas.scale(sc, sc, island.centerX(), island.centerY())
+                        val scale = 0.82f + 0.18f * motionProgress(sContent.value)
+                        canvas.scale(scale, scale, island.centerX(), island.centerY())
                     }
                     else -> {
-                        val sc = 0.9f + 0.1f * ca
-                        canvas.scale(sc, sc, island.centerX(), island.centerY())
+                        val scale = 0.88f + 0.12f * motion
+                        canvas.scale(scale, scale, island.centerX(), island.centerY())
                     }
                 }
             }
@@ -1489,16 +1511,30 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         }
         val t = ((System.nanoTime() - unlockStart) / 1e9f)
         // 0.0–0.35 s: zu, kurzer „Wackler“; danach springt der Bügel auf
-        val open = if (cfg.reduceMotion) 1f else ((t - 0.32f) / 0.32f).coerceIn(0f, 1f)
-        val entrance = if (cfg.reduceMotion) 1f else springOut((t / 0.18f).coerceIn(0f, 1f))
-        val wobble = if (t < 0.32f && !cfg.reduceMotion) sin(t * 38f) * 1.8f * d * (1f - t / 0.32f) else 0f
+        val open = if (cfg.reduceMotion) 1f else motionProgress(((t - 0.32f) / 0.32f).coerceIn(0f, 1f))
+        val entrance = if (cfg.reduceMotion) 1f else motionProgress((t / if (cfg.animStyle == IslandConfig.ANIM_NOTHING) 0.12f else 0.2f).coerceIn(0f, 1f))
+        val wobble = if (t < 0.32f && !cfg.reduceMotion &&
+            (cfg.animStyle == IslandConfig.ANIM_APPLE || cfg.animStyle == IslandConfig.ANIM_JELLY))
+            sin(t * 38f) * 1.8f * d * (1f - t / 0.32f) else 0f
         val h = island.height()
         p.color = withAlpha(Color.WHITE, a * entrance)
         Icons.lock(canvas, island.right - h * 0.55f + wobble, island.centerY() + h * 0.04f,
-            h * (0.42f + 0.08f * entrance), springOut(open), p)
+            h * (0.42f + 0.08f * entrance), open, p)
     }
 
-    /** kleiner Überschwinger für den Schloss-Bügel */
+    private fun motionProgress(x: Float): Float {
+        if (cfg.reduceMotion) return 1f
+        val t = x.coerceIn(0f, 1f)
+        val inv = 1f - t
+        return when (cfg.animStyle) {
+            IslandConfig.ANIM_ANDROID -> (t * t * (3f - 2f * t))
+            IslandConfig.ANIM_ONEUI -> (1f - inv * inv * inv * inv).coerceIn(0f, 1f)
+            IslandConfig.ANIM_NOTHING -> if (t == 0f) 0f else 1f - inv * inv * inv * inv * inv
+            IslandConfig.ANIM_JELLY -> springOut(t)
+            else -> springOut(t).coerceIn(0f, 1f)
+        }
+    }
+
     private fun springOut(x: Float): Float {
         if (x <= 0f) return 0f
         if (x >= 1f) return 1f
@@ -1523,8 +1559,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         if (cfg.reduceMotion || torchActivationStartNanos == 0L) return 1f
         val elapsed = (System.nanoTime() - torchActivationStartNanos).coerceAtLeast(0L)
         val t = (elapsed / 480_000_000f).coerceIn(0f, 1f)
-        val inv = 1f - t
-        return 1f - inv * inv * inv
+        return motionProgress(t)
     }
 
     private fun drawTorch(canvas: Canvas, a: Float) {
