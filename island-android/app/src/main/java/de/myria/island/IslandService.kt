@@ -197,6 +197,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         IslandBus.remove(this)
         Prefs.sp(this).unregisterOnSharedPreferenceChangeListener(this)
         try { unregisterReceiver(systemReceiver) } catch (_: Exception) {}
+        try { unregisterReceiver(screenReceiver) } catch (_: Exception) {}
         unregisterStatusWatchers()
         try { unregisterReceiver(btReceiver) } catch (_: Exception) {}
         unregisterPrivacyWatchers()
@@ -831,6 +832,14 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                         if (on) 0xFFFFD60A.toInt() else 0xFF8E8E93.toInt(), 190f)
                 }
                 android.app.AlarmManager.ACTION_NEXT_ALARM_CLOCK_CHANGED -> updateNextAlarm(true)
+            }
+        }
+    }
+
+    /** Bildschirmereignisse kommen auf manchen Android-Versionen von privilegierten System-Apps. */
+    private val screenReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context, intent: Intent) {
+            when (intent.action) {
                 Intent.ACTION_SCREEN_OFF -> {
                     screenOff = true
                     locked = true
@@ -1054,9 +1063,6 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         val f = IntentFilter().apply {
             addAction(Intent.ACTION_BATTERY_CHANGED)
             addAction(AudioManager.RINGER_MODE_CHANGED_ACTION)
-            addAction(Intent.ACTION_SCREEN_OFF)
-            addAction(Intent.ACTION_SCREEN_ON)
-            addAction(Intent.ACTION_USER_PRESENT)
             addAction(ACTION_VOLUME)
             addAction(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED)
             addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED)
@@ -1071,6 +1077,17 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
             registerReceiver(systemReceiver, f, Context.RECEIVER_NOT_EXPORTED)
         } else {
             registerReceiver(systemReceiver, f)
+        }
+
+        val screenFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(Intent.ACTION_USER_PRESENT)
+        }
+        if (Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(screenReceiver, screenFilter, Context.RECEIVER_EXPORTED)
+        } else {
+            registerReceiver(screenReceiver, screenFilter)
         }
     }
 
