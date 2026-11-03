@@ -282,6 +282,31 @@ class HomeActivity : Activity() {
         pager = Pager(this, prefs.pageEffect, prefs.motionScale) { updateDots(it) }
         home.addView(pager, LinearLayout.LayoutParams(-1, 0, 1f))
 
+        if (prefs.minimalMode) {
+            val modeSettings = TextView(this).apply {
+                text = "⚙   Modus & Einstellungen"
+                textSize = 13f
+                typeface = Looks.font(this@HomeActivity, look, 600)
+                setTextColor(if (prefs.darkText) 0xCC17171A.toInt() else 0xDDFFFFFF.toInt())
+                gravity = Gravity.CENTER
+                setPadding(dpi(18f), dpi(10f), dpi(18f), dpi(10f))
+                background = GradientDrawable().apply {
+                    cornerRadius = dp(22f)
+                    setColor(if (prefs.darkText) 0x1AFFFFFF else 0x24FFFFFF)
+                    setStroke(dp(1f), if (prefs.darkText) 0x22111114 else 0x33FFFFFF)
+                }
+                isClickable = true
+                isFocusable = true
+                contentDescription = "Minimalmodus und Startbildschirm-Einstellungen öffnen"
+                setOnClickListener { startActivity(Intent(this@HomeActivity, SettingsActivity::class.java)) }
+            }
+            home.addView(modeSettings, LinearLayout.LayoutParams(-2, -2).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
+                topMargin = dpi(4f)
+                bottomMargin = dpi(8f)
+            })
+        }
+
         dots = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
         if (!prefs.minimalMode && look == Look.APPLE && prefs.search) {
             home.addView(searchPill(), LinearLayout.LayoutParams(-2, -2).apply {

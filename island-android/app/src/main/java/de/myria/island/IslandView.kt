@@ -746,7 +746,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
         // 1) Frost
         bgPaint.shader = null
-        bgPaint.color = withAlpha(Color.BLACK, 0.05f + 0.62f * opacity)
+        bgPaint.color = withAlpha(Color.BLACK, 0.025f + 0.36f * opacity)
         canvas.drawRoundRect(rect, r, r, bgPaint)
         bgPaint.clearShadowLayer()
 
@@ -754,7 +754,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val topCol = mix(Color.WHITE, accent, tint)
         val bottomCol = mix(0xFFB3B3B3.toInt(), mix(accent, Color.BLACK, 0.2f), tint)
         p.shader = LinearGradient(rect.left, rect.top, rect.left + rect.height() * 0.42f, rect.bottom,
-            intArrayOf(withAlpha(topCol, 0.06f + 0.5f * tint), withAlpha(bottomCol, 0.06f + 0.38f * tint)),
+            intArrayOf(withAlpha(topCol, 0.035f + 0.34f * tint), withAlpha(bottomCol, 0.025f + 0.25f * tint)),
             null, Shader.TileMode.CLAMP)
         canvas.drawRoundRect(rect, r, r, p)
         p.shader = null
@@ -762,7 +762,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         // Spiegelung oben (weich)
         if (shine > 0.01f) {
             p.shader = LinearGradient(0f, rect.top, 0f, rect.top + rect.height() * 0.5f,
-                intArrayOf(withAlpha(Color.WHITE, 0.13f * shine), 0x00FFFFFF), null, Shader.TileMode.CLAMP)
+                intArrayOf(withAlpha(Color.WHITE, 0.20f * shine), withAlpha(Color.WHITE, 0.055f * shine), 0x00FFFFFF), null, Shader.TileMode.CLAMP)
             tmp2.set(rect.left + r * 0.2f, rect.top + rimW, rect.right - r * 0.2f, rect.top + rect.height() * 0.55f)
             canvas.drawRoundRect(tmp2, r * 0.85f, r * 0.85f, p)
             p.shader = null
@@ -785,19 +785,19 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             strokePaint.shader = null
             // 3c) Haarlinie rundum
             strokePaint.strokeWidth = 0.8f * d
-            strokePaint.color = withAlpha(Color.WHITE, 0.10f)
+            strokePaint.color = withAlpha(Color.WHITE, 0.18f)
             tmp2.set(rect); tmp2.inset(0.4f * d, 0.4f * d)
             canvas.drawRoundRect(tmp2, r, r, strokePaint)
 
             // 4) Linse: schmales helles Band + feine dunkle Kante dahinter (Brechung)
             val lens = 2.4f * d
             strokePaint.strokeWidth = lens
-            strokePaint.color = withAlpha(Color.WHITE, 0.035f + 0.05f * shine)
+            strokePaint.color = withAlpha(Color.WHITE, 0.055f + 0.075f * shine)
             tmp2.set(rect); tmp2.inset(rimW + lens / 2, rimW + lens / 2)
             val lr = (r - rimW - lens / 2).coerceAtLeast(0f)
             canvas.drawRoundRect(tmp2, lr, lr, strokePaint)
             strokePaint.strokeWidth = 0.8f * d
-            strokePaint.color = withAlpha(Color.BLACK, 0.18f)
+            strokePaint.color = withAlpha(Color.BLACK, 0.11f)
             tmp2.set(rect); tmp2.inset(rimW + lens + 0.4f * d, rimW + lens + 0.4f * d)
             val dr = (r - rimW - lens).coerceAtLeast(0f)
             canvas.drawRoundRect(tmp2, dr, dr, strokePaint)
