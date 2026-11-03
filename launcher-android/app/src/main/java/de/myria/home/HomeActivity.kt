@@ -26,6 +26,7 @@ import android.view.GestureDetector
 import android.view.Gravity
 import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
+import android.view.VelocityTracker
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.PathInterpolator
@@ -1379,6 +1380,7 @@ class HomeActivity : Activity() {
 class Pager(ctx: Context, private val effect: Int, private val motionScale: Int, private val onPage: (Int) -> Unit) : HorizontalScrollView(ctx) {
     private val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
     private var pageAnimator: ValueAnimator? = null
+    private var touchVelocity: VelocityTracker? = null
     var current = 0
         private set
     /** Index der eigentlichen Startseite (1, wenn links die „Heute“-Seite liegt) */
@@ -1429,8 +1431,9 @@ class Pager(ctx: Context, private val effect: Int, private val motionScale: Int,
             return
         }
         pageAnimator = ValueAnimator.ofInt(scrollX, target).apply {
-            duration = (240L * motionScale.coerceIn(50, 150) / 100L).coerceAtLeast(80L)
-            interpolator = PathInterpolator(0.2f, 0.8f, 0.2f, 1f)
+            val distance = kotlin.math.abs(target - scrollX).toFloat() / pageWidth().coerceAtLeast(1)
+            duration = (220L + 110L * distance.coerceIn(0f, 1f)).times(motionScale.coerceIn(50, 150) / 100f).toLong().coerceAtLeast(120L)
+            interpolator = PathInterpolator(0.22f, 0.61f, 0.36f, 1f)
             addUpdateListener { scrollTo(it.animatedValue as Int, 0) }
             start()
         }
@@ -1476,23 +1479,44 @@ class Pager(ctx: Context, private val effect: Int, private val motionScale: Int,
 
     override fun onTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                val r = super.onTouchEvent(ev)
+            MotionEvent.ACTION_DOWN -> {
+                pageAnimator?.cancel()
+                touchVelocity?.recycle()
+                touchVelocity = VelocityTracker.obtain().also { it.addMovement(ev) }
+            }
+            MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                touchVelocity?.addMovement(ev)
+        }
+
+        val result = super.onTouchEvent(ev)
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_UP -> {
                 val w = pageWidth()
-                // Fix: relativ zur aktuellen Seite messen. Vorher kam ACTION_DOWN oft gar nicht an
-                // (Finger startete auf einem Icon) → Zurückblättern nach links ging nicht.
+                val tracker = touchVelocity
+                tracker?.computeCurrentVelocity(1000)
+                val velocity = tracker?.xVelocity ?: 0f
+                tracker?.recycle()
+                touchVelocity = null
+
                 val moved = scrollX - current * w
+                val minFling = 700f * resources.displayMetrics.density
                 val target = when {
-                    moved > w * 0.15f -> current + 1
-                    moved < -w * 0.15f -> current - 1
+                    velocity < -minFling -> current + 1
+                    velocity > minFling -> current - 1
+                    moved > w * 0.18f -> current + 1
+                    moved < -w * 0.18f -> current - 1
                     else -> current
                 }
                 if (target != current) performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
                 toPage(target)
-                return r
+            }
+            MotionEvent.ACTION_CANCEL -> {
+                touchVelocity?.recycle()
+                touchVelocity = null
+                toPage(current)
             }
         }
-        return super.onTouchEvent(ev)
+        return result
     }
 }
 
