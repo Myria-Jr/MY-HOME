@@ -1035,7 +1035,7 @@ class HomeActivity : Activity() {
         val scroll = ScrollView(this).apply {
             isFillViewport = true
             overScrollMode = View.OVER_SCROLL_NEVER
-            addView(page, ScrollView.LayoutParams(-1, -2))
+            addView(page, ViewGroup.LayoutParams(-1, -2))
         }
         scroll.setOnLongClickListener {
             homeMenu(it)
