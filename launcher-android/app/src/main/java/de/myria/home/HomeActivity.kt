@@ -88,6 +88,7 @@ class HomeActivity : Activity() {
     private val look get() = prefs.look
     private val systemDark get() = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
     private val androidLightDrawer get() = look == Look.ANDROID && !systemDark
+    private fun animationDuration(base: Long) = if (prefs.motionScale == 0) 0L else (base * prefs.motionScale / 100f).roundToInt().toLong().coerceAtLeast(80L)
     private val drawerTextColor get() = if (androidLightDrawer) 0xFF1B1B1F.toInt() else Color.WHITE
     private val textColor get() = if (prefs.darkText) 0xFF111114.toInt() else Color.WHITE
     private val shadowColor get() = if (prefs.darkText) 0x33FFFFFF else 0x88000000.toInt()
@@ -273,7 +274,7 @@ class HomeActivity : Activity() {
         }, FrameLayout.LayoutParams(-1, -1))
         root.addView(home, FrameLayout.LayoutParams(-1, -1))
 
-        pager = Pager(this, prefs.pageEffect) { updateDots(it) }
+        pager = Pager(this, prefs.pageEffect, prefs.motionScale) { updateDots(it) }
         home.addView(pager, LinearLayout.LayoutParams(-1, 0, 1f))
 
         dots = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER }
@@ -295,7 +296,7 @@ class HomeActivity : Activity() {
         if (prefs.dock) home.addView(dockRow, LinearLayout.LayoutParams(-1, -2).apply {
             leftMargin = dpi(12f); rightMargin = dpi(12f)
         })
-        if (prefs.search && look in listOf(Look.ANDROID, Look.COLOROS)) {
+        if (prefs.search && look in listOf(Look.ANDROID, Look.COLOROS, Look.LIQUID_GLASS)) {
             home.addView(searchPill(), LinearLayout.LayoutParams(-1, dpi(52f)).apply {
                 topMargin = dpi(12f); leftMargin = dpi(16f); rightMargin = dpi(16f)
             })
@@ -320,6 +321,18 @@ class HomeActivity : Activity() {
         builtFor = signature()
     }
 
+    private fun glassSurface(radiusDp: Float, strength: Int): GradientDrawable {
+        val amount = strength.coerceIn(20, 100) / 100f
+        val top = Color.argb((48 + 88 * amount).roundToInt(), 255, 255, 255)
+        val middle = Color.argb((28 + 54 * amount).roundToInt(), 210, 224, 255)
+        val bottom = Color.argb((18 + 38 * amount).roundToInt(), 255, 255, 255)
+        val outline = Color.argb((72 + 108 * amount).roundToInt(), 255, 255, 255)
+        return GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(top, middle, bottom)).apply {
+            cornerRadius = dp(radiusDp)
+            setStroke(dpi(1f), outline)
+        }
+    }
+
     private fun dockSurface(): android.graphics.drawable.Drawable? = when (look) {
         Look.APPLE -> GradientDrawable().apply { cornerRadius = dp(34f); setColor(0x40FFFFFF); setStroke(dpi(1f), 0x33FFFFFF) }
         Look.GALAXY -> GradientDrawable().apply { cornerRadius = dp(22f); setColor(0x26FFFFFF) }
@@ -327,6 +340,7 @@ class HomeActivity : Activity() {
         Look.ONEUI -> GradientDrawable().apply { cornerRadius = dp(28f); setColor(0x1AFFFFFF) }
         Look.MAGICOS -> GradientDrawable().apply { cornerRadius = dp(30f); setColor(0x33FFFFFF); setStroke(dpi(1f), 0x22FFFFFF) }
         Look.ORIGINOS -> GradientDrawable().apply { cornerRadius = dp(32f); setColor(0x2BFFFFFF) }
+        Look.LIQUID_GLASS -> glassSurface(34f, prefs.glassStrength)
         else -> null
     }
 
@@ -336,7 +350,7 @@ class HomeActivity : Activity() {
         val androidLook = look == Look.ANDROID
         val foreground = if (androidLook) 0xFF303136.toInt() else Color.WHITE
         setPadding(dpi(16f), 0, dpi(18f), 0)
-        background = GradientDrawable().apply {
+        background = if (look == Look.LIQUID_GLASS) glassSurface(28f, prefs.glassStrength) else GradientDrawable().apply {
             cornerRadius = dp(28f)
             setColor(when (look) {
                 Look.ANDROID -> 0xFFE9E9ED.toInt()
@@ -463,11 +477,13 @@ class HomeActivity : Activity() {
             homeIcons.add(frame)
         }
 
-        col.setOnTouchListener { v, e ->
-            when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.9f).scaleY(0.9f).setDuration(110).start()
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f)
-                    .setDuration(260).setInterpolator(android.view.animation.OvershootInterpolator(2.5f)).start()
+        col.setOnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> view.animate().scaleX(0.94f).scaleY(0.94f)
+                    .setDuration(animationDuration(100L)).start()
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.animate().scaleX(1f).scaleY(1f)
+                    .setDuration(animationDuration(220L))
+                    .setInterpolator(android.view.animation.OvershootInterpolator(0.8f)).start()
             }
             false
         }
@@ -1058,8 +1074,11 @@ class HomeActivity : Activity() {
             Look.HYPEROS -> 0xFF121214.toInt()
             Look.MAGICOS -> 0xFF15131C.toInt()
             Look.ORIGINOS -> 0xFF101820.toInt()
+            Look.LIQUID_GLASS -> 0xFF172034.toInt()
         }
-        val a = (prefs.drawerOpacity.coerceIn(0, 100) * 2.55f).toInt()
+        val opacity = prefs.drawerOpacity.coerceIn(0, 100) / 100f
+        val glassAlpha = if (look == Look.LIQUID_GLASS) 96 + prefs.glassStrength * 1.15f else 255f
+        val a = (glassAlpha * opacity).roundToInt().coerceIn(0, 255)
         return (base and 0x00FFFFFF) or (a shl 24)
     }
 
@@ -1087,7 +1106,7 @@ class HomeActivity : Activity() {
             setHintTextColor(if (androidLightDrawer) 0x991B1B1F.toInt() else 0x99FFFFFF.toInt())
             typeface = Looks.font(this@HomeActivity, look, 400)
             setPadding(dpi(18f), dpi(10f), dpi(18f), dpi(10f))
-            background = GradientDrawable().apply { cornerRadius = dp(if (look == Look.APPLE) 12f else 26f); setColor(if (androidLightDrawer) 0xFFE7E6EB.toInt() else 0xFF2C2C30.toInt()) }
+            background = if (look == Look.LIQUID_GLASS) glassSurface(24f, prefs.glassStrength) else GradientDrawable().apply { cornerRadius = dp(if (look == Look.APPLE) 12f else 26f); setColor(if (androidLightDrawer) 0xFFE7E6EB.toInt() else 0xFF2C2C30.toInt()) }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -1276,12 +1295,14 @@ class HomeActivity : Activity() {
         drawerSearch.setText("")
         refreshDrawer()
         when (look) {
-            Look.APPLE -> { drawer.alpha = 0f; drawer.scaleX = 0.94f; drawer.scaleY = 0.94f; drawer.translationY = 0f }
+            Look.APPLE, Look.LIQUID_GLASS -> { drawer.alpha = 0f; drawer.scaleX = 0.94f; drawer.scaleY = 0.94f; drawer.translationY = 0f }
             Look.NOTHING -> { drawer.alpha = 0f; drawer.translationY = 0f }
             else -> { drawer.alpha = 0f; drawer.translationY = dp(80f) }
         }
-        drawer.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f).setDuration(320).setInterpolator(ease).start()
-        home.animate().alpha(0f).scaleX(0.96f).scaleY(0.96f).setDuration(260).start()
+        val opening = drawer.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f)
+            .setDuration(animationDuration(if (look == Look.LIQUID_GLASS) 420L else 320L))
+        opening.setInterpolator(if (look == Look.LIQUID_GLASS) android.view.animation.OvershootInterpolator(0.65f) else ease).start()
+        home.animate().alpha(0f).scaleX(0.96f).scaleY(0.96f).setDuration(animationDuration(260L)).start()
         if (focusSearch) {
             drawerSearch.requestFocus()
             main.postDelayed({
@@ -1295,14 +1316,15 @@ class HomeActivity : Activity() {
         drawerOpen = false
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(drawerSearch.windowToken, 0)
         drawerSearch.clearFocus()
-        home.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(if (animate) 300 else 0).start()
+        home.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(if (animate) animationDuration(300L) else 0L).start()
         if (!animate) {
             drawer.visibility = View.GONE
             return
         }
-        drawer.animate().alpha(0f).translationY(if (look == Look.APPLE || look == Look.NOTHING) 0f else dp(60f))
-            .scaleX(if (look == Look.APPLE) 0.95f else 1f).scaleY(if (look == Look.APPLE) 0.95f else 1f)
-            .setDuration(240).withEndAction { drawer.visibility = View.GONE }.start()
+        drawer.animate().alpha(0f).translationY(if (look == Look.APPLE || look == Look.NOTHING || look == Look.LIQUID_GLASS) 0f else dp(60f))
+            .scaleX(if (look == Look.APPLE || look == Look.LIQUID_GLASS) 0.95f else 1f)
+            .scaleY(if (look == Look.APPLE || look == Look.LIQUID_GLASS) 0.95f else 1f)
+            .setDuration(animationDuration(240L)).withEndAction { drawer.visibility = View.GONE }.start()
     }
 
     // ------------------------------------------------------------------
@@ -1354,8 +1376,9 @@ class HomeActivity : Activity() {
 
 /** Seitenweise blättern (mit Einrasten). */
 @SuppressLint("ViewConstructor", "ClickableViewAccessibility")
-class Pager(ctx: Context, private val effect: Int, private val onPage: (Int) -> Unit) : HorizontalScrollView(ctx) {
+class Pager(ctx: Context, private val effect: Int, private val motionScale: Int, private val onPage: (Int) -> Unit) : HorizontalScrollView(ctx) {
     private val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+    private var pageAnimator: ValueAnimator? = null
     var current = 0
         private set
     /** Index der eigentlichen Startseite (1, wenn links die „Heute“-Seite liegt) */
@@ -1396,6 +1419,21 @@ class Pager(ctx: Context, private val effect: Int, private val onPage: (Int) -> 
         current = i.coerceIn(0, max(0, pageCount - 1))
         smoothScrollTo(current * pageWidth(), 0)
         onPage(current)
+    }
+
+    override fun smoothScrollTo(x: Int, y: Int) {
+        val target = x.coerceIn(0, max(0, (pageCount - 1) * pageWidth()))
+        pageAnimator?.cancel()
+        if (motionScale == 0 || target == scrollX) {
+            scrollTo(target, 0)
+            return
+        }
+        pageAnimator = ValueAnimator.ofInt(scrollX, target).apply {
+            duration = (240L * motionScale.coerceIn(50, 150) / 100L).coerceAtLeast(80L)
+            interpolator = PathInterpolator(0.2f, 0.8f, 0.2f, 1f)
+            addUpdateListener { scrollTo(it.animatedValue as Int, 0) }
+            start()
+        }
     }
 
     /** Eigenes Einrasten statt freiem Schwung */
@@ -1474,10 +1512,12 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
             Look.HYPEROS -> 140f
             Look.MAGICOS -> 152f
             Look.ORIGINOS -> 150f
+            Look.LIQUID_GLASS -> 148f
         }
     }
 
     private val d = resources.displayMetrics.density
+    private val glassStrength = HomePrefs(ctx).glassStrength
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val r = RectF()
     private var cv: Canvas? = null
@@ -1631,6 +1671,22 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
                 text(SimpleDateFormat("HH", de).format(now), 12 * d, 86 * d, 84f, 800)
                 text(SimpleDateFormat("mm", de).format(now), 12 * d, 166 * d, 84f, 300)
                 text(SimpleDateFormat("EEEE d. MMM", de).format(now), w - 14 * d, 160 * d, 15f, 500, align = Paint.Align.RIGHT)
+            }
+            Look.LIQUID_GLASS -> {
+                val strength = glassStrength
+                val alpha = (36 + strength * 0.42f).roundToInt().coerceIn(0, 100)
+                r.set(12 * d, 8 * d, w - 12 * d, 142 * d)
+                p.clearShadowLayer()
+                p.color = Color.argb(alpha, 255, 255, 255)
+                c.drawRoundRect(r, 28 * d, 28 * d, p)
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = 1.2f * d
+                p.color = Color.argb((80 + strength * 1.2f).roundToInt().coerceIn(0, 220), 255, 255, 255)
+                c.drawRoundRect(r, 28 * d, 28 * d, p)
+                p.style = Paint.Style.FILL
+                text(time, w / 2, 82 * d, 60f, 500, align = Paint.Align.CENTER)
+                text(SimpleDateFormat("EEEE, d. MMMM", de).format(now), w / 2, 108 * d, 15f, 500, align = Paint.Align.CENTER)
+                batteryGlyph(c, w / 2 - 34 * d, 126 * d, 8 * d)
             }
             Look.NOTHING -> {
                 text(time, w / 2, 96 * d, 84f, 700, align = Paint.Align.CENTER, display = true)

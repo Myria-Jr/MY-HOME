@@ -35,6 +35,7 @@ enum class Look(val title: String, val subtitle: String) {
     HYPEROS("HyperOS", "Xiaomi: kräftige Uhr links, Squircles, klar & ruhig"),
     MAGICOS("MagicOS", "Honor: zentrierte Uhr, weiche Icons, Glas-Dock"),
     ORIGINOS("OriginOS", "vivo: große Icons, dünne Uhr, luftiges Raster"),
+    LIQUID_GLASS("Liquid Glass", "Transparente Glasflächen, weiche Verläufe, sanfte Animationen"),
 }
 
 /** Icon-Formen. Reihenfolge = gespeicherter Index. */
@@ -154,6 +155,12 @@ class HomePrefs(ctx: Context) {
     var drawerOpacity: Int
         get() = i("drawer_opacity", 90)
         set(v) = pi("drawer_opacity", v)
+    var glassStrength: Int
+        get() = i("glass_strength", 72).coerceIn(20, 100)
+        set(v) = pi("glass_strength", v)
+    var motionScale: Int
+        get() = i("motion_scale", 100).coerceIn(0, 150)
+        set(v) = pi("motion_scale", v)
     var favorites: List<String>
         get() = sp.getString("favorites", null)?.split('|')?.filter { it.isNotBlank() } ?: emptyList()
         set(v) = sp.edit().putString("favorites", v.joinToString("|")).apply()
@@ -243,7 +250,7 @@ object Looks {
     fun clearCache() = cache.evictAll()
 
     fun defaultShape(look: Look) = when (look) {
-        Look.APPLE, Look.HYPEROS -> Shape.SQUIRCLE
+        Look.APPLE, Look.HYPEROS, Look.LIQUID_GLASS -> Shape.SQUIRCLE
         Look.ANDROID -> Shape.SYSTEM
         Look.NOTHING -> Shape.CIRCLE
         Look.ONEUI -> Shape.PEBBLE
@@ -286,7 +293,7 @@ object Looks {
 
     /** Schrift je Look (Inter ≈ SF, Doto = Nothing-Punktschrift) */
     fun font(ctx: Context, look: Look, weight: Int, display: Boolean = false): Typeface = namedFont(ctx, when (look) {
-        Look.APPLE, Look.HYPEROS -> "Inter"
+        Look.APPLE, Look.HYPEROS, Look.LIQUID_GLASS -> "Inter"
         Look.NOTHING -> if (display) "Doto" else "Space Grotesk"
         Look.COLOROS, Look.MAGICOS, Look.ORIGINOS -> "Outfit"
         Look.ANDROID -> "Google Sans"

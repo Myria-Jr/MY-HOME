@@ -48,6 +48,7 @@ class SettingsActivity : Activity() {
 
     private fun dp(v: Float) = v * resources.displayMetrics.density
     private fun dpi(v: Float) = dp(v).toInt()
+    private fun motionDuration(base: Long) = if (prefs.motionScale == 0) 0L else (base * prefs.motionScale / 100f).toLong().coerceAtLeast(80L)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -114,6 +115,7 @@ class SettingsActivity : Activity() {
             sv.translationX = (if (forward) 1 else -1) * dp(60f)
             sv.alpha = 0f
             sv.animate().translationX(0f).alpha(1f).setDuration(260)
+                .setDuration(motionDuration(260L))
                 .setInterpolator(android.view.animation.PathInterpolator(0.2f, 0.9f, 0.1f, 1f)).start()
         }
         updatePreview()
@@ -152,6 +154,7 @@ class SettingsActivity : Activity() {
             action("Apple-Look anwenden", 0xFF55555A.toInt()) { applyLookPreset(Look.APPLE) },
             action("Pixel-/Lawnchair-Look anwenden", 0xFF6750A4.toInt()) { applyLookPreset(Look.ANDROID) },
             action("Nothing-Look anwenden", 0xFF202124.toInt()) { applyLookPreset(Look.NOTHING) },
+            action("Liquid-Glass-Look anwenden", 0xFF61758F.toInt()) { applyLookPreset(Look.LIQUID_GLASS) },
         )))
         hint(col, "Jedes Preset richtet Raster, Icons, Dock, Suche und Gesten passend ein. Danach kannst du jede Option einzeln ändern.")
 
@@ -246,6 +249,24 @@ class SettingsActivity : Activity() {
                 prefs.drawerIconDp = 50
                 prefs.swipeDownSearch = false
             }
+            Look.LIQUID_GLASS -> {
+                prefs.shape = Shape.SQUIRCLE.ordinal
+                prefs.iconStyle = IconStyle.CLEAR
+                prefs.monoIcons = false
+                prefs.columns = 4
+                prefs.iconDp = 56
+                prefs.allOnHome = false
+                prefs.dockCount = 4
+                prefs.dockIconDp = 52
+                prefs.dockLabels = false
+                prefs.dockBackground = true
+                prefs.drawerColumns = 4
+                prefs.drawerIconDp = 52
+                prefs.drawerOpacity = 100
+                prefs.glassStrength = 72
+                prefs.motionScale = 100
+                prefs.swipeDownSearch = true
+            }
             else -> {
                 prefs.shape = Shape.SYSTEM.ordinal
                 prefs.monoIcons = false
@@ -266,6 +287,7 @@ class SettingsActivity : Activity() {
         val styleName = when (target) {
             Look.APPLE -> "Apple"
             Look.NOTHING -> "Nothing"
+            Look.LIQUID_GLASS -> "Liquid Glass"
             else -> "Pixel-/Lawnchair"
         }
         Toast.makeText(this, "$styleName-Layout aktiviert", Toast.LENGTH_SHORT).show()
@@ -363,8 +385,14 @@ class SettingsActivity : Activity() {
             slider("Hintergrund abdunkeln", 0, 70, prefs.dim, "%") { prefs.dim = it },
             switch("Dunkle Schrift (helle Hintergründe)", prefs.darkText) { prefs.darkText = it; changed() },
             switch("Statusleiste ausblenden", prefs.hideStatusBar) { prefs.hideStatusBar = it },
+            slider("Animationsgeschwindigkeit", 0, 150, prefs.motionScale, "%") { prefs.motionScale = it },
         )))
-        hint(col, "Ordner: App gedrückt halten → „In Ordner legen“. Widgets: auf der Heute-Seite „Widget hinzufügen“.")
+        if (prefs.look == Look.LIQUID_GLASS) {
+            col.addView(card(listOf(
+                slider("Glasintensität", 20, 100, prefs.glassStrength, "%") { prefs.glassStrength = it; changed() },
+            )), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(14f) })
+        }
+        hint(col, "Ordner: App gedrückt halten → „In Ordner legen“. Widgets: auf der Heute-Seite „Widget hinzufügen“. Animationen lassen sich abschalten oder beschleunigen.")
     }
 
     private fun dockPage(col: LinearLayout) {
@@ -555,6 +583,12 @@ class SettingsActivity : Activity() {
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
         minimumHeight = dpi(54f)
+        isFocusable = true
+        foreground = android.graphics.drawable.RippleDrawable(
+            ColorStateList.valueOf(if (dark) 0x33FFFFFF else 0x22000000),
+            null,
+            GradientDrawable().apply { setColor(Color.WHITE) },
+        )
         setPadding(dpi(16f), dpi(8f), dpi(14f), dpi(8f))
     }
 
@@ -562,7 +596,7 @@ class SettingsActivity : Activity() {
 
     private fun action(t: String, color: Int, onClick: () -> Unit): View = rowBase().apply {
         addView(TextView(this@SettingsActivity).apply { text = t; textSize = 16.5f; setTextColor(color) })
-        setOnClickListener { onClick() }
+        setOnClickListener { performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK); onClick() }
     }
 
     private fun switch(t: String, value: Boolean, onChange: (Boolean) -> Unit): View = rowBase().apply {
@@ -772,7 +806,13 @@ class ShapeTile(ctx: Context, val index: Int, private val dark: Boolean) : View(
 @SuppressLint("ViewConstructor")
 class LookTile(ctx: Context, val look: Look, private val dark: Boolean) : View(ctx) {
     var chosen = false
-        set(v) { field = v; invalidate() }
+        set(v) {
+            if (field == v) return
+            field = v
+            animate().scaleX(if (v) 1.025f else 1f).scaleY(if (v) 1.025f else 1f)
+                .setDuration(180).setInterpolator(android.view.animation.OvershootInterpolator(0.7f)).start()
+            invalidate()
+        }
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val r = RectF()
     private val d = resources.displayMetrics.density
@@ -787,6 +827,7 @@ class LookTile(ctx: Context, val look: Look, private val dark: Boolean) : View(c
             Look.ONEUI -> 0xFF0F2A5C.toInt() to 0xFF5DA9FF.toInt()
             Look.GALAXY -> 0xFF1E1B3A.toInt() to 0xFF7C6CF0.toInt()
             Look.NOTHING -> 0xFF0A0A0A.toInt() to 0xFF2B2B2B.toInt()
+            Look.LIQUID_GLASS -> 0xFF17243A.toInt() to 0xFFB9D8F2.toInt()
             Look.COLOROS -> 0xFF1F6F6A.toInt() to 0xFFF3C38B.toInt()
             Look.HYPEROS -> 0xFF1A2A3A.toInt() to 0xFFFF8A3D.toInt()
             Look.MAGICOS -> 0xFF2A1F4A.toInt() to 0xFF7FD6FF.toInt()
@@ -795,6 +836,17 @@ class LookTile(ctx: Context, val look: Look, private val dark: Boolean) : View(c
         p.shader = LinearGradient(0f, 0f, w, h, c1, c2, Shader.TileMode.CLAMP)
         c.drawRoundRect(r, 18 * d, 18 * d, p)
         p.shader = null
+        if (look == Look.LIQUID_GLASS) {
+            p.color = 0x36FFFFFF
+            r.set(4 * d, 4 * d, w - 4 * d, h * 0.42f)
+            c.drawRoundRect(r, 16 * d, 16 * d, p)
+            p.color = 0x99FFFFFF.toInt()
+            p.style = Paint.Style.STROKE
+            p.strokeWidth = 1.2f * d
+            r.set(2.5f * d, 2.5f * d, w - 2.5f * d, h - 2.5f * d)
+            c.drawRoundRect(r, 18 * d, 18 * d, p)
+            p.style = Paint.Style.FILL
+        }
         // Mini-Uhr
         p.color = Color.WHITE
         p.textAlign = Paint.Align.CENTER
@@ -816,7 +868,7 @@ class LookTile(ctx: Context, val look: Look, private val dark: Boolean) : View(c
             c.restore()
         }
         val dy = h - 52 * d
-        if (look in listOf(Look.APPLE, Look.GALAXY, Look.COLOROS, Look.MAGICOS, Look.ORIGINOS)) {
+        if (look in listOf(Look.APPLE, Look.GALAXY, Look.COLOROS, Look.MAGICOS, Look.ORIGINOS, Look.LIQUID_GLASS)) {
             p.color = 0x40FFFFFF
             r.set(8 * d, dy - 6 * d, w - 8 * d, dy + s + 6 * d)
             c.drawRoundRect(r, 12 * d, 12 * d, p)
