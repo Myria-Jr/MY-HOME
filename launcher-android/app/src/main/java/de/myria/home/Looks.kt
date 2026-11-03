@@ -69,13 +69,13 @@ class HomePrefs(ctx: Context) {
     private fun pb(k: String, v: Boolean) = sp.edit().putBoolean(k, v).apply()
 
     var look: Look
-        get() = Look.values().getOrElse(i("look", 0)) { Look.APPLE }
+        get() = Look.values().getOrElse(i("look", Look.ANDROID.ordinal)) { Look.ANDROID }
         set(v) = pi("look", v.ordinal)
     var columns: Int
-        get() = i("columns", if (look == Look.ORIGINOS) 4 else 4).coerceIn(3, 6)
+        get() = i("columns", 5).coerceIn(3, 8)
         set(v) = pi("columns", v)
     var iconDp: Int
-        get() = i("icon_dp", if (look == Look.ORIGINOS) 62 else 56)
+        get() = i("icon_dp", 52).coerceIn(36, 80)
         set(v) = pi("icon_dp", v)
     var labels: Boolean
         get() = b("labels", true)
@@ -91,8 +91,17 @@ class HomePrefs(ctx: Context) {
         get() = b("dock", true)
         set(v) = pb("dock", v)
     var dockCount: Int
-        get() = i("dock_count", 4).coerceIn(3, 6)
+        get() = i("dock_count", 5).coerceIn(3, 8)
         set(v) = pi("dock_count", v)
+    var dockIconDp: Int
+        get() = i("dock_icon_dp", iconDp).coerceIn(36, 80)
+        set(v) = pi("dock_icon_dp", v)
+    var dockLabels: Boolean
+        get() = b("dock_labels", false)
+        set(v) = pb("dock_labels", v)
+    var dockBackground: Boolean
+        get() = b("dock_background", true)
+        set(v) = pb("dock_background", v)
     var clock: Boolean
         get() = b("clock", true)
         set(v) = pb("clock", v)
@@ -130,6 +139,15 @@ class HomePrefs(ctx: Context) {
     var doubleTap: Int
         get() = i("double_tap", 1)
         set(v) = pi("double_tap", v)
+    var swipeUpAction: Int
+        get() = i("swipe_up_action", 4).coerceIn(0, 4)
+        set(v) = pi("swipe_up_action", v)
+    var drawerColumns: Int
+        get() = i("drawer_columns", columns).coerceIn(3, 8)
+        set(v) = pi("drawer_columns", v)
+    var drawerIconDp: Int
+        get() = i("drawer_icon_dp", iconDp).coerceIn(36, 80)
+        set(v) = pi("drawer_icon_dp", v)
     var drawerList: Boolean
         get() = b("drawer_list", false)
         set(v) = pb("drawer_list", v)
@@ -226,7 +244,8 @@ object Looks {
 
     fun defaultShape(look: Look) = when (look) {
         Look.APPLE, Look.HYPEROS -> Shape.SQUIRCLE
-        Look.ANDROID, Look.NOTHING -> Shape.CIRCLE
+        Look.ANDROID -> Shape.SYSTEM
+        Look.NOTHING -> Shape.CIRCLE
         Look.ONEUI -> Shape.PEBBLE
         Look.GALAXY, Look.MAGICOS -> Shape.ROUNDED
         Look.COLOROS, Look.ORIGINOS -> Shape.ROUNDED

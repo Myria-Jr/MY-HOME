@@ -147,6 +147,11 @@ class SettingsActivity : Activity() {
             setPadding(dpi(4f), dpi(2f), 0, dpi(14f))
         })
         col.addView(preview())
+        header(col, "Schnellstart")
+        col.addView(card(listOf(
+            action("Pixel-/Lawnchair-Layout anwenden", 0xFF6750A4.toInt()) { applyPixelPreset() },
+        )))
+        hint(col, "Rundes App-Raster, System-Icons, Suchleiste und klare App-Übersicht. Alle Werte bleiben einzeln anpassbar.")
 
         if (!isDefaultHome()) col.addView(card(listOf(
             action("Als Standard-Startbildschirm festlegen", accent) {
@@ -193,6 +198,39 @@ class SettingsActivity : Activity() {
         hint(col, "Tipps: App gedrückt halten → Shortcuts, Ordner, Umbenennen · Nach links wischen → Heute-Seite mit Widgets · Nach oben wischen → alle Apps")
     }
 
+    private fun applyPixelPreset() {
+        prefs.look = Look.ANDROID
+        prefs.shape = Shape.SYSTEM.ordinal
+        prefs.iconStyle = IconStyle.STANDARD
+        prefs.monoIcons = false
+        prefs.columns = 5
+        prefs.iconDp = 52
+        prefs.labels = true
+        prefs.labelSize = 12
+        prefs.labelFont = -1
+        prefs.dock = true
+        prefs.dockCount = 5
+        prefs.dockIconDp = 48
+        prefs.dockLabels = false
+        prefs.dockBackground = true
+        prefs.search = true
+        prefs.clock = true
+        prefs.todayPage = true
+        prefs.allOnHome = false
+        prefs.pageEffect = 0
+        prefs.drawerColumns = 5
+        prefs.drawerIconDp = 48
+        prefs.drawerList = false
+        prefs.drawerSort = 0
+        prefs.drawerOpacity = 100
+        prefs.doubleTap = 1
+        prefs.swipeUpAction = 4
+        prefs.swipeDownSearch = false
+        Looks.clearCache()
+        Toast.makeText(this, "Pixel-Startbildschirm aktiviert", Toast.LENGTH_SHORT).show()
+        open(null, animate = false)
+    }
+
     private fun isDefaultHome(): Boolean = try {
         val ri = packageManager.resolveActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME), 0)
         ri?.activityInfo?.packageName == packageName
@@ -221,7 +259,7 @@ class SettingsActivity : Activity() {
     private fun navValue(id: String): String = when (id) {
         "icons" -> (Shape.values().getOrNull(prefs.shape)?.title ?: "Auto") + " · " + IconStyle.names[prefs.iconStyle.coerceIn(0, 3)]
         "home" -> "${prefs.columns} Spalten"
-        "drawer" -> listOf("A–Z", "Meistgenutzt", "Neueste")[prefs.drawerSort.coerceIn(0, 2)]
+        "drawer" -> "${prefs.drawerColumns} Spalten · " + listOf("A–Z", "Meistgenutzt", "Neueste")[prefs.drawerSort.coerceIn(0, 2)]
         "badges" -> if (!prefs.badges) "Aus" else if (BadgeService.granted(this)) "An" else "Erlauben"
         "hidden" -> prefs.hidden.size.takeIf { it > 0 }?.toString() ?: ""
         else -> ""
@@ -250,13 +288,13 @@ class SettingsActivity : Activity() {
         tintRow.visibility = if (prefs.iconStyle == IconStyle.TINTED) View.VISIBLE else View.GONE
         col.addView(card(listOf(
             labeled("Form", HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(shapeChips) }),
-            labeled("Stil (wie iOS)", chips(IconStyle.names, prefs.iconStyle) {
+            labeled("Icon-Farbmodus", chips(IconStyle.names, prefs.iconStyle) {
                 prefs.iconStyle = it
                 tintRow.visibility = if (it == IconStyle.TINTED) View.VISIBLE else View.GONE
                 changed()
             }),
             tintRow,
-            slider("Größe", 40, 72, prefs.iconDp, "dp") { prefs.iconDp = it; changed() },
+            slider("Größe", 36, 80, prefs.iconDp, "dp") { prefs.iconDp = it; changed() },
             switch("Schwarz-Weiß", prefs.monoIcons) { prefs.monoIcons = it; changed() },
         )))
         hint(col, "„Original“ zeigt die Icons genau so, wie dein Handy sie liefert. „Getönt“ färbt alle Icons in deiner Farbe, „Klar“ macht sie zu Glas – wie bei iOS 18/26.")
@@ -272,7 +310,7 @@ class SettingsActivity : Activity() {
 
     private fun homePage(col: LinearLayout) {
         col.addView(card(listOf(
-            slider("Spalten", 3, 6, prefs.columns, "") { prefs.columns = it; changed() },
+            slider("Spalten", 3, 8, prefs.columns, "") { prefs.columns = it; changed() },
             switch("Uhr-Widget", prefs.clock) { prefs.clock = it },
             labeled("Widget-Stil", chips(listOf("Passend") + Look.values().map { it.title }, prefs.widgetStyle + 1) { prefs.widgetStyle = it - 1 }),
             switch("„Heute“-Seite links (Widgets)", prefs.todayPage) { prefs.todayPage = it },
@@ -291,18 +329,24 @@ class SettingsActivity : Activity() {
     private fun dockPage(col: LinearLayout) {
         col.addView(card(listOf(
             switch("Dock", prefs.dock) { prefs.dock = it },
-            slider("Apps im Dock", 3, 6, prefs.dockCount, "") { prefs.dockCount = it },
+            slider("Apps im Dock", 3, 8, prefs.dockCount, "") { prefs.dockCount = it },
+            slider("Icon-Größe", 36, 80, prefs.dockIconDp, "dp") { prefs.dockIconDp = it },
+            switch("App-Namen im Dock", prefs.dockLabels) { prefs.dockLabels = it },
+            switch("Dock-Hintergrund", prefs.dockBackground) { prefs.dockBackground = it },
             switch("Suchleiste", prefs.search) { prefs.search = it },
         )))
+        hint(col, "Dock-Icon-Größe und Beschriftung lassen sich unabhängig vom Raster einstellen.")
     }
 
     private fun drawerPage(col: LinearLayout) {
         col.addView(card(listOf(
             labeled("Sortierung", chips(listOf("A–Z", "Meistgenutzt", "Neueste zuerst"), prefs.drawerSort) { prefs.drawerSort = it }),
             labeled("Ansicht", chips(listOf("Raster", "Liste"), if (prefs.drawerList) 1 else 0) { prefs.drawerList = it == 1 }),
-            slider("Hintergrund-Deckkraft", 40, 100, prefs.drawerOpacity, "%") { prefs.drawerOpacity = it },
+            slider("Spalten im Raster", 3, 8, prefs.drawerColumns, "") { prefs.drawerColumns = it },
+            slider("Icon-Größe", 36, 80, prefs.drawerIconDp, "dp") { prefs.drawerIconDp = it },
+            slider("Hintergrund-Deckkraft", 0, 100, prefs.drawerOpacity, "%") { prefs.drawerOpacity = it },
         )))
-        hint(col, "Die Suche findet Apps auch über Anfangsbuchstaben („gm“ → Google Maps). Bei A–Z kannst du am rechten Rand zu jedem Buchstaben springen.")
+        hint(col, "Startbildschirm und App-Übersicht haben eigene Raster- und Icon-Größen. Die A–Z-Schnellwahl erscheint in der Rasteransicht.")
     }
 
     private fun badgesPage(col: LinearLayout) {
@@ -323,6 +367,7 @@ class SettingsActivity : Activity() {
 
     private fun gesturesPage(col: LinearLayout) {
         col.addView(card(listOf(
+            labeled("Nach oben wischen", chips(listOf("Nichts", "Suche", "Benachrichtigungen", "Einstellungen", "Apps"), prefs.swipeUpAction) { prefs.swipeUpAction = it }),
             labeled("Doppeltippen auf freie Fläche", chips(listOf("Nichts", "Benachrichtigungen", "Suche", "Einstellungen", "Alle Apps"), prefs.doubleTap) { prefs.doubleTap = it }),
             switch("Nach unten wischen = Suche", prefs.swipeDownSearch) { prefs.swipeDownSearch = it },
         )))

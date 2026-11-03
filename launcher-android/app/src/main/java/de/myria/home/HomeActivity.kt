@@ -86,6 +86,9 @@ class HomeActivity : Activity() {
     private fun dp(v: Float) = v * resources.displayMetrics.density
     private fun dpi(v: Float) = dp(v).toInt()
     private val look get() = prefs.look
+    private val systemDark get() = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) == android.content.res.Configuration.UI_MODE_NIGHT_YES
+    private val androidLightDrawer get() = look == Look.ANDROID && !systemDark
+    private val drawerTextColor get() = if (androidLightDrawer) 0xFF1B1B1F.toInt() else Color.WHITE
     private val textColor get() = if (prefs.darkText) 0xFF111114.toInt() else Color.WHITE
     private val shadowColor get() = if (prefs.darkText) 0x33FFFFFF else 0x88000000.toInt()
 
@@ -148,6 +151,20 @@ class HomeActivity : Activity() {
         if (prefs.darkText) flags = flags or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
         if (prefs.hideStatusBar) flags = flags or View.SYSTEM_UI_FLAG_FULLSCREEN
         window.decorView.systemUiVisibility = flags
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (!::prefs.isInitialized || !::root.isInitialized) return
+        val reopenDrawer = drawerOpen
+        drawerOpen = false
+        editMode = false
+        Looks.clearCache()
+        applySystemBars()
+        build()
+        fillHome()
+        builtFor = signature()
+        if (reopenDrawer) openDrawer()
     }
 
     override fun onStart() {
@@ -271,7 +288,7 @@ class HomeActivity : Activity() {
         dockRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
-            background = dockBackground()
+            background = if (prefs.dockBackground) dockSurface() else null
             val pv = if (background != null) dpi(12f) else dpi(4f)
             setPadding(dpi(8f), pv, dpi(8f), pv)
         }
@@ -303,7 +320,7 @@ class HomeActivity : Activity() {
         builtFor = signature()
     }
 
-    private fun dockBackground(): android.graphics.drawable.Drawable? = when (look) {
+    private fun dockSurface(): android.graphics.drawable.Drawable? = when (look) {
         Look.APPLE -> GradientDrawable().apply { cornerRadius = dp(34f); setColor(0x40FFFFFF); setStroke(dpi(1f), 0x33FFFFFF) }
         Look.GALAXY -> GradientDrawable().apply { cornerRadius = dp(22f); setColor(0x26FFFFFF) }
         Look.COLOROS -> GradientDrawable().apply { cornerRadius = dp(30f); setColor(0x30FFFFFF) }
@@ -313,23 +330,39 @@ class HomeActivity : Activity() {
         else -> null
     }
 
-    private fun searchPill(): View = TextView(this).apply {
-        text = if (look == Look.APPLE) "⌕  Suchen" else "⌕   Apps & Web durchsuchen"
-        typeface = Looks.font(this@HomeActivity, look, 500)
-        textSize = if (look == Look.APPLE) 14f else 16f
-        gravity = if (look == Look.APPLE) Gravity.CENTER else Gravity.CENTER_VERTICAL or Gravity.START
-        val darkPill = look == Look.ANDROID
-        setTextColor(if (darkPill) 0xFF3C3C43.toInt() else Color.WHITE)
-        setPadding(dpi(if (look == Look.APPLE) 16f else 22f), dpi(7f), dpi(16f), dpi(7f))
+    private fun searchPill(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        val androidLook = look == Look.ANDROID
+        val foreground = if (androidLook) 0xFF303136.toInt() else Color.WHITE
+        setPadding(dpi(16f), 0, dpi(18f), 0)
         background = GradientDrawable().apply {
             cornerRadius = dp(28f)
             setColor(when (look) {
-                Look.ANDROID -> 0xEBF1F0F6.toInt()
+                Look.ANDROID -> 0xFFE9E9ED.toInt()
                 Look.APPLE -> 0x40FFFFFF
                 else -> 0x33FFFFFF
             })
         }
+        contentDescription = "Apps und Web durchsuchen"
+        isClickable = true
+        isFocusable = true
         setOnClickListener { openDrawer(focusSearch = true) }
+        addView(ImageView(this@HomeActivity).apply {
+            setImageResource(android.R.drawable.ic_menu_search)
+            setColorFilter(foreground)
+            contentDescription = null
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dpi(24f), dpi(24f)))
+        addView(TextView(this@HomeActivity).apply {
+            text = if (look == Look.APPLE) "Suchen" else "Apps & Web durchsuchen"
+            typeface = Looks.font(this@HomeActivity, look, 500)
+            textSize = if (look == Look.APPLE) 14f else 15f
+            setTextColor(foreground)
+            gravity = Gravity.CENTER_VERTICAL
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            setPadding(dpi(12f), 0, 0, 0)
+        }, LinearLayout.LayoutParams(0, -1, 1f))
     }
 
     private fun updateDots(page: Int) {
@@ -393,7 +426,7 @@ class HomeActivity : Activity() {
         col.addView(iconBox, LinearLayout.LayoutParams(px, px))
         if (showLabel) col.addView(TextView(this).apply {
             text = prefs.label(app.key, app.label)
-            setTextColor(if (inDock || !onHome) Color.WHITE else textColor)
+            setTextColor(if (inDock) Color.WHITE else if (!onHome) drawerTextColor else textColor)
             textSize = prefs.labelSize.toFloat() - (if (look == Look.NOTHING) 1f else 0f)
             typeface = if (prefs.labelFont >= 0) Looks.namedFont(this@HomeActivity, Looks.labelFonts[prefs.labelFont.coerceIn(0, Looks.labelFonts.size - 1)], 500)
                 else Looks.font(this@HomeActivity, look, if (look == Look.ONEUI || look == Look.GALAXY) 500 else 400)
@@ -438,11 +471,13 @@ class HomeActivity : Activity() {
             }
             false
         }
-        col.setOnClickListener {
+        frame.contentDescription = prefs.label(app.key, app.label)
+        frame.isFocusable = true
+        frame.setOnClickListener {
             if (editMode) { setEditMode(false); return@setOnClickListener }
             Apps.launch(this, app, iv)
         }
-        col.setOnLongClickListener {
+        frame.setOnLongClickListener {
             it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
             appMenu(it, app)
             true
@@ -963,7 +998,7 @@ class HomeActivity : Activity() {
 
         dockRow.removeAllViews()
         prefs.dockApps.mapNotNull { Apps.byKey(it) }.filter { it.key !in hidden }.take(prefs.dockCount).forEach { a ->
-            dockRow.addView(iconView(a, prefs.iconDp, false, true, false), LinearLayout.LayoutParams(0, -2, 1f))
+            dockRow.addView(iconView(a, prefs.dockIconDp, prefs.dockLabels, true, false), LinearLayout.LayoutParams(0, -2, 1f))
         }
         if (editMode) setEditMode(true)
     }
@@ -1014,14 +1049,17 @@ class HomeActivity : Activity() {
     private fun drawerColor(): Int {
         val base = when (look) {
             Look.APPLE -> 0xFF101014.toInt()
-            Look.ANDROID -> if (Build.VERSION.SDK_INT >= 31) try { getColor(android.R.color.system_neutral1_900) } catch (_: Exception) { 0xFF1B1B1F.toInt() } else 0xFF1B1B1F.toInt()
+            Look.ANDROID -> if (Build.VERSION.SDK_INT >= 31) try {
+                getColor(if (systemDark) android.R.color.system_neutral1_900 else android.R.color.system_neutral1_50)
+            } catch (_: Exception) { if (systemDark) 0xFF1B1B1F.toInt() else 0xFFF7F7FA.toInt() }
+            else if (systemDark) 0xFF1B1B1F.toInt() else 0xFFF7F7FA.toInt()
             Look.ONEUI, Look.GALAXY, Look.NOTHING -> 0xFF000000.toInt()
             Look.COLOROS -> 0xFF1A1A1E.toInt()
             Look.HYPEROS -> 0xFF121214.toInt()
             Look.MAGICOS -> 0xFF15131C.toInt()
             Look.ORIGINOS -> 0xFF101820.toInt()
         }
-        val a = (prefs.drawerOpacity.coerceIn(40, 100) * 2.55f).toInt()
+        val a = (prefs.drawerOpacity.coerceIn(0, 100) * 2.55f).toInt()
         return (base and 0x00FFFFFF) or (a shl 24)
     }
 
@@ -1038,18 +1076,18 @@ class HomeActivity : Activity() {
             text = when (look) { Look.APPLE -> "App-Mediathek"; Look.NOTHING -> "APPS"; else -> "Apps" }
             textSize = if (look == Look.NOTHING) 30f else 28f
             typeface = Looks.font(this@HomeActivity, look, 700, display = true)
-            setTextColor(Color.WHITE)
+            setTextColor(drawerTextColor)
             setPadding(dpi(22f), dpi(18f), dpi(22f), dpi(8f))
         })
         drawerSearch = EditText(this).apply {
             hint = if (look == Look.APPLE) "Suchen" else "Apps & Web durchsuchen"
             setSingleLine()
             textSize = 16f
-            setTextColor(Color.WHITE)
-            setHintTextColor(0x99FFFFFF.toInt())
+            setTextColor(drawerTextColor)
+            setHintTextColor(if (androidLightDrawer) 0x991B1B1F.toInt() else 0x99FFFFFF.toInt())
             typeface = Looks.font(this@HomeActivity, look, 400)
             setPadding(dpi(18f), dpi(10f), dpi(18f), dpi(10f))
-            background = GradientDrawable().apply { cornerRadius = dp(if (look == Look.APPLE) 12f else 26f); setColor(0x26FFFFFF) }
+            background = GradientDrawable().apply { cornerRadius = dp(if (look == Look.APPLE) 12f else 26f); setColor(if (androidLightDrawer) 0xFFE7E6EB.toInt() else 0xFF2C2C30.toInt()) }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -1067,10 +1105,10 @@ class HomeActivity : Activity() {
         // Websuche
         webRow = TextView(this).apply {
             textSize = 15f
-            setTextColor(Color.WHITE)
+            setTextColor(drawerTextColor)
             typeface = Looks.font(this@HomeActivity, look, 500)
             setPadding(dpi(18f), dpi(12f), dpi(18f), dpi(12f))
-            background = GradientDrawable().apply { cornerRadius = dp(14f); setColor(0x1AFFFFFF) }
+            background = GradientDrawable().apply { cornerRadius = dp(14f); setColor(if (androidLightDrawer) 0xFFE7E6EB.toInt() else 0xFF2C2C30.toInt()) }
             visibility = View.GONE
             setOnClickListener { webSearch(drawerSearch.text.toString()) }
         }
@@ -1090,7 +1128,7 @@ class HomeActivity : Activity() {
         suggestRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dpi(8f), 0, dpi(8f), dpi(6f)) }
         col.addView(suggestRow)
         drawerGrid = GridView(this).apply {
-            numColumns = if (prefs.drawerList) 1 else prefs.columns
+            numColumns = if (prefs.drawerList) 1 else prefs.drawerColumns
             verticalSpacing = dpi(4f)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
             setPadding(dpi(8f), 0, dpi(8f), dpi(20f))
@@ -1114,17 +1152,17 @@ class HomeActivity : Activity() {
         // Vorschläge nur ohne Suchbegriff
         suggestRow.removeAllViews()
         val title = (suggestRow.parent as ViewGroup).findViewWithTag<View>("suggestTitle")
-        val top = visibleApps().filter { prefs.launches(it.key) > 0 }.sortedByDescending { prefs.launches(it.key) }.take(prefs.columns)
+        val top = visibleApps().filter { prefs.launches(it.key) > 0 }.sortedByDescending { prefs.launches(it.key) }.take(prefs.drawerColumns)
         val show = q.isBlank() && top.isNotEmpty()
         title?.visibility = if (show) View.VISIBLE else View.GONE
         suggestRow.visibility = if (show) View.VISIBLE else View.GONE
         if (show) {
             top.forEach { a ->
-                suggestRow.addView(iconView(a, (prefs.iconDp * 0.9f).toInt(), true, false, false).apply {
-                    getChildAt(0).setOnClickListener { Apps.launch(this@HomeActivity, a, this); main.postDelayed({ closeDrawer(false) }, 300) }
+                suggestRow.addView(iconView(a, (prefs.drawerIconDp * 0.9f).toInt(), true, false, false).apply {
+                    setOnClickListener { Apps.launch(this@HomeActivity, a, this); main.postDelayed({ closeDrawer(false) }, 300) }
                 }, LinearLayout.LayoutParams(0, -2, 1f))
             }
-            repeat(prefs.columns - top.size) { suggestRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
+            repeat(prefs.drawerColumns - top.size) { suggestRow.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f)) }
         }
     }
 
@@ -1199,14 +1237,14 @@ class HomeActivity : Activity() {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
                     setPadding(dpi(18f), dpi(8f), dpi(18f), dpi(8f))
-                    val px = dpi(42f)
+                    val px = dpi(prefs.drawerIconDp.coerceIn(36, 64).toFloat())
                     addView(ImageView(this@HomeActivity).apply {
                         setImageBitmap(appIcon(a, px))
                     }, LinearLayout.LayoutParams(px, px))
                     addView(TextView(this@HomeActivity).apply {
                         text = prefs.label(a.key, a.label)
                         textSize = 16f
-                        setTextColor(Color.WHITE)
+                        setTextColor(drawerTextColor)
                         typeface = Looks.font(this@HomeActivity, look, 500)
                         setPadding(dpi(16f), 0, 0, 0)
                     })
@@ -1214,10 +1252,15 @@ class HomeActivity : Activity() {
                         Apps.launch(this@HomeActivity, a, this)
                         main.postDelayed({ closeDrawer(animate = false) }, 300)
                     }
+                    setOnLongClickListener {
+                        it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                        appMenu(it, a)
+                        true
+                    }
                 }
             }
-            return iconView(a, (prefs.iconDp * 0.92f).toInt(), true, false, false).apply {
-                getChildAt(0).setOnClickListener {
+            return iconView(a, (prefs.drawerIconDp * 0.92f).toInt(), true, false, false).apply {
+                setOnClickListener {
                     Apps.launch(this@HomeActivity, a, this)
                     main.postDelayed({ closeDrawer(animate = false) }, 300)
                 }
@@ -1270,7 +1313,16 @@ class HomeActivity : Activity() {
         override fun onFling(e1: MotionEvent?, e2: MotionEvent, vx: Float, vy: Float): Boolean {
             val dy = e2.y - (e1?.y ?: e2.y)
             if (abs(vy) < abs(vx) * 1.2f || abs(dy) < dp(60f) || editMode) return false
-            if (!drawerOpen && vy < 0) { openDrawer(); return true }
+            if (!drawerOpen && vy < 0) {
+                when (prefs.swipeUpAction) {
+                    1 -> openDrawer(focusSearch = true)
+                    2 -> expandNotifications()
+                    3 -> startActivity(Intent(this@HomeActivity, SettingsActivity::class.java))
+                    4 -> openDrawer()
+                    else -> return false
+                }
+                return true
+            }
             if (!drawerOpen && vy > 0) {
                 if (prefs.swipeDownSearch) openDrawer(focusSearch = true) else expandNotifications()
                 return true

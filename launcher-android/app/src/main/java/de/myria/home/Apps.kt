@@ -30,12 +30,20 @@ object Apps {
         IconPacks.prepare(ctx, HomePrefs(ctx).iconPack)
         val pm = ctx.packageManager
         val list = try {
-            la.getActivityList(null, Process.myUserHandle()).map {
-                val cn = it.componentName
-                val pack = IconPacks.iconFor(cn, density)
-                val icon = pack ?: try { it.getIcon(density) } catch (_: Exception) { null } ?: it.getBadgedIcon(0)
-                val inst = try { pm.getPackageInfo(cn.packageName, 0).firstInstallTime } catch (_: Exception) { 0L }
-                AppInfo(cn.flattenToShortString(), it.label?.toString() ?: cn.packageName, cn, icon, pack != null, inst)
+            la.getActivityList(null, Process.myUserHandle()).mapNotNull { activity ->
+                try {
+                    val cn = activity.componentName
+                    val pack = IconPacks.iconFor(cn, density)
+                    val icon = pack
+                        ?: try { activity.getIcon(density) } catch (_: Exception) { null }
+                        ?: try { activity.getBadgedIcon(0) } catch (_: Exception) { null }
+                        ?: try { pm.getApplicationIcon(cn.packageName) } catch (_: Exception) { null }
+                        ?: return@mapNotNull null
+                    val installed = try { pm.getPackageInfo(cn.packageName, 0).firstInstallTime } catch (_: Exception) { 0L }
+                    AppInfo(cn.flattenToShortString(), activity.label?.toString() ?: cn.packageName, cn, icon, pack != null, installed)
+                } catch (_: Exception) {
+                    null
+                }
             }
         } catch (_: Exception) { emptyList() }
         all = list.sortedBy { it.label.lowercase() }
@@ -45,21 +53,23 @@ object Apps {
     fun byKey(key: String) = all.firstOrNull { it.key == key }
 
     fun launch(ctx: Context, app: AppInfo, view: android.view.View?) {
-        HomePrefs(ctx).countLaunch(app.key)
         val la = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+        val bounds = view?.let {
+            val loc = IntArray(2); it.getLocationOnScreen(loc)
+            android.graphics.Rect(loc[0], loc[1], loc[0] + it.width, loc[1] + it.height)
+        }
+        val opts = view?.let {
+            android.app.ActivityOptions.makeScaleUpAnimation(it, 0, 0, it.width, it.height).toBundle()
+        }
         try {
-            val bounds = view?.let {
-                val loc = IntArray(2); it.getLocationOnScreen(loc)
-                android.graphics.Rect(loc[0], loc[1], loc[0] + it.width, loc[1] + it.height)
-            }
-            val opts = view?.let {
-                android.app.ActivityOptions.makeScaleUpAnimation(it, 0, 0, it.width, it.height).toBundle()
-            }
             la.startMainActivity(app.component, Process.myUserHandle(), bounds, opts)
+            HomePrefs(ctx).countLaunch(app.key)
+            return
         } catch (_: Exception) {
             try {
                 ctx.startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
                     .setComponent(app.component).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                HomePrefs(ctx).countLaunch(app.key)
             } catch (_: Exception) {}
         }
     }
