@@ -53,6 +53,9 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     private var touchable = true
     private val handler = Handler(Looper.getMainLooper())
     private var testRevert: Runnable? = null
+    private var overlayRestorePending = false
+    private var overlayRestoreAttempts = 0
+    private var lastUnlockEffectAt = 0L
 
     private var landscape = false
     private var screenOff = false
@@ -70,6 +73,8 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
     override fun onServiceConnected() {
         super.onServiceConnected()
+        tornDown = false
+        overlayRestoreAttempts = 0
         wm = getSystemService(WINDOW_SERVICE) as WindowManager
         cfg = Prefs.load(this)
 
@@ -172,6 +177,46 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         }
     }
 
+    private fun showUnlockEffect() {
+        val now = System.currentTimeMillis()
+        if (now - lastUnlockEffectAt < 500L) return
+        lastUnlockEffectAt = now
+        handler.postDelayed({
+            syncForegroundState()
+            if (!screenOff && !locked && !foregroundHidden) controller?.showTransient(UnlockContent())
+        }, 180)
+    }
+
+    private fun restoreOverlay() {
+        if (!::wm.isInitialized) return
+        val island = view ?: return
+        var restored = false
+        try {
+            if (island.parent == null) {
+                lp.flags = drawFlags()
+                wm.addView(island, lp)
+                restored = true
+            }
+            val touch = touchView
+            if (touch != null && touch.parent == null) {
+                tlp.flags = baseFlags()
+                wm.addView(touch, tlp)
+                restored = true
+            }
+            overlayRestoreAttempts = 0
+            if (restored) controller?.refresh()
+        } catch (_: Exception) {
+            if (!overlayRestorePending && overlayRestoreAttempts < 3) {
+                overlayRestoreAttempts++
+                overlayRestorePending = true
+                handler.postDelayed({
+                    overlayRestorePending = false
+                    restoreOverlay()
+                }, 350L)
+            }
+        }
+    }
+
     private fun syncForegroundState() {
         val pkg = try { rootInActiveWindow?.packageName?.toString() } catch (_: Exception) { null } ?: return
         if (pkg in ignoredPkgs) return
@@ -197,14 +242,19 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         }
         val nextScreenOff = !interactive
         val nextLocked = !interactive || keyguardLocked
-        if (nextScreenOff == screenOff && nextLocked == locked) return
+        if (nextScreenOff == screenOff && nextLocked == locked) {
+            restoreOverlay()
+            return
+        }
 
         val becameUnlocked = locked && !nextLocked
         screenOff = nextScreenOff
         locked = nextLocked
         if (becameUnlocked) unlockedAt = System.currentTimeMillis()
         updateSuppressed()
+        restoreOverlay()
         if (!locked) applyPrivacy()
+        if (becameUnlocked) showUnlockEffect()
     }
 
     /** Einstellungen + Energiesparmodus (spart Akku: keine Wellenform, kein Glow, ruhige Animationen) */
@@ -810,14 +860,14 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                 }
                 Intent.ACTION_USER_PRESENT -> {
                     onUnlockedChecks()
-                    val wasLocked = locked
                     locked = false
                     screenOff = false
                     unlockedAt = System.currentTimeMillis()
                     updateSuppressed()
                     applyPrivacy()
-                    handler.postDelayed({ syncForegroundState() }, 350)
-                    if (wasLocked) handler.postDelayed({ controller?.showTransient(UnlockContent()) }, 180)
+                    restoreOverlay()
+                    handler.postDelayed({ syncForegroundState() }, 120)
+                    showUnlockEffect()
                 }
             }
         }

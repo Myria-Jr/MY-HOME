@@ -463,7 +463,8 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 is Content.Timer -> want(250)
                 is Content.Call -> want(if (c.incoming) 33 else 250)
                 is Content.Progress -> if (c.progress < 0) want(33)
-                is UnlockContent -> if (c === drawn) want(16)
+                is UnlockContent -> if (!cfg.reduceMotion && c === drawn &&
+                    System.nanoTime() - unlockStart < 720_000_000L) want(16)
                 is TorchContent -> if (torchActivationProgress() < 1f) want(16)
                 is VolumeContent -> {}
                 is Content.Charging -> if (c.plugged && c === drawn &&
@@ -1488,11 +1489,13 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         }
         val t = ((System.nanoTime() - unlockStart) / 1e9f)
         // 0.0–0.35 s: zu, kurzer „Wackler“; danach springt der Bügel auf
-        val open = if (cfg.reduceMotion) 1f else ((t - 0.35f) / 0.3f).coerceIn(0f, 1f)
-        val wobble = if (t < 0.35f && !cfg.reduceMotion) sin(t * 40f) * 2f * d * (1f - t / 0.35f) else 0f
+        val open = if (cfg.reduceMotion) 1f else ((t - 0.32f) / 0.32f).coerceIn(0f, 1f)
+        val entrance = if (cfg.reduceMotion) 1f else springOut((t / 0.18f).coerceIn(0f, 1f))
+        val wobble = if (t < 0.32f && !cfg.reduceMotion) sin(t * 38f) * 1.8f * d * (1f - t / 0.32f) else 0f
         val h = island.height()
-        p.color = withAlpha(Color.WHITE, a)
-        Icons.lock(canvas, island.right - h * 0.55f + wobble, island.centerY() + h * 0.04f, h * 0.5f, springOut(open), p)
+        p.color = withAlpha(Color.WHITE, a * entrance)
+        Icons.lock(canvas, island.right - h * 0.55f + wobble, island.centerY() + h * 0.04f,
+            h * (0.42f + 0.08f * entrance), springOut(open), p)
     }
 
     /** kleiner Überschwinger für den Schloss-Bügel */
