@@ -808,7 +808,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         // Long soft reflection across the top lip.
         if (shine > 0.01f) {
             p.shader = LinearGradient(0f, rect.top, 0f, rect.top + rect.height() * 0.52f,
-                intArrayOf(withAlpha(Color.WHITE, 0.24f * shine), withAlpha(Color.WHITE, 0.07f * shine), 0x00FFFFFF),
+                intArrayOf(withAlpha(Color.WHITE, 0.12f * shine), withAlpha(Color.WHITE, 0.035f * shine), 0x00FFFFFF),
                 null, Shader.TileMode.CLAMP)
             tmp2.set(rect.left + r * 0.2f, rect.top + rimW, rect.right - r * 0.2f, rect.top + rect.height() * 0.55f)
             canvas.drawRoundRect(tmp2, r * 0.85f, r * 0.85f, p)
@@ -818,30 +818,27 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         strokePaint.shader = null
         if (cfg.glassBorder) {
             val edgeR = max(r, 1f)
-            // Bright top edge and a restrained lower reflection make the surface feel rounded.
-            strokePaint.strokeWidth = rimW
-            strokePaint.shader = LinearGradient(0f, rect.top, 0f, rect.top + min(edgeR, rect.height() * 0.5f),
-                intArrayOf(withAlpha(Color.WHITE, 0.58f * (0.4f + 0.6f * shine)), 0x00FFFFFF),
-                null, Shader.TileMode.CLAMP)
-            tmp2.set(rect); tmp2.inset(rimW / 2, rimW / 2)
-            val ir = (r - rimW / 2).coerceAtLeast(0f)
-            canvas.drawRoundRect(tmp2, ir, ir, strokePaint)
-            strokePaint.shader = LinearGradient(0f, rect.bottom - min(edgeR, rect.height() * 0.5f), 0f, rect.bottom,
-                intArrayOf(0x00FFFFFF, withAlpha(Color.WHITE, 0.12f + 0.16f * shine)),
-                null, Shader.TileMode.CLAMP)
-            canvas.drawRoundRect(tmp2, ir, ir, strokePaint)
+            // A restrained specular reflection replaces the uniform white outline.
+            strokePaint.strokeWidth = 0.85f * d
+            strokePaint.strokeCap = Paint.Cap.ROUND
+            strokePaint.shader = LinearGradient(rect.left + edgeR, rect.top, rect.right - edgeR, rect.top,
+                intArrayOf(0x00FFFFFF, withAlpha(Color.WHITE, 0.20f * shine), 0x00FFFFFF),
+                floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
+            canvas.drawLine(rect.left + edgeR, rect.top + 0.55f * d,
+                rect.right - edgeR, rect.top + 0.55f * d, strokePaint)
             strokePaint.shader = null
+            strokePaint.strokeCap = Paint.Cap.BUTT
 
-            // Fine white inner rim.
-            strokePaint.strokeWidth = 0.8f * d
-            strokePaint.color = withAlpha(Color.WHITE, 0.24f)
-            tmp2.set(rect); tmp2.inset(0.4f * d, 0.4f * d)
+            // A recessed edge adds depth without a bright contour.
+            strokePaint.strokeWidth = 0.7f * d
+            strokePaint.color = withAlpha(Color.BLACK, 0.14f)
+            tmp2.set(rect); tmp2.inset(0.35f * d, 0.35f * d)
             canvas.drawRoundRect(tmp2, r, r, strokePaint)
 
             // Lensed inner band and its soft dark edge.
-            val lens = 2.4f * d
+            val lens = 1.3f * d
             strokePaint.strokeWidth = lens
-            strokePaint.color = withAlpha(Color.WHITE, 0.07f + 0.09f * shine)
+            strokePaint.color = withAlpha(Color.WHITE, 0.025f + 0.035f * shine)
             tmp2.set(rect); tmp2.inset(rimW + lens / 2, rimW + lens / 2)
             val lr = (r - rimW - lens / 2).coerceAtLeast(0f)
             canvas.drawRoundRect(tmp2, lr, lr, strokePaint)
@@ -877,10 +874,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             }
         }
 
-        // Crisp outer highlight.
-        strokePaint.strokeWidth = 1f * d
-        strokePaint.color = withAlpha(Color.WHITE, 0.17f)
-        tmp2.set(rect); tmp2.inset(0.5f * d, 0.5f * d)
+        // A subtle shadowed edge keeps the glass grounded on bright backgrounds.
+        strokePaint.strokeWidth = 0.8f * d
+        strokePaint.color = withAlpha(Color.BLACK, 0.16f)
+        tmp2.set(rect); tmp2.inset(0.4f * d, 0.4f * d)
         canvas.drawRoundRect(tmp2, r, r, strokePaint)
 
         gapPaint.color = mix(Color.BLACK, 0xFF2A2A2E.toInt(), 1f - opacity * 0.6f)
