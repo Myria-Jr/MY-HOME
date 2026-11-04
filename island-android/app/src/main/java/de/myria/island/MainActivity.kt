@@ -394,7 +394,7 @@ class MainActivity : Activity() {
             addView(content)
         }
         root.addView(scroll, FrameLayout.LayoutParams(-1, -1).apply {
-            if (hasDock) bottomMargin = dpi(78f)
+            if (hasDock) bottomMargin = dpi(140f)
         })
 
         val bar = FrameLayout(this)
@@ -444,9 +444,7 @@ class MainActivity : Activity() {
         root.addView(bar, FrameLayout.LayoutParams(-1, navH.toInt(), Gravity.TOP))
         if (backdrop != null && dockDestination != null) {
             root.addView(glassDock(backdrop, dockDestination),
-                FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
-                    bottomMargin = dpi(12f)
-                })
+                FrameLayout.LayoutParams(dpi(220f), dpi(150f), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
         }
 
         scroll.setOnScrollChangeListener { _, _, y, _, _ ->
@@ -486,9 +484,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
             setPadding(dpi(6f), dpi(5f), dpi(6f), dpi(5f))
-            elevation = dp(4f)
         }
-        dock.background = backdrop.dockBackground(dock)
         for (destination in GlassDestination.entries) {
             val button = object : FrameLayout(this) {
                 override fun getAccessibilityClassName(): CharSequence = android.widget.Button::class.java.name
@@ -516,7 +512,7 @@ class MainActivity : Activity() {
             }
             dock.addView(button, LinearLayout.LayoutParams(dpi(58f), dpi(48f)))
         }
-        return dock
+        return GlassDockLayout(this, pal, backdrop, dock) { reduceMotion }
     }
 
     private fun mainPage(): View = page(APP_NAME, false, GlassDestination.START) { c ->
