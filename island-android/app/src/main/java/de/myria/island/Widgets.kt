@@ -32,7 +32,7 @@ class Palette(val look: Int, val dark: Boolean, ctx: Context, private val appFon
     val isAndroid = look == IslandConfig.LOOK_ANDROID
     val isOneUi = look == IslandConfig.LOOK_ONEUI
     val isNothing = look == IslandConfig.LOOK_NOTHING
-    /** Liquid Glass (nach stormaref/LiquidGlassSkill): Verlauf-Hintergrund + Glas-Karten */
+    /** Liquid Glass: Farbverlauf und schwebende Navigation. */
     val isGlass = look == IslandConfig.LOOK_GLASS
     /** Glas verhält sich bei Schaltern & Co. wie iOS */
     val iosLike = isApple || isGlass
@@ -109,7 +109,7 @@ class Palette(val look: Int, val dark: Boolean, ctx: Context, private val appFon
                 bg = if (dark) 0xFF0A0A0C.toInt() else 0xFFE8EAEF.toInt()
                 card = 0
                 label = if (dark) 0xFFEDEDF0.toInt() else 0xFF2B2F3A.toInt()
-                secondary = if (dark) 0x99EDEDF0.toInt() else 0x992B2F3A.toInt()
+                secondary = if (dark) 0xCCEDEDF0.toInt() else 0xCC2B2F3A.toInt()
                 separator = if (dark) 0x1AFFFFFF else 0x1F1E212D
                 accent = if (dark) 0xFFA5A0FF.toInt() else 0xFF4F46E5.toInt()
                 onAccent = Color.WHITE
@@ -586,11 +586,17 @@ fun hRow(ctx: Context): LinearLayout = LinearLayout(ctx).apply {
     gravity = Gravity.CENTER_VERTICAL
 }
 
-enum class Glyph { GEAR, PAINT, RULER, SPARKLE, ISLAND, NOTE, BELL, GRID, HAND, INFO, LOCK, LOCATION, BOLT, DROP, SPEAKER, SEARCH, APPICON, FONT, TIMER, CLOCK, EYE, PHONE, TORCH }
+enum class Glyph { HOME, GEAR, PAINT, RULER, SPARKLE, ISLAND, NOTE, BELL, GRID, HAND, INFO, LOCK, LOCATION, BOLT, DROP, SPEAKER, SEARCH, APPICON, FONT, TIMER, CLOCK, EYE, PHONE, TORCH }
 
 /** Einstellungs-Icon im jeweiligen Look. */
 @SuppressLint("ViewConstructor")
-class GlyphIcon(ctx: Context, private val color: Int, private val glyph: Glyph, private val pal: Palette) : View(ctx) {
+class GlyphIcon(
+    ctx: Context,
+    private val color: Int,
+    private val glyph: Glyph,
+    private val pal: Palette,
+    private val bare: Boolean = false,
+) : View(ctx) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val r = RectF()
     private val path = Path()
@@ -606,6 +612,7 @@ class GlyphIcon(ctx: Context, private val color: Int, private val glyph: Glyph, 
         p.style = Paint.Style.FILL
         val glyphColor: Int
         when {
+            bare -> glyphColor = color
             pal.isAndroid -> {
                 p.color = Palette.mixC(color, if (pal.dark) Color.BLACK else Color.WHITE, if (pal.dark) 0.55f else 0.78f)
                 c.drawCircle(s / 2, s / 2, s / 2, p)
@@ -625,22 +632,8 @@ class GlyphIcon(ctx: Context, private val color: Int, private val glyph: Glyph, 
                 glyphColor = pal.label
             }
             pal.isGlass -> {
-                // Farbiges Glas: getönte Fläche + Lichtkante oben (wie der „Colored glass“-Rezept-Tier)
-                p.shader = LinearGradient(0f, 0f, s * 0.4f, s, Palette.mixC(color, Color.WHITE, 0.15f), color, Shader.TileMode.CLAMP)
-                p.alpha = 210
-                c.drawRoundRect(r, s * 0.28f, s * 0.28f, p)
-                p.shader = null
-                p.alpha = 255
-                p.style = Paint.Style.STROKE
-                p.strokeWidth = context.dp(1f)
-                p.shader = LinearGradient(0f, 0f, 0f, s * 0.5f, 0x99FFFFFF.toInt(), 0x00FFFFFF, Shader.TileMode.CLAMP)
-                r.inset(p.strokeWidth / 2, p.strokeWidth / 2)
-                c.drawRoundRect(r, s * 0.28f, s * 0.28f, p)
-                p.shader = null
-                p.color = 0x1FFFFFFF
-                c.drawRoundRect(r, s * 0.28f, s * 0.28f, p)
-                p.style = Paint.Style.FILL
-                r.set(0f, 0f, s, s)
+                p.color = color
+                c.drawRoundRect(r, s * 0.24f, s * 0.24f, p)
                 glyphColor = Color.WHITE
             }
             else -> {
@@ -655,6 +648,21 @@ class GlyphIcon(ctx: Context, private val color: Int, private val glyph: Glyph, 
         val cy = s / 2
         val g = s * (if (pal.isAndroid) 0.5f else 0.62f)
         when (glyph) {
+            Glyph.HOME -> {
+                p.style = Paint.Style.STROKE
+                p.strokeWidth = s * 0.07f
+                p.strokeJoin = Paint.Join.ROUND
+                p.strokeCap = Paint.Cap.ROUND
+                path.reset()
+                path.moveTo(cx - g * 0.5f, cy - g * 0.05f)
+                path.lineTo(cx, cy - g * 0.48f)
+                path.lineTo(cx + g * 0.5f, cy - g * 0.05f)
+                path.moveTo(cx - g * 0.36f, cy - g * 0.16f)
+                path.lineTo(cx - g * 0.36f, cy + g * 0.44f)
+                path.lineTo(cx + g * 0.36f, cy + g * 0.44f)
+                path.lineTo(cx + g * 0.36f, cy - g * 0.16f)
+                c.drawPath(path, p)
+            }
             Glyph.GEAR -> {
                 p.style = Paint.Style.STROKE
                 p.strokeWidth = s * 0.08f
@@ -927,66 +935,16 @@ class DesignTile(ctx: Context, private val pal: Palette, private val design: Int
 }
 
 
-/**
- * Glas-Fläche nach stormaref/LiquidGlassSkill (CSS-Ebene):
- * farblose Tönung (Weiß → 70 % Grau, 6 %), Lichtkante oben, Haarlinie, Reflex unten, 1px Rand.
- */
-class GlassDrawable(private val pal: Palette, private val radius: Float, private val dp: Float, private val strong: Boolean = false) :
-    android.graphics.drawable.Drawable() {
+/** Mesh-Farbverlauf für Android ohne RuntimeShader. */
+internal class MeshDrawable(private val pal: Palette) : android.graphics.drawable.Drawable() {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val r = RectF()
-
-    override fun draw(c: Canvas) {
-        val b = bounds
-        r.set(b)
-        val rad = radius.coerceAtMost(r.height() / 2)
-        // Tönung (bei „strong“ etwas Frost für Lesbarkeit, wie der Menu-Tier)
-        val topA = if (strong) (if (pal.dark) 0x42 else 0x96) else (if (pal.dark) 0x24 else 0x59)
-        val botA = if (strong) (if (pal.dark) 0x34 else 0x7A) else (if (pal.dark) 0x1A else 0x40)
-        p.style = Paint.Style.FILL
-        p.shader = LinearGradient(0f, r.top, 0f, r.bottom,
-            Color.argb(topA, 255, 255, 255), Color.argb(botA, 179, 179, 179), Shader.TileMode.CLAMP)
-        c.drawRoundRect(r, rad, rad, p)
-        p.shader = null
-        p.style = Paint.Style.STROKE
-        // Lichtkante oben
-        p.strokeWidth = dp
-        p.shader = LinearGradient(0f, r.top, 0f, r.top + rad.coerceAtLeast(dp * 8),
-            Color.argb(if (pal.dark) 128 else 140, 255, 255, 255), 0x00FFFFFF, Shader.TileMode.CLAMP)
-        val i = dp / 2
-        c.drawRoundRect(r.left + i, r.top + i, r.right - i, r.bottom - i, rad, rad, p)
-        // Reflex unten
-        p.shader = LinearGradient(0f, r.bottom - rad.coerceAtLeast(dp * 8), 0f, r.bottom,
-            0x00FFFFFF, Color.argb(16, 255, 255, 255), Shader.TileMode.CLAMP)
-        c.drawRoundRect(r.left + i, r.top + i, r.right - i, r.bottom - i, rad, rad, p)
-        p.shader = null
-        // Haarlinie
-        p.color = Color.argb(if (pal.dark) 26 else 31, 255, 255, 255)
-        c.drawRoundRect(r.left + dp * 1.5f, r.top + dp * 1.5f, r.right - dp * 1.5f, r.bottom - dp * 1.5f, rad, rad, p)
-        // Rand
-        p.color = if (pal.dark) 0x14FFFFFF else 0x1F1E212D
-        c.drawRoundRect(r.left + i, r.top + i, r.right - i, r.bottom - i, rad, rad, p)
-        p.style = Paint.Style.FILL
-    }
-
-    override fun getOutline(outline: android.graphics.Outline) {
-        outline.setRoundRect(bounds, radius.coerceAtMost(bounds.height() / 2f))
-    }
-
-    override fun setAlpha(alpha: Int) {}
-    override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) {}
-    @Deprecated("Deprecated in Java")
-    override fun getOpacity() = android.graphics.PixelFormat.TRANSLUCENT
-}
-
-/** Ambient-Mesh-Hintergrund (Rezept-Regel 1: Glas braucht etwas, das es zeigen kann). */
-class MeshDrawable(private val pal: Palette) : android.graphics.drawable.Drawable() {
-    private val p = Paint(Paint.ANTI_ALIAS_FLAG)
+    var phase = 0f
 
     override fun draw(c: Canvas) {
         val w = bounds.width().toFloat()
         val h = bounds.height().toFloat()
-        c.drawColor(pal.bg)
+        p.color = pal.bg
+        c.drawRect(bounds, p)
         val d = pal.dark
         val blobs = listOf(
             floatArrayOf(0.42f, 0.38f, 0.75f) to (if (d) Color.argb(66, 139, 92, 246) else Color.argb(51, 139, 92, 246)),
@@ -996,9 +954,10 @@ class MeshDrawable(private val pal: Palette) : android.graphics.drawable.Drawabl
             floatArrayOf(0.95f, 1.1f, 0.85f) to (if (d) Color.argb(77, 79, 70, 229) else Color.argb(15, 67, 56, 202)),
         )
         val m = kotlin.math.max(w, h)
-        for ((pos, col) in blobs) {
-            val cx = w * pos[0]
-            val cy = h * pos[1]
+        for ((index, blob) in blobs.withIndex()) {
+            val (pos, col) = blob
+            val cx = bounds.left + w * (pos[0] + 0.08f * kotlin.math.sin(phase + index))
+            val cy = bounds.top + h * (pos[1] + 0.10f * kotlin.math.cos(phase + index))
             val rad = m * pos[2]
             p.shader = android.graphics.RadialGradient(cx, cy, rad, col, Color.TRANSPARENT, Shader.TileMode.CLAMP)
             c.drawCircle(cx, cy, rad, p)

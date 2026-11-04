@@ -10,6 +10,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -19,6 +20,7 @@ import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
@@ -56,11 +58,15 @@ class MainActivity : Activity() {
     private val previews = ArrayList<IslandController>()
     /** Werden in onResume / nach Berechtigungen aufgerufen */
     private val refreshers = ArrayList<() -> Unit>()
+    private val pageRefreshers = mutableMapOf<View, List<() -> Unit>>()
 
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
         if (k != Prefs.CUSTOM_SNAPSHOT && (k in Prefs.LOOK_INT_KEYS || k in Prefs.LOOK_BOOL_KEYS)) Prefs.rememberCustom(this)
         val c = previewCfg()
         previews.forEach { it.cfg = c }
+        if (k == Prefs.REDUCE_MOTION) {
+            stack.forEach { (it.background as? LiquidGlassBackdrop)?.invalidateSelf() }
+        }
     }
 
     private fun previewCfg() = Prefs.load(this).copy(hideLandscape = false, enabled = true)
@@ -288,10 +294,11 @@ class MainActivity : Activity() {
         }
     }
 
-    private fun pop(): Boolean {
+    private fun pop(animate: Boolean = true): Boolean {
         if (stack.size <= 1) return false
         val top = stack.removeAt(stack.size - 1)
         val name = stackNames.removeAt(stackNames.size - 1)
+        pageRefreshers.remove(top)?.let { refreshers.removeAll(it.toSet()) }
         if (name == "geometry") IslandBus.calibrate(false)
         val prev = stack.last()
         prev.visibility = View.VISIBLE
@@ -300,11 +307,13 @@ class MainActivity : Activity() {
             host.removeView(top)
             (top.getTag(TAG_PREVIEW) as? IslandController)?.let { previews.remove(it); it.release() }
         }
-        if (reduceMotion) {
+        if (!animate || reduceMotion) {
             top.animate().cancel()
             prev.animate().cancel()
             prev.translationX = 0f
             prev.alpha = 1f
+            prev.scaleX = 1f
+            prev.scaleY = 1f
             end.run()
         } else if (pal.isNothing) {
             top.animate().alpha(0f).setDuration(motionDuration(180L)).withEndAction(end).start()
@@ -324,19 +333,27 @@ class MainActivity : Activity() {
     }
 
     /** Seite mit großem Titel, der beim Scrollen in die Leiste wandert – je nach Look. */
-    private fun page(title: String, back: Boolean, build: (LinearLayout) -> Unit): FrameLayout {
+    private fun page(
+        title: String,
+        back: Boolean,
+        dockDestination: GlassDestination? = null,
+        build: (LinearLayout) -> Unit,
+    ): FrameLayout {
         val root = FrameLayout(this).apply {
-            if (pal.isGlass) background = MeshDrawable(pal) else setBackgroundColor(pal.bg)
+            setBackgroundColor(pal.bg)
             elevation = dp(10f)
             isClickable = true
             // Fix: Suchfeld bekommt beim Öffnen nicht automatisch den Fokus (keine Tastatur)
             isFocusableInTouchMode = true
             descendantFocusability = android.view.ViewGroup.FOCUS_BEFORE_DESCENDANTS
         }
+        val backdrop = if (pal.isGlass) LiquidGlassBackdrop(root, pal) { reduceMotion } else null
+        if (backdrop != null) root.background = backdrop
+        val hasDock = backdrop != null && dockDestination != null
         val navH = dp(54f)
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dpi(16f), navH.toInt(), dpi(16f), dpi(48f))
+            setPadding(dpi(16f), navH.toInt(), dpi(16f), dpi(if (hasDock) 24f else 48f))
         }
         val bigTitle = TextView(this).apply {
             text = if (pal.isNothing) title.uppercase() else title
@@ -368,13 +385,17 @@ class MainActivity : Activity() {
             }
         }
         content.addView(bigTitle, LinearLayout.LayoutParams(-1, -2))
+        val firstRefresher = refreshers.size
         build(content)
+        if (refreshers.size > firstRefresher) pageRefreshers[root] = refreshers.drop(firstRefresher)
         val scroll = ScrollView(this).apply {
             isVerticalScrollBarEnabled = false
             overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
             addView(content)
         }
-        root.addView(scroll, FrameLayout.LayoutParams(-1, -1))
+        root.addView(scroll, FrameLayout.LayoutParams(-1, -1).apply {
+            if (hasDock) bottomMargin = dpi(78f)
+        })
 
         val bar = FrameLayout(this)
         val barBg = View(this).apply {
@@ -421,6 +442,12 @@ class MainActivity : Activity() {
             })
         }
         root.addView(bar, FrameLayout.LayoutParams(-1, navH.toInt(), Gravity.TOP))
+        if (backdrop != null && dockDestination != null) {
+            root.addView(glassDock(backdrop, dockDestination),
+                FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply {
+                    bottomMargin = dpi(12f)
+                })
+        }
 
         scroll.setOnScrollChangeListener { _, _, y, _, _ ->
             val threshold = bigTitle.bottom - navH * 0.6f
@@ -448,7 +475,51 @@ class MainActivity : Activity() {
         else -> "Apple"
     }
 
-    private fun mainPage(): View = page(APP_NAME, false) { c ->
+    private enum class GlassDestination(val page: String, val label: String, val glyph: Glyph) {
+        START("main", "Start", Glyph.HOME),
+        DESIGN("style", "Design & Stil", Glyph.SPARKLE),
+        SETUP("permissions", "Berechtigungen", Glyph.GEAR),
+    }
+
+    private fun glassDock(backdrop: LiquidGlassBackdrop, current: GlassDestination): View {
+        val dock = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(dpi(6f), dpi(5f), dpi(6f), dpi(5f))
+            elevation = dp(4f)
+        }
+        dock.background = backdrop.dockBackground(dock)
+        for (destination in GlassDestination.entries) {
+            val button = object : FrameLayout(this) {
+                override fun getAccessibilityClassName(): CharSequence = android.widget.Button::class.java.name
+            }.apply {
+                isSelected = destination == current
+                isFocusable = true
+                contentDescription = destination.label
+                val shape = GradientDrawable().apply {
+                    cornerRadius = dp(24f)
+                    setColor(if (destination == current) pal.fill else Color.TRANSPARENT)
+                }
+                val mask = GradientDrawable().apply {
+                    cornerRadius = dp(24f)
+                    setColor(Color.WHITE)
+                }
+                background = RippleDrawable(ColorStateList.valueOf(pal.fill), shape, mask)
+                addView(GlyphIcon(this@MainActivity, pal.label, destination.glyph, pal, bare = true).apply {
+                    importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                }, FrameLayout.LayoutParams(dpi(29f), dpi(29f), Gravity.CENTER))
+                setOnClickListener {
+                    if (stackNames.lastOrNull() != current.page || destination == current) return@setOnClickListener
+                    while (stack.size > 1) pop(animate = false)
+                    if (destination != GlassDestination.START) open(destination.page, animate = false)
+                }
+            }
+            dock.addView(button, LinearLayout.LayoutParams(dpi(58f), dpi(48f)))
+        }
+        return dock
+    }
+
+    private fun mainPage(): View = page(APP_NAME, false, GlassDestination.START) { c ->
         c.addView(TextView(this).apply {
             text = "Deine Dynamic Island – in jedem Design."
             textSize = 15f
@@ -590,9 +661,13 @@ class MainActivity : Activity() {
             setHintTextColor(pal.secondary)
             typeface = pal.font(400)
             setPadding(dpi(40f), dpi(6f), dpi(14f), dpi(6f))
-            background = if (pal.isGlass) GlassDrawable(pal, dp(14f), dp(1f)) else GradientDrawable().apply {
-                cornerRadius = dp(if (pal.isApple) 10f else 28f)
-                setColor(if (pal.isApple) pal.fill else pal.card)
+            background = GradientDrawable().apply {
+                cornerRadius = dp(when {
+                    pal.isApple -> 10f
+                    pal.isGlass -> 14f
+                    else -> 28f
+                })
+                setColor(if (pal.iosLike) pal.fill else pal.card)
                 if (pal.isNothing) setStroke(dpi(1f), pal.outline)
             }
             addTextChangedListener(object : TextWatcher {
@@ -706,7 +781,7 @@ class MainActivity : Activity() {
                 prefs.edit().putInt(Prefs.UI_LOOK, it).apply()
                 main.postDelayed({ recreate() }, 180)
             },
-        ), footer = "Nur das Aussehen dieser Einstellungen – unabhängig von der Island."))
+        ), footer = "„Glas“ zeigt einen animierten Farbverlauf mit schwebender Navigation. Diese Einstellung betrifft das Aussehen der App."))
     }
 
     private fun appearancePage() = page("Erscheinungsbild", true) { c ->
@@ -1015,7 +1090,7 @@ class MainActivity : Activity() {
         )))
     }
 
-    private fun permissionsPage() = page("Berechtigungen", true) { c ->
+    private fun permissionsPage() = page("Berechtigungen", true, GlassDestination.SETUP) { c ->
         c.addView(section("Pflicht", listOf(
             statusRow("Bedienungshilfe", "Zeichnet die Island über allem", ::a11yEnabled) {
                 startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -1577,7 +1652,7 @@ class MainActivity : Activity() {
         } else {
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                background = if (pal.isGlass) GlassDrawable(pal, r, dp(1f)) else GradientDrawable().apply {
+                background = GradientDrawable().apply {
                     cornerRadius = r
                     setColor(pal.card)
                     if (pal.isNothing) setStroke(dpi(1f), pal.separator)
@@ -1866,7 +1941,7 @@ class MainActivity : Activity() {
     // Übersichts-Seiten
     // ==================================================================
 
-    private fun stylePage() = page("Design & Stil", true) { c ->
+    private fun stylePage() = page("Design & Stil", true, GlassDestination.DESIGN) { c ->
         c.addView(previewCard(big = false, root = c))
         c.addView(sectionHeader("Vorlage"))
         c.addView(designStrip())
@@ -1922,10 +1997,13 @@ class MainActivity : Activity() {
                 tile.addView(tv)
                 fun paint() {
                     val on = prefs.getBoolean(key, def)
-                    tile.background = if (pal.isGlass) GlassDrawable(pal, dp(18f), dp(1f), strong = on)
-                    else GradientDrawable().apply {
+                    tile.background = GradientDrawable().apply {
                         cornerRadius = dp(18f)
-                        setColor(if (on) Palette.mixC(pal.card, color, if (pal.dark) 0.28f else 0.16f) else pal.card)
+                        setColor(when {
+                            pal.isGlass -> if (on) pal.fill else Color.TRANSPARENT
+                            on -> Palette.mixC(pal.card, color, if (pal.dark) 0.28f else 0.16f)
+                            else -> pal.card
+                        })
                         if (pal.isNothing) setStroke(dpi(1f), if (on) pal.accent else pal.separator)
                     }
                     tv.setTextColor(if (on) pal.label else pal.secondary)
