@@ -56,20 +56,26 @@ class MainActivity : Activity() {
 
     /** Alle Vorschau-Islands (Hauptseite + Unterseiten) */
     private val previews = ArrayList<IslandController>()
+    private val glassPreviews = HashSet<IslandController>()
     /** Werden in onResume / nach Berechtigungen aufgerufen */
     private val refreshers = ArrayList<() -> Unit>()
     private val pageRefreshers = mutableMapOf<View, List<() -> Unit>>()
 
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, k ->
         if (k != Prefs.CUSTOM_SNAPSHOT && (k in Prefs.LOOK_INT_KEYS || k in Prefs.LOOK_BOOL_KEYS)) Prefs.rememberCustom(this)
-        val c = previewCfg()
-        previews.forEach { it.cfg = c }
+        refreshPreviewConfigs()
         if (k == Prefs.REDUCE_MOTION) {
             stack.forEach { (it.background as? LiquidGlassBackdrop)?.invalidateSelf() }
         }
     }
 
     private fun previewCfg() = Prefs.load(this).copy(hideLandscape = false, enabled = true)
+
+    private fun refreshPreviewConfigs() {
+        val config = previewCfg()
+        val glass = config.copy(style = IslandConfig.STYLE_GLASS, alwaysVisible = true)
+        previews.forEach { it.cfg = if (it in glassPreviews) glass else config }
+    }
 
     private fun dp(v: Float) = (v * resources.displayMetrics.density)
     private fun dpi(v: Float) = dp(v).toInt()
@@ -114,8 +120,7 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        val currentPreviewConfig = previewCfg()
-        previews.forEach { it.cfg = currentPreviewConfig }
+        refreshPreviewConfigs()
         refreshers.forEach { it() }
         if (stackNames.lastOrNull() == "geometry") IslandBus.calibrate(true)
     }
@@ -305,7 +310,11 @@ class MainActivity : Activity() {
         val w = host.width.toFloat()
         val end = Runnable {
             host.removeView(top)
-            (top.getTag(TAG_PREVIEW) as? IslandController)?.let { previews.remove(it); it.release() }
+            (top.getTag(TAG_PREVIEW) as? IslandController)?.let {
+                previews.remove(it)
+                glassPreviews.remove(it)
+                it.release()
+            }
         }
         if (!animate || reduceMotion) {
             top.animate().cancel()
@@ -831,7 +840,7 @@ class MainActivity : Activity() {
     }
 
     private fun glassPage() = page("Liquid Glass", true) { c ->
-        c.addView(previewCard(big = false, root = c))
+        c.addView(previewCard(big = false, root = c, glassComparison = true))
         if (prefs.getInt(Prefs.STYLE, D.style) != IslandConfig.STYLE_GLASS) {
             val holder = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             holder.addView(section(null, listOf(
@@ -842,6 +851,12 @@ class MainActivity : Activity() {
             ), footer = "Gerade ist ein anderer Stil aktiv."))
             c.addView(holder)
         }
+        c.addView(section("Material", choiceRows(Prefs.GLASS_MATERIAL, D.glassMaterial, listOf(
+            "Automatisch" to "Wählt helles oder dunkles Glas anhand der verfügbaren Hintergrundfarben.",
+            "Dunkel" to "Getöntes, schwarzes Glas mit hellen Symbolen.",
+            "Hell" to "Helles, milchiges Glas mit dunklen Symbolen.",
+            "Klar" to "Mehr Durchsicht mit dezentem Kontrast unter Text und Symbolen.",
+        ))))
         c.addView(section("Glas", listOf(
             sliderRow("Milchigkeit", Prefs.GLASS_OPACITY, D.glassOpacity, 0, 100) {
                 when { it < 20 -> "Klar"; it > 80 -> "Milchig"; else -> "$it %" }
@@ -850,7 +865,9 @@ class MainActivity : Activity() {
             sliderRow("Tönung", Prefs.GLASS_TINT, D.glassTint, 0, 100) { if (it == 0) "Neutral" else "$it %" },
         ), footer = "Milchigkeit = wie stark das Glas den Hintergrund verdeckt. Tönung färbt das Glas in der Akzentfarbe."))
         c.addView(section("Kante", listOf(
-            switchRow("Lichtkante", Prefs.GLASS_BORDER, D.glassBorder, "Heller Rand oben, Reflex unten"),
+            switchRow("Lichtkante", Prefs.GLASS_BORDER, D.glassBorder, "Kurze Glanzlichter und eine dezente dunkle Kante"),
+            switchRow("Adaptives Randlicht", Prefs.GLASS_ADAPTIVE_RIM, D.glassAdaptiveRim,
+                "Stimmt Farbe und Stärke auf die Vorschau oder die Android-Hintergrundfarben ab."),
             sliderRow("Kanten-Stärke", Prefs.GLASS_BORDER_WIDTH, D.glassBorderWidth, 3, 30) { "%.1f dp".format(it / 10f) },
             switchRow("Farbsaum", Prefs.GLASS_RAINBOW, D.glassRainbow, "Regenbogen-Lichtbrechung am Rand"),
         )))
@@ -1247,7 +1264,7 @@ class MainActivity : Activity() {
     // Vorschau
     // ==================================================================
 
-    private fun previewCard(big: Boolean, root: View?): View {
+    private fun previewCard(big: Boolean, root: View?, glassComparison: Boolean = false): View {
         val card = FrameLayout(this).apply {
             background = GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
@@ -1255,7 +1272,7 @@ class MainActivity : Activity() {
             ).apply { cornerRadius = dp(28f) }
             clipToOutline = true
         }
-        card.addView(object : View(this) {
+        if (!glassComparison) card.addView(object : View(this) {
             private val pp = Paint(Paint.ANTI_ALIAS_FLAG)
             override fun onDraw(c: Canvas) {
                 fun blob(x: Float, y: Float, r: Float, color: Int) {
@@ -1267,12 +1284,16 @@ class MainActivity : Activity() {
                 blob(width * 0.55f, height * 0.12f, width * 0.22f, 0x55FFFFFF)
             }
         }, FrameLayout.LayoutParams(-1, -1))
-        card.addView(TextView(this).apply {
+        val clockLabel = TextView(this).apply {
             text = "9:41"
             textSize = 15f
             typeface = pal.font(700)
             setTextColor(Color.WHITE)
-        }, FrameLayout.LayoutParams(-2, -2).apply { leftMargin = dpi(26f); topMargin = dpi(18f) })
+        }
+        card.addView(clockLabel, FrameLayout.LayoutParams(-2, -2).apply {
+            leftMargin = dpi(26f)
+            topMargin = dpi(18f)
+        })
 
         val view = IslandView(this, topInset = dp(12f))
         val ctl = IslandController(view, object : IslandController.Host {
@@ -1293,7 +1314,9 @@ class MainActivity : Activity() {
             }
         })
         card.addView(view, FrameLayout.LayoutParams(-1, -1))
-        ctl.cfg = previewCfg()
+        val preview = previewCfg()
+        if (glassComparison) glassPreviews.add(ctl)
+        ctl.cfg = if (glassComparison) preview.copy(style = IslandConfig.STYLE_GLASS, alwaysVisible = true) else preview
         ctl.setCharging(Content.Charging(batteryLevel(), false))
         if (demoMusicOn) ctl.setMusic(demoMusic())
         ctl.setLive(demoLive.values.toList())
@@ -1343,6 +1366,27 @@ class MainActivity : Activity() {
 
         val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         box.addView(card, LinearLayout.LayoutParams(-1, dpi(if (big) 310f else 300f)))
+        if (glassComparison) {
+            val scenes = listOf(
+                GlassEnvironment(0xFFF5D7E6.toInt(), 0xFFB7DDF8.toInt()),
+                GlassEnvironment(0xFF131C43.toInt(), 0xFF432659.toInt()),
+                GlassEnvironment(0xFF271451.toInt(), 0xFFF4C5AB.toInt()),
+            )
+            fun applyScene(index: Int) {
+                val scene = scenes[index]
+                clockLabel.setTextColor(if (scene.primaryLuminance >= 0.20f) 0xFF11141B.toInt() else Color.WHITE)
+                card.background = GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                    intArrayOf(scene.primary, scene.secondary)).apply { cornerRadius = dp(28f) }
+                // The island occupies the middle of the preview; sample the gradient in that region.
+                view.glassEnvironment = GlassEnvironment(
+                    Palette.mixC(scene.primary, scene.secondary, 0.22f),
+                    Palette.mixC(scene.primary, scene.secondary, 0.78f),
+                )
+            }
+            applyScene(0)
+            box.addView(labeled("Vorschau-Hintergrund",
+                segmentRow(listOf("Hell", "Dunkel", "Kontrast"), 0, ::applyScene)))
+        }
         if (big) box.addView(TextView(this).apply {
             text = "Chips antippen → testet die Vorschau UND die echte Island. Gedrückt halten = groß."
             textSize = 13f
@@ -2256,7 +2300,7 @@ class MainActivity : Activity() {
             "Wellenform Fortschritt Tasten Buttons" to "appearance",
             "Schrift Schriftart Google-Sans Mono Serif Textgröße" to "appearance",
             "Leuchten Glow Schatten" to "appearance",
-            "Liquid-Glass Glas Milchigkeit Glanz Tönung Kante Farbsaum Regenbogen" to "glass",
+            "Liquid-Glass Glas Material Klar Hell Dunkel Automatisch Randlicht Milchigkeit Glanz Tönung Kante Farbsaum Regenbogen" to "glass",
             "Position Kamera Vertikal Horizontal" to "geometry",
             "Breite Höhe Rundung Pille Kompakt Erweitert Ecken" to "geometry",
             "Animation Bounce Tempo Federung Drück-Effekt Bewegung" to "animation",

@@ -2,6 +2,7 @@ package de.myria.island
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapShader
 import android.graphics.Canvas
@@ -63,6 +64,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         const val BLUE = 0xFF0A84FF.toInt()
         const val GRAY = 0xFF8E8E93.toInt()
         const val LIGHT = 0xFFD1D1D6.toInt()
+        private const val DARK_GLASS_INK = 0xFF11141B.toInt()
     }
 
     private val d = resources.displayMetrics.density
@@ -178,6 +180,15 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     private val tmp2 = RectF()
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val glass = IslandGlass(d)
+    internal var glassEnvironment: GlassEnvironment? = null
+        set(value) {
+            if (field == value) return
+            field = value
+            if (cfg.style == IslandConfig.STYLE_GLASS) kick()
+        }
+    private var surfaceInk = Color.WHITE
+    private val surfaceMuted get() = if (surfaceInk == Color.WHITE) GRAY else 0xFF48505E.toInt()
+    private val surfaceSecondary get() = if (surfaceInk == Color.WHITE) LIGHT else 0xFF333C49.toInt()
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -194,6 +205,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     }
     private val shaderMatrix = Matrix()
     private val whiteFilter = PorterDuffColorFilter(Color.WHITE, PorterDuff.Mode.SRC_IN)
+    private val darkFilter = PorterDuffColorFilter(DARK_GLASS_INK, PorterDuff.Mode.SRC_IN)
 
     private val shaderCache = HashMap<Bitmap, BitmapShader>()
     private val artMatrix = Matrix()
@@ -529,7 +541,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     }
 
     private fun waveColor(c: Content.Music): Int =
-        if (cfg.waveformCover) accentOf(c) else Color.WHITE
+        if (cfg.waveformCover) readableAccent(accentOf(c)) else surfaceInk
+
+    private fun readableAccent(color: Int): Int =
+        if (surfaceInk == Color.WHITE) color else mix(color, surfaceInk, 0.52f)
 
     private fun drawIsland(canvas: Canvas, alpha: Float) {
         val w = sW.value
@@ -551,6 +566,14 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         // --- Bubble (zweite Aktivität) ---
         val bp = sBubble.value.coerceIn(0f, 1.15f)
         val glassStyle = cfg.style == IslandConfig.STYLE_GLASS
+        val nightMode = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+        val environment = glassEnvironment ?: if (nightMode == Configuration.UI_MODE_NIGHT_YES) {
+            GlassEnvironment.DARK
+        } else {
+            GlassEnvironment.LIGHT
+        }
+        val lightInk = !glassStyle || environment.lightInkOnSurface(cfg.glassMaterial)
+        surfaceInk = if (lightInk) Color.WHITE else DARK_GLASS_INK
         val showBubble = bp > 0.01f && bubbleDrawn != null
         if (showBubble && !glassStyle) drawBubble(canvas, bp)
 
@@ -584,8 +607,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             val readability = if (c != null) ca else if (mode == Mode.IDLE &&
                 (cfg.idleContent != IslandConfig.IDLE_NONE || privacy.any)) 0.8f else 0f
             glass.draw(canvas, island, r, if (showBubble) bubble else null, bubble.width() / 2f * roundness(),
-                (1f - bp).coerceIn(0f, 1f), cfg, accentOf(c), readability, travel, touch, touchX, bgPaint)
-            gapPaint.color = 0xFF26262A.toInt()
+                (1f - bp).coerceIn(0f, 1f), cfg, accentOf(c), environment, lightInk, readability,
+                travel, touch, touchX, bgPaint)
+            gapPaint.color = if (lightInk) 0xFF26262A.toInt() else 0xFFE3E8F0.toInt()
             if (showBubble) drawBubbleContent(canvas, bp)
         } else {
             paintShape(canvas, island, r, c)
@@ -825,7 +849,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             is Content.Nav -> drawNavArrow(canvas, c, cx, cy, s * 0.56f, a)
             is Content.Progress -> drawRing(canvas, cx, cy, s * 0.5f, c.progress, if (c.done) GREEN else BLUE, a)
             is Content.Charging -> { p.color = withAlpha(GREEN, a); Icons.bolt(canvas, cx, cy, s * 0.5f, p) }
-            is Content.Device -> { p.color = withAlpha(Color.WHITE, a); Icons.headphones(canvas, cx, cy, s * 0.5f, p) }
+            is Content.Device -> { p.color = withAlpha(surfaceInk, a); Icons.headphones(canvas, cx, cy, s * 0.5f, p) }
             else -> {}
         }
     }
@@ -898,14 +922,14 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             canvas.drawCircle(rect.centerX(), rect.centerY(), rad * 0.62f, ringPaint)
             p.color = withAlpha(0xFF111111.toInt(), a)
             canvas.drawCircle(rect.centerX(), rect.centerY(), rad * 0.18f, p)
-            p.color = withAlpha(Color.WHITE, a * 0.6f)
+            p.color = withAlpha(surfaceInk, a * 0.6f)
             canvas.drawCircle(rect.centerX(), rect.centerY(), rad * 0.06f, p)
             return
         }
         if (!drawBitmapRound(canvas, rect, c.info.art, radius, a)) {
             p.color = withAlpha(accentOf(c), a)
             canvas.drawRoundRect(rect, radius, radius, p)
-            p.color = withAlpha(Color.WHITE, a * 0.9f)
+            p.color = withAlpha(surfaceInk, a * 0.9f)
             Icons.note(canvas, rect.centerX(), rect.centerY(), rect.width() * 0.5f, p)
         }
     }
@@ -970,7 +994,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         when (cfg.progressStyle) {
             IslandConfig.PROGRESS_SQUIGGLE -> {
                 ringPaint.strokeWidth = max(2.5f * d, thick * 0.55f)
-                ringPaint.color = withAlpha(Color.WHITE, a * 0.25f)
+                ringPaint.color = withAlpha(surfaceInk, a * 0.25f)
                 if (r > split + 6 * d) canvas.drawLine(split + 6 * d, cy, r, cy, ringPaint)
                 ringPaint.color = withAlpha(color, a)
                 linePath.reset()
@@ -1000,7 +1024,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             }
             else -> {
                 tmp.set(l, cy - thick / 2, r, cy + thick / 2)
-                p.color = withAlpha(Color.WHITE, a * 0.22f)
+                p.color = withAlpha(surfaceInk, a * 0.22f)
                 canvas.drawRoundRect(tmp, thick / 2, thick / 2, p)
                 tmp.set(l, cy - thick / 2, split, cy + thick / 2)
                 p.color = withAlpha(color, a)
@@ -1038,7 +1062,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     }
 
     /** Pillen-Buttons (Benachrichtigungs-/Timer-Aktionen). Gibt die Gesamtbreite zurück. */
-    private fun pillRow(canvas: Canvas, actions: List<NotifAction>, left: Float, right: Float, cy: Float, a: Float, interactive: Boolean, tint: Int = Color.WHITE, equal: Boolean = true) {
+    private fun pillRow(canvas: Canvas, actions: List<NotifAction>, left: Float, right: Float, cy: Float, a: Float, interactive: Boolean, tint: Int = surfaceInk, equal: Boolean = true) {
         if (actions.isEmpty()) return
         val gap = 8 * d
         val ph = 36 * d
@@ -1054,11 +1078,11 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             val glass = cfg.style == IslandConfig.STYLE_GLASS
             p.color = withAlpha(tint, a * when {
                 glass -> 0.08f
-                tint == Color.WHITE -> 0.16f
+                tint == surfaceInk -> 0.16f
                 else -> 0.24f
             })
             canvas.drawRoundRect(tmp, ph / 2, ph / 2, p)
-            textPaint.color = withAlpha(if (tint == Color.WHITE) Color.WHITE else tint, a)
+            textPaint.color = withAlpha(if (tint == surfaceInk) surfaceInk else readableAccent(tint), a)
             val label = ellipsize(act.title, textPaint, w - 16 * d)
             canvas.drawText(label, tmp.centerX() - textPaint.measureText(label) / 2, cy + textPaint.textSize * 0.36f, textPaint)
             if (interactive) hits.add(Hit(RectF(tmp), act.run))
@@ -1105,17 +1129,17 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val tx = artRect.right + 14 * d
         val avail = right - waveWidth() - 12 * d - tx
         boldPaint.textSize = spx(17f)
-        boldPaint.color = withAlpha(Color.WHITE, a)
+        boldPaint.color = withAlpha(surfaceInk, a)
         canvas.drawText(ellipsize(info.title, boldPaint, avail), tx, artRect.top + 26 * d, boldPaint)
         textPaint.textSize = spx(15f)
-        textPaint.color = withAlpha(GRAY, a)
+        textPaint.color = withAlpha(surfaceMuted, a)
         canvas.drawText(ellipsize(info.artist, textPaint, avail), tx, artRect.top + 48 * d, textPaint)
 
         // Fortschritt (zieh zum Spulen)
         val py = artRect.bottom + 28 * d
         val pos = if (seeking && info.durationMs > 0) (seekFrac * info.durationMs).toLong() else info.positionNow()
         numPaint.textSize = spx(11.5f)
-        numPaint.color = withAlpha(if (seeking) Color.WHITE else GRAY, a)
+        numPaint.color = withAlpha(if (seeking) surfaceInk else surfaceMuted, a)
         val elapsed = formatClock(pos)
         val remain = if (info.durationMs > 0) "-" + formatClock(info.durationMs - pos) else ""
         val tw = 42 * d
@@ -1126,14 +1150,14 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val bh = if (seeking) 9 * d else 5.5f * d
         if (info.durationMs > 0) {
             val f = (pos.toFloat() / info.durationMs).coerceIn(0f, 1f)
-            val barColor = if (cfg.progressStyle == IslandConfig.PROGRESS_LINE) Color.WHITE else accentOf(c)
+            val barColor = if (cfg.progressStyle == IslandConfig.PROGRESS_LINE) surfaceInk else accentOf(c)
             drawBar(canvas, bl, br, py, f, barColor, a, bh, info.playing)
             if (interactive && cfg.musicSeek && info.canSeek) {
                 seekRect.set(bl, py - 16 * d, br, py + 16 * d)
                 seekActive = true
             }
         } else {
-            drawBar(canvas, bl, br, py, 0f, Color.WHITE, a, bh, false)
+            drawBar(canvas, bl, br, py, 0f, surfaceInk, a, bh, false)
         }
 
         // Steuerung
@@ -1170,28 +1194,28 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 if (info.playing) Icons.pause(canvas, cx, cy, s * 0.8f, p) else Icons.play(canvas, cx, cy, s * 0.8f, p)
             }
             IslandConfig.CONTROL_CIRCLE -> {
-                p.color = withAlpha(Color.WHITE, a)
+                p.color = withAlpha(surfaceInk, a)
                 canvas.drawCircle(cx, cy, 26 * d, p)
-                p.color = withAlpha(Color.BLACK, a)
+                p.color = withAlpha(if (surfaceInk == Color.WHITE) Color.BLACK else Color.WHITE, a)
                 if (info.playing) Icons.pause(canvas, cx, cy, s * 0.75f, p) else Icons.play(canvas, cx, cy, s * 0.75f, p)
             }
             IslandConfig.CONTROL_OUTLINE -> {
                 strokePaint.shader = null
                 strokePaint.strokeWidth = 1.2f * d
-                strokePaint.color = withAlpha(Color.WHITE, a * 0.45f)
+                strokePaint.color = withAlpha(surfaceInk, a * 0.45f)
                 for (x in floatArrayOf(cx - spacing, cx, cx + spacing)) canvas.drawCircle(x, cy, 23 * d, strokePaint)
-                p.color = withAlpha(Color.WHITE, a)
+                p.color = withAlpha(surfaceInk, a)
                 if (info.playing) Icons.pause(canvas, cx, cy, s * 0.62f, p) else Icons.play(canvas, cx, cy, s * 0.62f, p)
                 Icons.skip(canvas, cx - spacing, cy, s * 0.7f, -1, p)
                 Icons.skip(canvas, cx + spacing, cy, s * 0.7f, 1, p)
                 return
             }
             else -> {
-                p.color = withAlpha(Color.WHITE, a)
+                p.color = withAlpha(surfaceInk, a)
                 if (info.playing) Icons.pause(canvas, cx, cy, s, p) else Icons.play(canvas, cx, cy, s, p)
             }
         }
-        p.color = withAlpha(Color.WHITE, a)
+        p.color = withAlpha(surfaceInk, a)
         Icons.skip(canvas, cx - spacing, cy, s, -1, p)
         Icons.skip(canvas, cx + spacing, cy, s, 1, p)
     }
@@ -1201,7 +1225,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     /** Lade-Farbe je System: Apple/One UI grün, Pixel in der Akzentfarbe, Nothing weiß */
     private fun chargeColor(low: Boolean): Int = when {
         low -> if (Icons.family == Icons.NOTHING) 0xFFD71921.toInt() else RED
-        Icons.family == Icons.NOTHING -> Color.WHITE
+        Icons.family == Icons.NOTHING -> surfaceInk
         Icons.family == Icons.MATERIAL -> systemColor(android.R.color.system_accent1_200, 0xFFA8C7FA.toInt())
         else -> GREEN
     }
@@ -1216,9 +1240,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val bw = 27 * d
         val bx = island.left + h * 0.55f + 13 * d
         p.color = withAlpha(color, a)
-        val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = withAlpha(Color.WHITE, a * 0.45f) }
+        val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = withAlpha(surfaceInk, a * 0.45f) }
         val pulse = if (c.plugged && !cfg.reduceMotion) 0.85f + 0.15f * sin(age * 4f) else 1f
-        val bolt = if (c.plugged) Paint(p).apply { this.color = withAlpha(Color.WHITE, a * pulse) } else null
+        val bolt = if (c.plugged) Paint(p).apply { this.color = withAlpha(surfaceInk, a * pulse) } else null
         Icons.battery(canvas, bx, island.centerY(), bw, fill, body, p, bolt, d)
 
         // Glanz, der über die Füllung läuft
@@ -1258,7 +1282,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             p.color = withAlpha(0xFF3A3A3C.toInt(), a)
             canvas.drawRoundRect(tmp, pillH / 2, pillH / 2, p)
         }
-        p.color = withAlpha(Color.WHITE, a)
+        p.color = withAlpha(surfaceInk, a)
         val bellCx = tmp.centerX()
         val bellCy = tmp.centerY()
         Icons.bell(canvas, bellCx, bellCy, pillH * 0.62f, p, c.silent, if (c.silent) gapPaint else null)
@@ -1268,7 +1292,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             else -> "Klingeln"
         }
         boldPaint.textSize = h * 0.4f * cfg.textScale
-        rightText(canvas, txt, boldPaint, if (c.silent) RED else Color.WHITE, a)
+        rightText(canvas, txt, boldPaint, if (c.silent) RED else surfaceInk, a)
     }
 
     // ---- Timer ----
@@ -1292,7 +1316,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         Icons.timer(canvas, cx0, cy, s * 0.5f, p)
         val tx = island.left + pad + s + 14 * d
         textPaint.textSize = spx(13f)
-        textPaint.color = withAlpha(GRAY, a)
+        textPaint.color = withAlpha(surfaceMuted, a)
         canvas.drawText(ellipsize(c.title, textPaint, 140 * d), tx, cy - 9 * d, textPaint)
         numPaint.textSize = spx(30f)
         numPaint.color = withAlpha(ORANGE, a)
@@ -1310,7 +1334,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             p.color = withAlpha(0xFF636366.toInt(), a)
             canvas.drawCircle(cx, cy, s / 2, p)
             boldPaint.textSize = s * 0.42f
-            boldPaint.color = withAlpha(Color.WHITE, a)
+            boldPaint.color = withAlpha(surfaceInk, a)
             val ch = name.trim().take(1).uppercase()
             canvas.drawText(ch, cx - boldPaint.measureText(ch) / 2, cy + boldPaint.textSize * 0.36f, boldPaint)
         }
@@ -1339,10 +1363,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val tx = island.left + pad + s + 12 * d
         val avail = declineX - br - 10 * d - tx
         textPaint.textSize = spx(13f)
-        textPaint.color = withAlpha(GRAY, a)
+        textPaint.color = withAlpha(surfaceMuted, a)
         canvas.drawText(ellipsize(c.app, textPaint, avail), tx, cy - 6 * d, textPaint)
         boldPaint.textSize = spx(17f)
-        boldPaint.color = withAlpha(Color.WHITE, a)
+        boldPaint.color = withAlpha(surfaceInk, a)
         canvas.drawText(ellipsize(c.name, boldPaint, avail), tx, cy + 16 * d, boldPaint)
         circleButton(canvas, declineX, cy, br, RED, a, interactive, c.decline) { x, y, r ->
             Icons.phone(canvas, x, y, r * 1.0f, p, 135f)
@@ -1364,7 +1388,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val tx = island.left + pad + s + 14 * d
         val avail = hx - br - 12 * d - tx
         boldPaint.textSize = spx(17f)
-        boldPaint.color = withAlpha(Color.WHITE, a)
+        boldPaint.color = withAlpha(surfaceInk, a)
         canvas.drawText(ellipsize(c.name, boldPaint, avail), tx, cy - 3 * d, boldPaint)
         numPaint.textSize = spx(15f)
         numPaint.color = withAlpha(GREEN, a)
@@ -1385,12 +1409,11 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         if (bmp != null && !bmp.isRecycled) {
             tmp.set(cx - s / 2, cy - s / 2, cx + s / 2, cy + s / 2)
             artPaint.alpha = (a * 255).toInt()
-            // Pfeil-Bilder sind meist einfarbig → weiß einfärben, damit sie auf Schwarz sichtbar sind
-            artPaint.colorFilter = whiteFilter
+            artPaint.colorFilter = if (surfaceInk == Color.WHITE) whiteFilter else darkFilter
             canvas.drawBitmap(bmp, null, tmp, artPaint)
             artPaint.colorFilter = null
         } else {
-            p.color = withAlpha(Color.WHITE, a)
+            p.color = withAlpha(surfaceInk, a)
             Icons.turnArrow(canvas, cx, cy, s, p)
         }
     }
@@ -1400,7 +1423,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         drawNavArrow(canvas, c, leftX(h), island.centerY(), h * 0.62f, a)
         boldPaint.textSize = h * 0.42f * cfg.textScale
         val maxW = island.width() / 2 - cfg.widthDp * d / 2 - 4 * d
-        rightText(canvas, ellipsize(c.primary, boldPaint, maxW), boldPaint, Color.WHITE, a)
+        rightText(canvas, ellipsize(c.primary, boldPaint, maxW), boldPaint, surfaceInk, a)
     }
 
     private fun drawNavExpanded(canvas: Canvas, c: Content.Nav, a: Float) {
@@ -1411,10 +1434,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val tx = island.left + pad + s + 16 * d
         val avail = island.right - pad - tx
         boldPaint.textSize = spx(26f)
-        boldPaint.color = withAlpha(Color.WHITE, a)
+        boldPaint.color = withAlpha(surfaceInk, a)
         canvas.drawText(ellipsize(c.primary, boldPaint, avail), tx, cy - 2 * d, boldPaint)
         textPaint.textSize = spx(15f)
-        textPaint.color = withAlpha(LIGHT, a)
+        textPaint.color = withAlpha(surfaceSecondary, a)
         canvas.drawText(ellipsize(c.secondary, textPaint, avail), tx, cy + 22 * d, textPaint)
     }
 
@@ -1455,10 +1478,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         canvas.drawText(pct, island.right - pad - pw, top + 28 * d, numPaint)
         val avail = island.right - pad - pw - 12 * d - tx
         boldPaint.textSize = spx(15.5f)
-        boldPaint.color = withAlpha(Color.WHITE, a)
+        boldPaint.color = withAlpha(surfaceInk, a)
         canvas.drawText(ellipsize(c.title, boldPaint, avail), tx, top + 18 * d, boldPaint)
         textPaint.textSize = spx(13f)
-        textPaint.color = withAlpha(GRAY, a)
+        textPaint.color = withAlpha(surfaceMuted, a)
         canvas.drawText(ellipsize(c.app, textPaint, avail), tx, top + 37 * d, textPaint)
         val by = island.bottom - pad - 3 * d
         val f = if (c.done) 1f else if (c.progress < 0) {
@@ -1485,7 +1508,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             (cfg.animStyle == IslandConfig.ANIM_APPLE || cfg.animStyle == IslandConfig.ANIM_JELLY))
             sin(t * 38f) * 1.8f * d * (1f - t / 0.32f) else 0f
         val h = island.height()
-        p.color = withAlpha(Color.WHITE, a * entrance)
+        p.color = withAlpha(surfaceInk, a * entrance)
         Icons.lock(canvas, island.right - h * 0.55f + wobble, island.centerY() + h * 0.04f,
             h * (0.42f + 0.08f * entrance), open, p)
     }
@@ -1515,12 +1538,12 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     private fun drawVolume(canvas: Canvas, c: VolumeContent, a: Float) {
         val h = island.height()
         val lvl = if (c.muted) 0f else c.level.coerceIn(0f, 1f)
-        p.color = withAlpha(Color.WHITE, a)
+        p.color = withAlpha(surfaceInk, a)
         val waves = if (c.muted || lvl == 0f) 0 else if (lvl < 0.34f) 1 else if (lvl < 0.67f) 2 else 3
         Icons.speaker(canvas, leftX(h) + 2 * d, island.centerY(), h * 0.58f, waves, c.muted, p)
         val r = rightEdge(h)
         val bwid = min(78 * d, island.width() / 2 - cfg.widthDp * d / 2 + 4 * d)
-        drawBar(canvas, r - bwid, r, island.centerY(), lvl, Color.WHITE, a, 6 * d, false)
+        drawBar(canvas, r - bwid, r, island.centerY(), lvl, surfaceInk, a, 6 * d, false)
     }
 
     private fun torchActivationProgress(): Float {
@@ -1591,12 +1614,12 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         p.color = withAlpha(0xFFFFD60A.toInt(), a)
         Icons.flashlight(canvas, island.left + pad + 10 * d, island.top + pad + 8 * d, 20 * d, p)
         textPaint.textSize = spx(12.5f)
-        textPaint.color = withAlpha(LIGHT, a)
+        textPaint.color = withAlpha(surfaceSecondary, a)
         val hint = if (c.adjustable) "Wischen: Helligkeit · Tippen: Aus" else "Tippen zum Ausschalten"
         canvas.drawText(ellipsize(hint, textPaint, island.width() - pad * 2), island.left + pad, island.bottom - 14 * d, textPaint)
         if (c.adjustable) {
             numPaint.textSize = spx(15f)
-            numPaint.color = withAlpha(Color.WHITE, a)
+            numPaint.color = withAlpha(surfaceInk, a)
             val pct = "${(lvl * 100).toInt()} %"
             canvas.drawText(pct, island.right - pad - numPaint.measureText(pct), island.top + pad + 14 * d, numPaint)
             if (interactive) {
@@ -1608,7 +1631,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
     private fun drawFocus(canvas: Canvas, c: FocusContent, a: Float) {
         val h = island.height()
-        val col = if (c.on) 0xFF7D7AFF.toInt() else GRAY
+        val col = if (c.on) 0xFF7D7AFF.toInt() else surfaceMuted
         p.color = withAlpha(col, a)
         Icons.moon(canvas, leftX(h), island.centerY(), h * 0.56f, p)
         boldPaint.textSize = h * 0.4f * cfg.textScale
@@ -1629,12 +1652,12 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         }
         boldPaint.textSize = h * 0.38f * cfg.textScale
         val maxW = island.width() - h * 1.5f
-        rightText(canvas, ellipsize(c.title, boldPaint, maxW), boldPaint, if (c.app != null) Color.WHITE else c.color, a)
+        rightText(canvas, ellipsize(c.title, boldPaint, maxW), boldPaint, if (c.app != null) surfaceInk else c.color, a)
     }
 
     private fun drawAirplane(canvas: Canvas, c: AirplaneContent, a: Float) {
         val h = island.height()
-        val col = if (c.on) ORANGE else GRAY
+        val col = if (c.on) ORANGE else surfaceMuted
         p.color = withAlpha(col, a)
         Icons.airplane(canvas, leftX(h), island.centerY(), h * 0.56f, p)
         boldPaint.textSize = h * 0.4f * cfg.textScale
@@ -1643,7 +1666,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
     private fun drawNetwork(canvas: Canvas, c: NetworkContent, a: Float) {
         val h = island.height()
-        val col = if (c.kind == 0) GRAY else BLUE
+        val col = if (c.kind == 0) surfaceMuted else BLUE
         p.color = withAlpha(col, a)
         Icons.wifi(canvas, leftX(h), island.centerY(), h * 0.56f, p, c.kind != 0)
         boldPaint.textSize = h * 0.4f * cfg.textScale
@@ -1704,15 +1727,15 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val color = chargeColor(c.level <= 20)
         val bw = 64 * d
         p.color = withAlpha(color, a)
-        val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = withAlpha(Color.WHITE, a * if (Icons.family == Icons.NOTHING) 0.22f else 0.45f) }
-        val bolt = Paint(p).apply { this.color = withAlpha(if (Icons.family == Icons.NOTHING) Color.WHITE else Color.WHITE, a) }
+        val body = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = withAlpha(surfaceInk, a * if (Icons.family == Icons.NOTHING) 0.22f else 0.45f) }
+        val bolt = Paint(p).apply { this.color = withAlpha(surfaceInk, a) }
         if (Icons.family == Icons.MATERIAL) {
             // Pixel-Ladeanimation: Ring mit Blitz in der Mitte, der sanft pulsiert
             val r = 26 * d
             val rcx = island.left + pad + bw / 2
             val age = (System.nanoTime() - chargeStart) / 1e9f
             val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 6 * d; strokeCap = Paint.Cap.ROUND }
-            ring.color = withAlpha(Color.WHITE, a * 0.16f)
+            ring.color = withAlpha(surfaceInk, a * 0.16f)
             canvas.drawCircle(rcx, cy, r, ring)
             ring.color = withAlpha(color, a)
             tmp.set(rcx - r, cy - r, rcx + r, cy + r)
@@ -1735,7 +1758,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         if (c.fast && cfg.chargeDetails) parts.add("⚡ Schnell")
         if (!c.tempC.isNaN() && cfg.chargeDetails) parts.add("%.0f °C".format(c.tempC))
         textPaint.textSize = spx(14f)
-        textPaint.color = withAlpha(LIGHT, a)
+        textPaint.color = withAlpha(surfaceSecondary, a)
         canvas.drawText(ellipsize(parts.joinToString("  ·  "), textPaint, island.right - pad - tx), tx, cy + 26 * d, textPaint)
     }
 
@@ -1757,11 +1780,11 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             else -> null
         }
         if (left != null) {
-            numPaint.color = withAlpha(Color.WHITE, a)
+            numPaint.color = withAlpha(surfaceInk, a)
             canvas.drawText(ellipsize(left, numPaint, island.width() / 2 - h * 0.3f), island.left + h * 0.45f, island.centerY() + numPaint.textSize * 0.36f, numPaint)
         }
         if ((ic == IslandConfig.IDLE_BATTERY || ic == IslandConfig.IDLE_BOTH || ic == IslandConfig.IDLE_DATE_BATTERY) && idleBattery >= 0 && !privacy.any) {
-            val col = if (idleBattery <= 20) RED else Color.WHITE
+            val col = if (idleBattery <= 20) RED else surfaceInk
             val txt = "$idleBattery%"
             numPaint.color = withAlpha(col, a)
             canvas.drawText(txt, island.right - h * 0.45f - numPaint.measureText(txt), island.centerY() + numPaint.textSize * 0.36f, numPaint)
@@ -1772,7 +1795,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
     private fun drawDevice(canvas: Canvas, c: Content.Device, a: Float) {
         val h = island.height()
-        p.color = withAlpha(Color.WHITE, a)
+        p.color = withAlpha(surfaceInk, a)
         Icons.headphones(canvas, leftX(h), island.centerY(), h * 0.52f, p)
         if (c.connected && c.battery in 0..100) {
             val rs = h * 0.56f
@@ -1785,7 +1808,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             canvas.drawText(t, rx - rs / 2 - 6 * d - numPaint.measureText(t), island.centerY() + numPaint.textSize * 0.36f, numPaint)
         } else {
             boldPaint.textSize = h * 0.38f * cfg.textScale
-            rightText(canvas, if (c.connected) "Verbunden" else "Getrennt", boldPaint, if (c.connected) GREEN else GRAY, a)
+            rightText(canvas, if (c.connected) "Verbunden" else "Getrennt", boldPaint, if (c.connected) GREEN else surfaceMuted, a)
         }
     }
 
@@ -1823,12 +1846,12 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
         if (cfg.notifShowApp) {
             textPaint.textSize = spx(11.5f)
-            textPaint.color = withAlpha(GRAY, a)
+            textPaint.color = withAlpha(surfaceMuted, a)
             canvas.drawText(ellipsize(n.app.uppercase(), textPaint, avail), tx, y + 11 * d, textPaint)
             y += appH
         }
         boldPaint.textSize = spx(15f * sc)
-        boldPaint.color = withAlpha(Color.WHITE, a)
+        boldPaint.color = withAlpha(surfaceInk, a)
         val titleY = y + titleH * 0.8f
         canvas.drawText(ellipsize(n.title.ifBlank { n.app }, boldPaint, avail), tx, titleY, boldPaint)
 
@@ -1837,13 +1860,13 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             numPaint.textSize = spx(11.5f)
             val bw = numPaint.measureText(badge) + 12 * d
             tmp.set(right - bw, titleY - 13 * d, right, titleY + 4 * d)
-            p.color = withAlpha(Color.WHITE, a * 0.18f)
+            p.color = withAlpha(surfaceInk, a * 0.18f)
             canvas.drawRoundRect(tmp, tmp.height() / 2, tmp.height() / 2, p)
-            numPaint.color = withAlpha(Color.WHITE, a)
+            numPaint.color = withAlpha(surfaceInk, a)
             canvas.drawText(badge, tmp.centerX() - numPaint.measureText(badge) / 2, titleY, numPaint)
         } else if (cfg.notifShowTime) {
             textPaint.textSize = spx(12f)
-            textPaint.color = withAlpha(GRAY, a)
+            textPaint.color = withAlpha(surfaceMuted, a)
             canvas.drawText(time, right - timeW, titleY, textPaint)
         }
         y += titleH
@@ -1851,10 +1874,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val body = n.text.ifBlank { n.app }
         if (lines == 1) {
             textPaint.textSize = spx(13.5f * sc)
-            textPaint.color = withAlpha(LIGHT, a)
+            textPaint.color = withAlpha(surfaceSecondary, a)
             canvas.drawText(ellipsize(body, textPaint, right - tx), tx, y + 14 * d * sc, textPaint)
         } else {
-            val tp = TextPaint(textPaint).apply { textSize = spx(13.5f * sc); color = withAlpha(LIGHT, a) }
+            val tp = TextPaint(textPaint).apply { textSize = spx(13.5f * sc); color = withAlpha(surfaceSecondary, a) }
             val w = max(1, (right - tx).toInt())
             val l = StaticLayout.Builder.obtain(body, 0, body.length, tp, w)
                 .setMaxLines(lines).setEllipsize(TextUtils.TruncateAt.END).setLineSpacing(1f * d, 1f).build()
@@ -1872,7 +1895,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val lx = leftX(h)
         notifIcon(canvas, n, RectF(lx - s / 2, island.centerY() - s / 2, lx + s / 2, island.centerY() + s / 2), a)
         boldPaint.textSize = h * 0.38f * cfg.textScale
-        rightText(canvas, (if (cfg.notifShowApp) n.app else n.title.ifBlank { n.app }), boldPaint, n.accent?.let { mix(it, Color.WHITE, 0.35f) } ?: Color.WHITE, a)
+        rightText(canvas, (if (cfg.notifShowApp) n.app else n.title.ifBlank { n.app }), boldPaint, n.accent?.let { if (surfaceInk == Color.WHITE) mix(it, surfaceInk, 0.35f) else readableAccent(it) } ?: surfaceInk, a)
     }
 
     // ---- Kontrollzentrum (wie MT Capsule) ----
@@ -1890,7 +1913,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         fun slider(index: Int, value: Float, icon: (Float, Float, Float, Paint) -> Unit, label: String, onChange: (Float) -> Unit) {
             val v = if (sliderIndex == index) sliderValue else value
             tmp.set(island.left + pad, y, island.right - pad, y + sh)
-            p.color = withAlpha(Color.WHITE, a * 0.12f)
+            p.color = withAlpha(surfaceInk, a * 0.12f)
             canvas.drawRoundRect(tmp, sh / 2, sh / 2, p)
             val fillR = tmp.left + max(sh, tmp.width() * v.coerceIn(0f, 1f))
             tmp2.set(tmp.left, tmp.top, fillR, tmp.bottom)
@@ -1899,7 +1922,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             p.color = withAlpha(if (isLight(acc)) 0xFF1C1B1F.toInt() else Color.WHITE, a)
             icon(tmp.left + sh / 2, tmp.centerY(), sh * 0.5f, p)
             numPaint.textSize = spx(13f)
-            numPaint.color = withAlpha(Color.WHITE, a * 0.85f)
+            numPaint.color = withAlpha(surfaceInk, a * 0.85f)
             val txt = "$label  ${(v * 100).toInt()} %"
             canvas.drawText(txt, tmp.right - 14 * d - numPaint.measureText(txt), tmp.centerY() + numPaint.textSize * 0.36f, numPaint)
             // Fix: beim Ziehen keine neuen Treffer-Flächen anhäufen
@@ -1916,9 +1939,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         for (i in 0 until n) {
             val by = y + 26 * d + (i / 4) * 56 * d
             val cx = island.left + pad + step * (i % 4) + step / 2
-            p.color = withAlpha(Color.WHITE, a * 0.14f)
+            p.color = withAlpha(surfaceInk, a * 0.14f)
             canvas.drawCircle(cx, by, br, p)
-            p.color = withAlpha(Color.WHITE, a)
+            p.color = withAlpha(surfaceInk, a)
             when (i) {
                 0 -> Icons.flashlight(canvas, cx, by, br * 1.0f, p)
                 1 -> Icons.timer(canvas, cx, by, br * 1.0f, p)
@@ -1928,12 +1951,12 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                 5 -> Icons.headphones(canvas, cx, by, br * 0.95f, p)
                 6 -> {
                     numPaint.textSize = br * 0.9f
-                    numPaint.color = withAlpha(Color.WHITE, a)
+                    numPaint.color = withAlpha(surfaceInk, a)
                     canvas.drawText("±", cx - numPaint.measureText("±") / 2, by + numPaint.textSize * 0.36f, numPaint)
                 }
                 else -> {
                     ringPaint.strokeWidth = 2 * d
-                    ringPaint.color = withAlpha(Color.WHITE, a)
+                    ringPaint.color = withAlpha(surfaceInk, a)
                     canvas.drawCircle(cx, by, br * 0.32f, ringPaint)
                     for (k in 0 until 8) {
                         val ang = Math.toRadians(k * 45.0)
@@ -1951,9 +1974,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
 
     private fun bodyLayout(n: Content.Notif, width: Float): StaticLayout {
         val w = max(1, width.toInt())
-        val key = n.id + "|" + w + "|" + cfg.textScale
+        val key = n.id + "|" + w + "|" + cfg.textScale + "|" + surfaceInk
         notifLayout?.let { if (notifLayoutKey == key) return it }
-        val tp = TextPaint(textPaint).apply { textSize = spx(15f); color = Color.WHITE }
+        val tp = TextPaint(textPaint).apply { textSize = spx(15f); color = surfaceInk }
         val text = n.text.ifBlank { n.app }
         val l = StaticLayout.Builder.obtain(text, 0, text.length, tp, w)
             .setAlignment(Layout.Alignment.ALIGN_NORMAL)
@@ -1980,13 +2003,13 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val iconS = 24 * d
         drawBitmapRound(canvas, RectF(island.left + pad, y, island.left + pad + iconS, y + iconS), n.icon, 6 * d, a)
         textPaint.textSize = spx(13f)
-        textPaint.color = withAlpha(GRAY, a)
+        textPaint.color = withAlpha(surfaceMuted, a)
         canvas.drawText(n.app.uppercase(), island.left + pad + iconS + 8 * d, y + iconS * 0.68f, textPaint)
         val time = "jetzt"
         canvas.drawText(time, island.right - pad - textPaint.measureText(time), y + iconS * 0.68f, textPaint)
         y += iconS + 10 * d
         boldPaint.textSize = spx(16f)
-        boldPaint.color = withAlpha(Color.WHITE, a)
+        boldPaint.color = withAlpha(surfaceInk, a)
         canvas.drawText(ellipsize(n.title.ifBlank { n.app }, boldPaint, island.width() - pad * 2), island.left + pad, y + 16 * d, boldPaint)
         y += 22 * d
         val body = bodyLayout(n, island.width() - pad * 2)

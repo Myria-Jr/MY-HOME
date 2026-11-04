@@ -45,6 +45,8 @@ data class IslandConfig(
 
     // Liquid Glass
     val glassOpacity: Int = 24,
+    val glassMaterial: Int = GLASS_DARK,
+    val glassAdaptiveRim: Boolean = true,
     val glassShine: Int = 96,
     val glassBorder: Boolean = true,
     val glassBorderWidth: Int = 16,
@@ -173,6 +175,11 @@ data class IslandConfig(
 
         const val STYLE_BLACK = 0
         const val STYLE_GLASS = 1
+
+        const val GLASS_AUTO = 0
+        const val GLASS_DARK = 1
+        const val GLASS_LIGHT = 2
+        const val GLASS_CLEAR = 3
         const val STYLE_TINT = 2
         const val STYLE_MATERIAL = 3
         const val STYLE_GRAPHITE = 4
@@ -286,6 +293,8 @@ object Prefs {
     const val CONTROL_STYLE = "control_style"
 
     const val GLASS_OPACITY = "glass_opacity"
+    const val GLASS_MATERIAL = "glass_material"
+    const val GLASS_ADAPTIVE_RIM = "glass_adaptive_rim"
     const val GLASS_SHINE = "glass_shine"
     const val GLASS_BORDER = "glass_border"
     const val GLASS_BORDER_WIDTH = "glass_border_width"
@@ -418,6 +427,8 @@ object Prefs {
             controlStyle = i(CONTROL_STYLE, d.controlStyle),
 
             glassOpacity = i(GLASS_OPACITY, d.glassOpacity),
+            glassMaterial = i(GLASS_MATERIAL, d.glassMaterial).coerceIn(IslandConfig.GLASS_AUTO, IslandConfig.GLASS_CLEAR),
+            glassAdaptiveRim = b(GLASS_ADAPTIVE_RIM, d.glassAdaptiveRim),
             glassShine = i(GLASS_SHINE, d.glassShine),
             glassBorder = b(GLASS_BORDER, d.glassBorder),
             glassBorderWidth = i(GLASS_BORDER_WIDTH, d.glassBorderWidth),
@@ -581,8 +592,8 @@ object Prefs {
     /** Werte, die einen Look ausmachen (für Custom gemerkt). */
     val LOOK_INT_KEYS = listOf(STYLE, ACCENT_MODE, ACCENT_COLOR, EXPANDED_RADIUS, COMPACT_ROUND, BOUNCE, SPEED,
         WAVE_STYLE, PROGRESS_STYLE, CONTROL_STYLE, FONT_STYLE, FONT_SCALE, UI_LOOK, ANIM_STYLE,
-        GLASS_OPACITY, GLASS_SHINE, GLASS_BORDER_WIDTH, GLASS_TINT, GLOW_STRENGTH)
-    val LOOK_BOOL_KEYS = listOf(GLOW, GLASS_BORDER, GLASS_RAINBOW, SHADOW)
+        GLASS_OPACITY, GLASS_SHINE, GLASS_BORDER_WIDTH, GLASS_TINT, GLASS_MATERIAL, GLOW_STRENGTH)
+    val LOOK_BOOL_KEYS = listOf(GLOW, GLASS_BORDER, GLASS_RAINBOW, GLASS_ADAPTIVE_RIM, SHADOW)
 
     /** Merkt sich den aktuellen Look als „Custom“ – nur wenn Custom gerade aktiv ist. */
     fun rememberCustom(c: Context) {
@@ -661,7 +672,8 @@ object Prefs {
 
     fun resetGlass(c: Context) {
         sp(c).edit().remove(GLASS_OPACITY).remove(GLASS_SHINE).remove(GLASS_BORDER)
-            .remove(GLASS_BORDER_WIDTH).remove(GLASS_RAINBOW).remove(GLASS_TINT).apply()
+            .remove(GLASS_BORDER_WIDTH).remove(GLASS_RAINBOW).remove(GLASS_TINT)
+            .remove(GLASS_MATERIAL).remove(GLASS_ADAPTIVE_RIM).apply()
     }
 
     fun resetAll(c: Context) {

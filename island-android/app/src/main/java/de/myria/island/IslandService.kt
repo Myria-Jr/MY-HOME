@@ -44,6 +44,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
     private lateinit var wm: WindowManager
     private var view: IslandView? = null
+    private var glassWallpaperLight: AutoCloseable? = null
     private var controller: IslandController? = null
     private val lp = WindowManager.LayoutParams()
     /** Unsichtbares Touch-Fenster: nur es ändert seine Größe → kein Ruckeln beim Zeichnen. */
@@ -80,6 +81,10 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
         val v = IslandView(this)
         view = v
+        glassWallpaperLight?.close()
+        glassWallpaperLight = if (Build.VERSION.SDK_INT >= 27) runCatching {
+            GlassWallpaperLight(this, handler) { colors -> view?.glassEnvironment = colors }
+        }.getOrNull() else null
         val c = IslandController(v, this)
         controller = c
         c.cfg = effective()
@@ -291,6 +296,8 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         unregisterNetwork()
         OwnTimers.onChange = null
         OwnTimers.onTimerDone = null
+        glassWallpaperLight?.close()
+        glassWallpaperLight = null
         controller?.release()
         controller = null
         view?.let { try { wm.removeView(it) } catch (_: Exception) {} }
