@@ -13,7 +13,6 @@ import android.graphics.Path
 import android.graphics.PathMeasure
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
-import android.graphics.SweepGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.Typeface
@@ -156,11 +155,14 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     private val sContent = Spring(0f, precision = 0.003f)
     private val sPress = Spring(1f, precision = 0.001f)
     private val sBubble = Spring(0f, precision = 0.003f)
+    private val sGlassTouch = Spring(0f, stiffness = 500f, dampingRatio = 0.86f, precision = 0.002f)
+    private var glassExpandedKey: String? = null
+    private var glassExpandedHeight = 0f
     /** Akku-Füllstand beim Laden (animiert hochzählen) */
     private val sFill = Spring(0f, stiffness = 40f, dampingRatio = 1f, precision = 0.002f)
     /** Cover-„Pop“ bei neuem Song */
     private val sArtPop = Spring(1f, stiffness = 260f, dampingRatio = 0.5f, precision = 0.002f)
-    private val springs = arrayOf(sW, sH, sR, sAlpha, sContent, sPress, sBubble, sFill, sArtPop)
+    private val springs = arrayOf(sW, sH, sR, sAlpha, sContent, sPress, sBubble, sFill, sArtPop, sGlassTouch)
     private var chargeStart = 0L
     private var lastMusicId: String? = null
 
@@ -175,6 +177,7 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
     private val tmp = RectF()
     private val tmp2 = RectF()
     private val bgPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val glass = IslandGlass(d)
     private val strokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
     private val ringPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -255,7 +258,13 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         var bubbleZ = 0.62f
         var alphaK = k * 1.4f
         when (cfg.animStyle) {
-            IslandConfig.ANIM_APPLE -> { z = max(z, 0.68f); zH = z; pressZ = 0.55f; bubbleZ = 0.55f }
+            IslandConfig.ANIM_APPLE -> {
+                val glassStyle = cfg.style == IslandConfig.STYLE_GLASS
+                z = max(z, if (glassStyle) 0.79f else 0.68f)
+                zH = z
+                pressZ = if (glassStyle) 0.78f else 0.55f
+                bubbleZ = if (glassStyle) 0.76f else 0.55f
+            }
             IslandConfig.ANIM_ANDROID -> {
                 z = max(z, 0.92f); zH = z; k *= 1.12f; kH = k
                 contentK = k * 2.8f; alphaK = k * 2.2f; pressZ = 0.9f; bubbleZ = 0.88f
@@ -408,6 +417,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         }
         sW.target = s.w
         sH.target = s.h
+        if (mode == Mode.EXPANDED) {
+            glassExpandedKey = target?.key
+            glassExpandedHeight = s.h
+        }
         sR.target = min(s.r, s.h / 2 * roundness())
         sAlpha.target = if (mode == Mode.HIDDEN) 0f else 1f
         sBubble.target = if (bubbleWanted()) 1f else 0f
@@ -435,6 +448,11 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         lastFrame = now
         if (cfg.vinyl && (drawn as? Content.Music)?.info?.playing == true) vinylAngle = (vinylAngle + dt * 42f) % 360f
 
+        if (cfg.style != IslandConfig.STYLE_GLASS || cfg.reduceMotion) {
+            sGlassTouch.snap(0f)
+        } else {
+            sGlassTouch.target = if (pressed && !swiped && !seeking) 1f else 0f
+        }
         var moving = false
         for (s in springs) {
             if (s.step(dt)) moving = true
@@ -531,8 +549,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val ca = sContent.value.coerceIn(0f, 1f)
 
         // --- Bubble (zweite Aktivität) ---
-        val bp = sBubble.value
-        if (bp > 0.01f && bubbleDrawn != null) drawBubble(canvas, bp.coerceIn(0f, 1.15f))
+        val bp = sBubble.value.coerceIn(0f, 1.15f)
+        val glassStyle = cfg.style == IslandConfig.STYLE_GLASS
+        val showBubble = bp > 0.01f && bubbleDrawn != null
+        if (showBubble && !glassStyle) drawBubble(canvas, bp)
 
         // --- Glow / Schatten ---
         bgPaint.clearShadowLayer()
@@ -555,7 +575,21 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         }
 
         // --- Form ---
-        paintShape(canvas, island, r, c)
+        if (glassStyle) {
+            if (showBubble) layoutBubble(bp)
+            val travel = if (cfg.reduceMotion) 0f else ((sW.velocity + sH.velocity * 0.6f) / (1200f * d))
+                .coerceIn(-1f, 1f)
+            val touch = sGlassTouch.value.coerceIn(0f, 1f)
+            val touchX = ((downX - island.centerX()) / max(island.width() / 2f, 1f)).coerceIn(-1f, 1f)
+            val readability = if (c != null) ca else if (mode == Mode.IDLE &&
+                (cfg.idleContent != IslandConfig.IDLE_NONE || privacy.any)) 0.8f else 0f
+            glass.draw(canvas, island, r, if (showBubble) bubble else null, bubble.width() / 2f * roundness(),
+                (1f - bp).coerceIn(0f, 1f), cfg, accentOf(c), readability, travel, touch, touchX, bgPaint)
+            gapPaint.color = 0xFF26262A.toInt()
+            if (showBubble) drawBubbleContent(canvas, bp)
+        } else {
+            paintShape(canvas, island, r, c)
+        }
 
         // --- Akku-Rand (Ladestand als Linie um die Island) ---
         if (ringLevel >= 0f && (mode == Mode.IDLE || mode == Mode.COMPACT)) drawBatteryRing(canvas, r)
@@ -613,34 +647,14 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
             }
             val big = mode == Mode.EXPANDED && sH.value > cfg.heightDp * d * 1.8f
             val interactive = ca > 0.6f
-            when (c) {
-                is Content.Music -> if (big) drawMusicExpanded(canvas, c, ca, interactive) else drawMusicCompact(canvas, c, ca)
-                is Content.Charging -> if (big) drawChargingExpanded(canvas, c, ca) else drawCharging(canvas, c, ca)
-                is Content.Ringer -> drawRinger(canvas, c, ca)
-                is Content.Notif -> when {
-                    big -> drawNotifExpanded(canvas, c, ca, interactive)
-                    cfg.notifStyle == IslandConfig.NOTIF_COMPACT -> drawNotifCompact(canvas, c, ca)
-                    else -> drawNotif(canvas, c, ca)
-                }
-                is PanelContent -> drawPanel(canvas, c, ca, interactive)
-                is Content.Timer -> if (big) drawTimerExpanded(canvas, c, ca, interactive) else drawTimerCompact(canvas, c, ca)
-                is Content.Call -> when {
-                    c.incoming -> drawCallIncoming(canvas, c, ca, interactive)
-                    big -> drawCallExpanded(canvas, c, ca, interactive)
-                    else -> drawCallCompact(canvas, c, ca)
-                }
-                is Content.Nav -> if (big) drawNavExpanded(canvas, c, ca) else drawNavCompact(canvas, c, ca)
-                is Content.Progress -> if (big) drawProgressExpanded(canvas, c, ca) else drawProgressCompact(canvas, c, ca)
-                is Content.Device -> drawDevice(canvas, c, ca)
-                is UnlockContent -> drawUnlock(canvas, ca)
-                is VolumeContent -> drawVolume(canvas, c, ca)
-                is TorchContent -> if (big) drawTorchExpanded(canvas, c, ca, interactive) else drawTorch(canvas, ca)
-                is FocusContent -> drawFocus(canvas, c, ca)
-                is AirplaneContent -> drawAirplane(canvas, c, ca)
-                is StatusContent -> drawStatus(canvas, c, ca)
-                is NetworkContent -> drawNetwork(canvas, c, ca)
-                is HeatContent -> drawHeat(canvas, c, ca)
-                is AlarmContent -> drawAlarm(canvas, c, ca)
+            val blend = if (glassStyle && !cfg.reduceMotion) glassLayoutBlend(c) else null
+            if (blend == null) {
+                drawContent(canvas, c, ca, big, interactive)
+            } else {
+                if (blend < 0.99f) drawContent(canvas, c, ca * (1f - blend), false,
+                    interactive && blend < 0.2f && mode != Mode.EXPANDED)
+                if (blend > 0.01f) drawContent(canvas, c, ca * blend, true,
+                    interactive && blend > 0.86f && mode == Mode.EXPANDED)
             }
             canvas.restore()
         }
@@ -649,13 +663,54 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         if (layered) canvas.restore()
     }
 
+    private fun glassLayoutBlend(c: Content): Float? {
+        if (c.key != glassExpandedKey || c is PanelContent || (c is Content.Call && c.incoming)) return null
+        val compact = sizeFor(Mode.COMPACT, c).h
+        val delta = glassExpandedHeight - compact
+        if (delta <= 6f * d) return null
+        val fraction = ((sH.value - compact) / delta - 0.32f) / 0.54f
+        val t = fraction.coerceIn(0f, 1f)
+        return t * t * (3f - 2f * t)
+    }
+
+    private fun drawContent(canvas: Canvas, c: Content, ca: Float, big: Boolean, interactive: Boolean) {
+        when (c) {
+            is Content.Music -> if (big) drawMusicExpanded(canvas, c, ca, interactive) else drawMusicCompact(canvas, c, ca)
+            is Content.Charging -> if (big) drawChargingExpanded(canvas, c, ca) else drawCharging(canvas, c, ca)
+            is Content.Ringer -> drawRinger(canvas, c, ca)
+            is Content.Notif -> when {
+                big -> drawNotifExpanded(canvas, c, ca, interactive)
+                cfg.notifStyle == IslandConfig.NOTIF_COMPACT -> drawNotifCompact(canvas, c, ca)
+                else -> drawNotif(canvas, c, ca)
+            }
+            is PanelContent -> drawPanel(canvas, c, ca, interactive)
+            is Content.Timer -> if (big) drawTimerExpanded(canvas, c, ca, interactive) else drawTimerCompact(canvas, c, ca)
+            is Content.Call -> when {
+                c.incoming -> drawCallIncoming(canvas, c, ca, interactive)
+                big -> drawCallExpanded(canvas, c, ca, interactive)
+                else -> drawCallCompact(canvas, c, ca)
+            }
+            is Content.Nav -> if (big) drawNavExpanded(canvas, c, ca) else drawNavCompact(canvas, c, ca)
+            is Content.Progress -> if (big) drawProgressExpanded(canvas, c, ca) else drawProgressCompact(canvas, c, ca)
+            is Content.Device -> drawDevice(canvas, c, ca)
+            is UnlockContent -> drawUnlock(canvas, ca)
+            is VolumeContent -> drawVolume(canvas, c, ca)
+            is TorchContent -> if (big) drawTorchExpanded(canvas, c, ca, interactive) else drawTorch(canvas, ca)
+            is FocusContent -> drawFocus(canvas, c, ca)
+            is AirplaneContent -> drawAirplane(canvas, c, ca)
+            is StatusContent -> drawStatus(canvas, c, ca)
+            is NetworkContent -> drawNetwork(canvas, c, ca)
+            is HeatContent -> drawHeat(canvas, c, ca)
+            is AlarmContent -> drawAlarm(canvas, c, ca)
+        }
+    }
+
     private fun systemColor(id: Int, fallback: Int): Int =
         if (Build.VERSION.SDK_INT >= 31) try { context.getColor(id) } catch (_: Exception) { fallback } else fallback
 
     private fun paintShape(canvas: Canvas, rect: RectF, r: Float, c: Content?) {
         bgPaint.shader = null
         when (cfg.style) {
-            IslandConfig.STYLE_GLASS -> paintGlass(canvas, rect, r, c)
             IslandConfig.STYLE_TINT -> {
                 val a = accentOf(c)
                 bgPaint.shader = LinearGradient(
@@ -727,194 +782,34 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         bgPaint.shader = null
     }
 
-    /**
-     * Liquid Glass – nach dem Rezept aus stormaref/LiquidGlassSkill, auf Android übertragen:
-     *  1. Frost: dunkler Schleier, damit Text über jeder Statusleiste lesbar bleibt (wie dort der „Modal“-Tier)
-     *  2. Tönung: farblos (Weiß → 70 % Grau bei ~6 %) – Farbe nur, wenn man „Tönung“ hochdreht
-     *  3. Rand aus drei Lichtern: Lichtkante oben (inset 0 1px), Haarlinie rundum (inset 0 0 0 1px),
-     *     schwacher Reflex unten (inset 0 -1px) + 1px Außenrand
-     *  4. Lichtbrechung: Android lässt Overlays nicht hinter sich schauen – darum wird das schmale
-     *     1–2-px-Band am Rand, in dem echte Brechung am stärksten ist, als Linse nachgezeichnet
-     *     (+ optionaler Farbsaum)
-     */
-    private fun paintGlass(canvas: Canvas, rect: RectF, r: Float, c: Content?) {
-        val opacity = cfg.glassOpacity.coerceIn(0, 100) / 100f
-        val shine = cfg.glassShine.coerceIn(0, 100) / 100f
-        val tint = cfg.glassTint.coerceIn(0, 100) / 100f
-        val accent = accentOf(c)
-        val rimW = (cfg.glassBorderWidth.coerceIn(3, 30) / 10f) * d
-
-        // Clear translucent body: keep wallpaper detail visible through the island.
-        bgPaint.shader = null
-        bgPaint.color = withAlpha(Color.BLACK, 0.018f + 0.30f * opacity)
-        canvas.drawRoundRect(rect, r, r, bgPaint)
-        bgPaint.clearShadowLayer()
-
-        // A faint cool-to-warm body tint follows the active content color.
-        val topCol = mix(Color.WHITE, accent, tint)
-        val bottomCol = mix(0xFFB3B3B3.toInt(), mix(accent, Color.BLACK, 0.16f), tint)
-        p.shader = LinearGradient(rect.left, rect.top, rect.left + rect.height() * 0.42f, rect.bottom,
-            intArrayOf(withAlpha(topCol, 0.025f + 0.24f * tint), withAlpha(bottomCol, 0.018f + 0.18f * tint)),
-            null, Shader.TileMode.CLAMP)
-        canvas.drawRoundRect(rect, r, r, p)
-        p.shader = null
-
-        // Pearlescent color refraction: soft spectral caustics stay inside the glass contour.
-        if (cfg.glassRainbow) {
-            val phase = sContent.value.coerceIn(0f, 1f)
-            val save = canvas.save()
-            islandPath.reset()
-            islandPath.addRoundRect(rect, r, r, Path.Direction.CW)
-            canvas.clipPath(islandPath)
-
-            val travelX = rect.left + rect.width() * (0.16f + 0.68f * (1f - phase))
-            val band = rect.height() * 1.7f
-            p.shader = LinearGradient(travelX - band, rect.top, travelX + band, rect.bottom,
-                intArrayOf(
-                    0x00000000,
-                    withAlpha(0xFFBD76FF.toInt(), 0.08f + 0.15f * shine),
-                    withAlpha(0xFFFF63C8.toInt(), 0.10f + 0.17f * shine),
-                    withAlpha(0xFF66E8FF.toInt(), 0.12f + 0.20f * shine),
-                    withAlpha(0x00FFFFFF, 0.0f),
-                    withAlpha(0xFFFFCE68.toInt(), 0.08f + 0.14f * shine),
-                    0x00000000
-                ),
-                floatArrayOf(0f, 0.18f, 0.34f, 0.52f, 0.68f, 0.86f, 1f),
-                Shader.TileMode.CLAMP)
-            canvas.drawRect(rect, p)
-            p.shader = null
-
-            val causticRadius = rect.height() * 0.96f
-            val leftX = rect.left + rect.width() * 0.2f
-            val rightX = rect.left + rect.width() * 0.82f
-            p.shader = android.graphics.RadialGradient(leftX, rect.top + rect.height() * 0.37f, causticRadius,
-                intArrayOf(
-                    withAlpha(0xFFFF63D2.toInt(), 0.10f + 0.25f * shine),
-                    withAlpha(0xFF8367FF.toInt(), 0.05f + 0.13f * shine),
-                    0x00FFFFFF
-                ), floatArrayOf(0f, 0.48f, 1f), Shader.TileMode.CLAMP)
-            canvas.drawCircle(leftX, rect.top + rect.height() * 0.37f, causticRadius, p)
-            p.shader = android.graphics.RadialGradient(rightX, rect.top + rect.height() * 0.68f, causticRadius,
-                intArrayOf(
-                    withAlpha(0xFFFFD66B.toInt(), 0.08f + 0.19f * shine),
-                    withAlpha(0xFF4FE7FF.toInt(), 0.05f + 0.12f * shine),
-                    0x00FFFFFF
-                ), floatArrayOf(0f, 0.46f, 1f), Shader.TileMode.CLAMP)
-            canvas.drawCircle(rightX, rect.top + rect.height() * 0.68f, causticRadius, p)
-
-            // Soft overlapping color nodes approximate a living mesh gradient inside the glass.
-            val meshX = rect.left + rect.width() * (0.42f + 0.16f * phase)
-            val meshY = rect.top + rect.height() * 0.52f
-            val meshRadius = rect.height() * 0.78f
-            p.shader = android.graphics.RadialGradient(meshX, meshY, meshRadius,
-                intArrayOf(
-                    withAlpha(0xFFB86CFF.toInt(), 0.05f + 0.09f * shine),
-                    withAlpha(0xFF6FE8FF.toInt(), 0.025f + 0.055f * shine),
-                    0x00FFFFFF
-                ), floatArrayOf(0f, 0.52f, 1f), Shader.TileMode.CLAMP)
-            canvas.drawCircle(meshX, meshY, meshRadius, p)
-            p.shader = null
-            canvas.restoreToCount(save)
-        }
-
-        // Long soft reflection across the top lip.
-        if (shine > 0.01f) {
-            p.shader = LinearGradient(0f, rect.top, 0f, rect.top + rect.height() * 0.52f,
-                intArrayOf(withAlpha(Color.WHITE, 0.12f * shine), withAlpha(Color.WHITE, 0.035f * shine), 0x00FFFFFF),
-                null, Shader.TileMode.CLAMP)
-            tmp2.set(rect.left + r * 0.2f, rect.top + rimW, rect.right - r * 0.2f, rect.top + rect.height() * 0.55f)
-            canvas.drawRoundRect(tmp2, r * 0.85f, r * 0.85f, p)
-            p.shader = null
-        }
-
-        strokePaint.shader = null
-        if (cfg.glassBorder) {
-            val edgeR = max(r, 1f)
-            // A restrained specular reflection replaces the uniform white outline.
-            strokePaint.strokeWidth = 0.85f * d
-            strokePaint.strokeCap = Paint.Cap.ROUND
-            strokePaint.shader = LinearGradient(rect.left + edgeR, rect.top, rect.right - edgeR, rect.top,
-                intArrayOf(0x00FFFFFF, withAlpha(Color.WHITE, 0.20f * shine), 0x00FFFFFF),
-                floatArrayOf(0f, 0.5f, 1f), Shader.TileMode.CLAMP)
-            canvas.drawLine(rect.left + edgeR, rect.top + 0.55f * d,
-                rect.right - edgeR, rect.top + 0.55f * d, strokePaint)
-            strokePaint.shader = null
-            strokePaint.strokeCap = Paint.Cap.BUTT
-
-            // A recessed edge adds depth without a bright contour.
-            strokePaint.strokeWidth = 0.7f * d
-            strokePaint.color = withAlpha(Color.BLACK, 0.14f)
-            tmp2.set(rect); tmp2.inset(0.35f * d, 0.35f * d)
-            canvas.drawRoundRect(tmp2, r, r, strokePaint)
-
-            // Lensed inner band and its soft dark edge.
-            val lens = 1.3f * d
-            strokePaint.strokeWidth = lens
-            strokePaint.color = withAlpha(Color.WHITE, 0.025f + 0.035f * shine)
-            tmp2.set(rect); tmp2.inset(rimW + lens / 2, rimW + lens / 2)
-            val lr = (r - rimW - lens / 2).coerceAtLeast(0f)
-            canvas.drawRoundRect(tmp2, lr, lr, strokePaint)
-            strokePaint.strokeWidth = 0.8f * d
-            strokePaint.color = withAlpha(Color.BLACK, 0.09f)
-            tmp2.set(rect); tmp2.inset(rimW + lens + 0.4f * d, rimW + lens + 0.4f * d)
-            val dr = (r - rimW - lens).coerceAtLeast(0f)
-            canvas.drawRoundRect(tmp2, dr, dr, strokePaint)
-
-            // Split-spectrum rim: cyan, violet, pink, amber and mint reflections.
-            if (cfg.glassRainbow) {
-                val spectral = intArrayOf(
-                    withAlpha(0xFF73E8FF.toInt(), 0.30f + 0.34f * shine),
-                    withAlpha(0xFF8D78FF.toInt(), 0.24f + 0.30f * shine),
-                    withAlpha(0xFFFF62CE.toInt(), 0.30f + 0.36f * shine),
-                    withAlpha(0xFFFFA15D.toInt(), 0.20f + 0.28f * shine),
-                    withAlpha(0xFFFFE27A.toInt(), 0.18f + 0.24f * shine),
-                    withAlpha(0xFF62F3D2.toInt(), 0.24f + 0.30f * shine),
-                    withAlpha(0xFF73E8FF.toInt(), 0.30f + 0.34f * shine)
-                )
-                strokePaint.strokeWidth = rimW * 1.15f
-                strokePaint.shader = SweepGradient(rect.centerX(), rect.centerY(), spectral, null)
-                tmp2.set(rect); tmp2.inset(rimW * 0.8f, rimW * 0.8f)
-                val rr = (r - rimW * 0.8f).coerceAtLeast(0f)
-                canvas.drawRoundRect(tmp2, rr, rr, strokePaint)
-
-                // A second, thinner fringe gives the rim the split-light look in the reference.
-                strokePaint.strokeWidth = 0.75f * d
-                tmp2.set(rect); tmp2.inset(rimW * 2.25f, rimW * 2.25f)
-                val innerR = (r - rimW * 2.25f).coerceAtLeast(0f)
-                canvas.drawRoundRect(tmp2, innerR, innerR, strokePaint)
-                strokePaint.shader = null
-            }
-        }
-
-        // A subtle shadowed edge keeps the glass grounded on bright backgrounds.
-        strokePaint.strokeWidth = 0.8f * d
-        strokePaint.color = withAlpha(Color.BLACK, 0.16f)
-        tmp2.set(rect); tmp2.inset(0.4f * d, 0.4f * d)
-        canvas.drawRoundRect(tmp2, r, r, strokePaint)
-
-        gapPaint.color = mix(Color.BLACK, 0xFF2A2A2E.toInt(), 1f - opacity * 0.6f)
+    private fun layoutBubble(bp: Float) {
+        val size = cfg.heightDp * d
+        val start = island.right - size / 2f
+        val end = island.right + 7f * d + size / 2f
+        val x = start + (end - start) * bp
+        val y = island.centerY()
+        val radius = size / 2f * (0.55f + 0.45f * bp.coerceAtMost(1f))
+        bubble.set(x - radius, y - radius, x + radius, y + radius)
     }
-
-    // ---- Bubble ----
 
     private fun drawBubble(canvas: Canvas, bp: Float) {
         val c = bubbleDrawn ?: return
-        val bs = cfg.heightDp * d
-        val cy = island.centerY()
-        val startX = island.right - bs / 2
-        val endX = island.right + 7 * d + bs / 2
-        val bx = startX + (endX - startX) * bp
-        val rad = bs / 2 * (0.55f + 0.45f * bp.coerceAtMost(1f))
-        // „Gooey“-Brücke beim Abtrennen
+        layoutBubble(bp)
         if (bp < 0.75f) {
-            val bh = bs * 0.8f * (1f - bp / 0.75f)
-            tmp.set(island.right - bs / 2, cy - bh / 2, bx, cy + bh / 2)
-            paintShape(canvas, tmp, bh / 2, c)
+            val size = cfg.heightDp * d
+            val h = size * 0.8f * (1f - bp / 0.75f)
+            val y = bubble.centerY()
+            tmp.set(island.right - size / 2f, y - h / 2f, bubble.centerX(), y + h / 2f)
+            paintShape(canvas, tmp, h / 2f, c)
         }
-        bubble.set(bx - rad, cy - rad, bx + rad, cy + rad)
-        paintShape(canvas, bubble, rad * roundness(), c)
-        val a = bp.coerceIn(0f, 1f) * bp.coerceIn(0f, 1f)
-        if (a > 0.05f) drawMini(canvas, c, bx, cy, rad * 2, a)
+        paintShape(canvas, bubble, bubble.width() / 2f * roundness(), c)
+        drawBubbleContent(canvas, bp)
+    }
+
+    private fun drawBubbleContent(canvas: Canvas, bp: Float) {
+        val c = bubbleDrawn ?: return
+        val t = bp.coerceIn(0f, 1f)
+        if (t * t > 0.05f) drawMini(canvas, c, bubble.centerX(), bubble.centerY(), bubble.width(), t * t)
     }
 
     private fun drawMini(canvas: Canvas, c: Content, cx: Float, cy: Float, s: Float, a: Float) {
@@ -2175,7 +2070,9 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                     torchStartLevel = torch.level
                     torchDragLevel = torch.level
                 }
-                if (mode != Mode.EXPANDED && cfg.squish) sPress.target = 0.95f
+                if (mode != Mode.EXPANDED && cfg.squish) {
+                    sPress.target = if (cfg.style == IslandConfig.STYLE_GLASS) 0.974f else 0.95f
+                }
                 kick()
                 postDelayed(longPress, 420)
                 return true

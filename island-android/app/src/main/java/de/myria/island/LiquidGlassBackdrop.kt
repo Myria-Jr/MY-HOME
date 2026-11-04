@@ -17,7 +17,6 @@ import android.os.Build
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.View
-import android.view.animation.PathInterpolator
 import android.widget.Button
 import android.widget.FrameLayout
 import kotlin.math.roundToInt
@@ -35,7 +34,9 @@ internal class GlassDockLayout(
 
     private var zoom = false
     private var progress = 0f
-    private var animator: ValueAnimator? = null
+    private val lensSpring = Spring(0f, stiffness = 420f, dampingRatio = 0.82f, precision = 0.002f)
+    private var lastLensFrame = 0L
+    private val lensFrame = Runnable { stepLens() }
     private val icon = GlyphIcon(context, palette.label, Glyph.SEARCH, palette, bare = true).apply {
         importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
     }
@@ -72,18 +73,34 @@ internal class GlassDockLayout(
 
     private fun moveLens(expanded: Boolean) {
         val target = if (expanded) 1f else 0f
-        animator?.cancel()
-        animator = null
-        if (progress == target) return
         if (reduceMotion() || !ValueAnimator.areAnimatorsEnabled() || !isShown) {
+            removeCallbacks(lensFrame)
+            lastLensFrame = 0L
+            lensSpring.snap(target)
             drawProgress(target)
-            return
+        } else if (lensSpring.target != target) {
+            lensSpring.target = target
+            if (lastLensFrame == 0L) {
+                lastLensFrame = System.nanoTime()
+                postOnAnimation(lensFrame)
+            }
         }
-        animator = ValueAnimator.ofFloat(progress, target).apply {
-            duration = 290L
-            interpolator = PathInterpolator(0.2f, 0.78f, 0.25f, 1f)
-            addUpdateListener { drawProgress(it.animatedValue as Float) }
-            start()
+    }
+
+    private fun stepLens() {
+        val now = System.nanoTime()
+        val dt = ((now - lastLensFrame) / 1e9f).coerceIn(0.001f, 0.035f)
+        lastLensFrame = now
+        val moving = lensSpring.step(dt)
+        drawProgress(lensSpring.value.coerceIn(0f, 1f))
+        if (moving && isShown) {
+            postOnAnimation(lensFrame)
+        } else {
+            lastLensFrame = 0L
+            if (moving) {
+                lensSpring.snap(lensSpring.target)
+                drawProgress(lensSpring.value)
+            }
         }
     }
 
@@ -95,9 +112,10 @@ internal class GlassDockLayout(
     }
 
     override fun onDetachedFromWindow() {
-        animator?.cancel()
-        animator = null
-        drawProgress(if (zoom) 1f else 0f)
+        removeCallbacks(lensFrame)
+        lastLensFrame = 0L
+        lensSpring.snap(if (zoom) 1f else 0f)
+        drawProgress(lensSpring.value)
         super.onDetachedFromWindow()
     }
 }
@@ -323,7 +341,9 @@ internal class LiquidGlassBackdrop(
 
                     float light = max(0.0, dot(outward, float2(-0.60, -0.80)));
                     float rim = smoothstep(0.12, 0.8, depth) * (1.0 - smoothstep(0.9, 2.8, depth));
-                    color = mix(color, float3(1.0), 0.27 * rim * pow(light, 14.0));
+                    float focusLight = pow(max(0.0, dot(outward, float2(0.36, -0.93))), 18.0);
+                    float glint = rim * (0.23 * pow(light, 14.0) + 0.12 * lensWeight * morph * focusLight);
+                    color = mix(color, float3(1.0), glint);
                     return half4(color * coverage, coverage + shadow * (1.0 - coverage));
                 }
             """
