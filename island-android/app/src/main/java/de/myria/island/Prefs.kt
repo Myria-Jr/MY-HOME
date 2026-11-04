@@ -44,12 +44,12 @@ data class IslandConfig(
     val controlStyle: Int = CONTROL_PLAIN,
 
     // Liquid Glass
-    val glassOpacity: Int = 38,
-    val glassShine: Int = 88,
+    val glassOpacity: Int = 24,
+    val glassShine: Int = 96,
     val glassBorder: Boolean = true,
-    val glassBorderWidth: Int = 13,
-    val glassRainbow: Boolean = false,
-    val glassTint: Int = 12,
+    val glassBorderWidth: Int = 16,
+    val glassRainbow: Boolean = true,
+    val glassTint: Int = 8,
 
     // Animation
     val bounce: Int = 45,

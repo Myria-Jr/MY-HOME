@@ -744,25 +744,72 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val accent = accentOf(c)
         val rimW = (cfg.glassBorderWidth.coerceIn(3, 30) / 10f) * d
 
-        // 1) Frost
+        // Clear translucent body: keep wallpaper detail visible through the island.
         bgPaint.shader = null
-        bgPaint.color = withAlpha(Color.BLACK, 0.025f + 0.36f * opacity)
+        bgPaint.color = withAlpha(Color.BLACK, 0.018f + 0.30f * opacity)
         canvas.drawRoundRect(rect, r, r, bgPaint)
         bgPaint.clearShadowLayer()
 
-        // 2) Tönung (farblos; „Tönung“ färbt nur sie – Rand & Linse bleiben)
+        // A faint cool-to-warm body tint follows the active content color.
         val topCol = mix(Color.WHITE, accent, tint)
-        val bottomCol = mix(0xFFB3B3B3.toInt(), mix(accent, Color.BLACK, 0.2f), tint)
+        val bottomCol = mix(0xFFB3B3B3.toInt(), mix(accent, Color.BLACK, 0.16f), tint)
         p.shader = LinearGradient(rect.left, rect.top, rect.left + rect.height() * 0.42f, rect.bottom,
-            intArrayOf(withAlpha(topCol, 0.035f + 0.34f * tint), withAlpha(bottomCol, 0.025f + 0.25f * tint)),
+            intArrayOf(withAlpha(topCol, 0.025f + 0.24f * tint), withAlpha(bottomCol, 0.018f + 0.18f * tint)),
             null, Shader.TileMode.CLAMP)
         canvas.drawRoundRect(rect, r, r, p)
         p.shader = null
 
-        // Spiegelung oben (weich)
+        // Pearlescent color refraction: soft spectral caustics stay inside the glass contour.
+        if (cfg.glassRainbow) {
+            val phase = sContent.value.coerceIn(0f, 1f)
+            val save = canvas.save()
+            islandPath.reset()
+            islandPath.addRoundRect(rect, r, r, Path.Direction.CW)
+            canvas.clipPath(islandPath)
+
+            val travelX = rect.left + rect.width() * (0.16f + 0.68f * (1f - phase))
+            val band = rect.height() * 1.7f
+            p.shader = LinearGradient(travelX - band, rect.top, travelX + band, rect.bottom,
+                intArrayOf(
+                    0x00000000,
+                    withAlpha(0xFFBD76FF.toInt(), 0.08f + 0.15f * shine),
+                    withAlpha(0xFFFF63C8.toInt(), 0.10f + 0.17f * shine),
+                    withAlpha(0xFF66E8FF.toInt(), 0.12f + 0.20f * shine),
+                    withAlpha(0x00FFFFFF, 0.0f),
+                    withAlpha(0xFFFFCE68.toInt(), 0.08f + 0.14f * shine),
+                    0x00000000
+                ),
+                floatArrayOf(0f, 0.18f, 0.34f, 0.52f, 0.68f, 0.86f, 1f),
+                Shader.TileMode.CLAMP)
+            canvas.drawRect(rect, p)
+            p.shader = null
+
+            val causticRadius = rect.height() * 0.96f
+            val leftX = rect.left + rect.width() * 0.2f
+            val rightX = rect.left + rect.width() * 0.82f
+            p.shader = android.graphics.RadialGradient(leftX, rect.top + rect.height() * 0.37f, causticRadius,
+                intArrayOf(
+                    withAlpha(0xFFFF63D2.toInt(), 0.10f + 0.25f * shine),
+                    withAlpha(0xFF8367FF.toInt(), 0.05f + 0.13f * shine),
+                    0x00FFFFFF
+                ), floatArrayOf(0f, 0.48f, 1f), Shader.TileMode.CLAMP)
+            canvas.drawCircle(leftX, rect.top + rect.height() * 0.37f, causticRadius, p)
+            p.shader = android.graphics.RadialGradient(rightX, rect.top + rect.height() * 0.68f, causticRadius,
+                intArrayOf(
+                    withAlpha(0xFFFFD66B.toInt(), 0.08f + 0.19f * shine),
+                    withAlpha(0xFF4FE7FF.toInt(), 0.05f + 0.12f * shine),
+                    0x00FFFFFF
+                ), floatArrayOf(0f, 0.46f, 1f), Shader.TileMode.CLAMP)
+            canvas.drawCircle(rightX, rect.top + rect.height() * 0.68f, causticRadius, p)
+            p.shader = null
+            canvas.restoreToCount(save)
+        }
+
+        // Long soft reflection across the top lip.
         if (shine > 0.01f) {
-            p.shader = LinearGradient(0f, rect.top, 0f, rect.top + rect.height() * 0.5f,
-                intArrayOf(withAlpha(Color.WHITE, 0.20f * shine), withAlpha(Color.WHITE, 0.055f * shine), 0x00FFFFFF), null, Shader.TileMode.CLAMP)
+            p.shader = LinearGradient(0f, rect.top, 0f, rect.top + rect.height() * 0.52f,
+                intArrayOf(withAlpha(Color.WHITE, 0.24f * shine), withAlpha(Color.WHITE, 0.07f * shine), 0x00FFFFFF),
+                null, Shader.TileMode.CLAMP)
             tmp2.set(rect.left + r * 0.2f, rect.top + rimW, rect.right - r * 0.2f, rect.top + rect.height() * 0.55f)
             canvas.drawRoundRect(tmp2, r * 0.85f, r * 0.85f, p)
             p.shader = null
@@ -771,51 +818,68 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         strokePaint.shader = null
         if (cfg.glassBorder) {
             val edgeR = max(r, 1f)
-            // 3a) Lichtkante oben: folgt der Rundung, blendet nach unten aus
+            // Bright top edge and a restrained lower reflection make the surface feel rounded.
             strokePaint.strokeWidth = rimW
             strokePaint.shader = LinearGradient(0f, rect.top, 0f, rect.top + min(edgeR, rect.height() * 0.5f),
-                intArrayOf(withAlpha(Color.WHITE, 0.5f * (0.4f + 0.6f * shine)), 0x00FFFFFF), null, Shader.TileMode.CLAMP)
+                intArrayOf(withAlpha(Color.WHITE, 0.58f * (0.4f + 0.6f * shine)), 0x00FFFFFF),
+                null, Shader.TileMode.CLAMP)
             tmp2.set(rect); tmp2.inset(rimW / 2, rimW / 2)
             val ir = (r - rimW / 2).coerceAtLeast(0f)
             canvas.drawRoundRect(tmp2, ir, ir, strokePaint)
-            // 3b) Reflex unten
             strokePaint.shader = LinearGradient(0f, rect.bottom - min(edgeR, rect.height() * 0.5f), 0f, rect.bottom,
-                intArrayOf(0x00FFFFFF, withAlpha(Color.WHITE, 0.10f + 0.12f * shine)), null, Shader.TileMode.CLAMP)
+                intArrayOf(0x00FFFFFF, withAlpha(Color.WHITE, 0.12f + 0.16f * shine)),
+                null, Shader.TileMode.CLAMP)
             canvas.drawRoundRect(tmp2, ir, ir, strokePaint)
             strokePaint.shader = null
-            // 3c) Haarlinie rundum
+
+            // Fine white inner rim.
             strokePaint.strokeWidth = 0.8f * d
-            strokePaint.color = withAlpha(Color.WHITE, 0.18f)
+            strokePaint.color = withAlpha(Color.WHITE, 0.24f)
             tmp2.set(rect); tmp2.inset(0.4f * d, 0.4f * d)
             canvas.drawRoundRect(tmp2, r, r, strokePaint)
 
-            // 4) Linse: schmales helles Band + feine dunkle Kante dahinter (Brechung)
+            // Lensed inner band and its soft dark edge.
             val lens = 2.4f * d
             strokePaint.strokeWidth = lens
-            strokePaint.color = withAlpha(Color.WHITE, 0.055f + 0.075f * shine)
+            strokePaint.color = withAlpha(Color.WHITE, 0.07f + 0.09f * shine)
             tmp2.set(rect); tmp2.inset(rimW + lens / 2, rimW + lens / 2)
             val lr = (r - rimW - lens / 2).coerceAtLeast(0f)
             canvas.drawRoundRect(tmp2, lr, lr, strokePaint)
             strokePaint.strokeWidth = 0.8f * d
-            strokePaint.color = withAlpha(Color.BLACK, 0.11f)
+            strokePaint.color = withAlpha(Color.BLACK, 0.09f)
             tmp2.set(rect); tmp2.inset(rimW + lens + 0.4f * d, rimW + lens + 0.4f * d)
             val dr = (r - rimW - lens).coerceAtLeast(0f)
             canvas.drawRoundRect(tmp2, dr, dr, strokePaint)
 
-            // Farbsaum (Dispersion an der Kante)
+            // Split-spectrum rim: cyan, violet, pink, amber and mint reflections.
             if (cfg.glassRainbow) {
-                strokePaint.strokeWidth = rimW
-                strokePaint.shader = SweepGradient(rect.centerX(), rect.centerY(),
-                    intArrayOf(0x3864D2FF, 0x2EFF6AD5, 0x30FFD60A, 0x2A30D158, 0x3864D2FF), null)
-                tmp2.set(rect); tmp2.inset(rimW * 1.6f, rimW * 1.6f)
-                val rr = (r - rimW * 1.6f).coerceAtLeast(0f)
+                val spectral = intArrayOf(
+                    withAlpha(0xFF73E8FF.toInt(), 0.30f + 0.34f * shine),
+                    withAlpha(0xFF8D78FF.toInt(), 0.24f + 0.30f * shine),
+                    withAlpha(0xFFFF62CE.toInt(), 0.30f + 0.36f * shine),
+                    withAlpha(0xFFFFA15D.toInt(), 0.20f + 0.28f * shine),
+                    withAlpha(0xFFFFE27A.toInt(), 0.18f + 0.24f * shine),
+                    withAlpha(0xFF62F3D2.toInt(), 0.24f + 0.30f * shine),
+                    withAlpha(0xFF73E8FF.toInt(), 0.30f + 0.34f * shine)
+                )
+                strokePaint.strokeWidth = rimW * 1.15f
+                strokePaint.shader = SweepGradient(rect.centerX(), rect.centerY(), spectral, null)
+                tmp2.set(rect); tmp2.inset(rimW * 0.8f, rimW * 0.8f)
+                val rr = (r - rimW * 0.8f).coerceAtLeast(0f)
                 canvas.drawRoundRect(tmp2, rr, rr, strokePaint)
+
+                // A second, thinner fringe gives the rim the split-light look in the reference.
+                strokePaint.strokeWidth = 0.75f * d
+                tmp2.set(rect); tmp2.inset(rimW * 2.25f, rimW * 2.25f)
+                val innerR = (r - rimW * 2.25f).coerceAtLeast(0f)
+                canvas.drawRoundRect(tmp2, innerR, innerR, strokePaint)
                 strokePaint.shader = null
             }
         }
-        // 1px Außenrand
+
+        // Crisp outer highlight.
         strokePaint.strokeWidth = 1f * d
-        strokePaint.color = withAlpha(Color.WHITE, 0.08f)
+        strokePaint.color = withAlpha(Color.WHITE, 0.17f)
         tmp2.set(rect); tmp2.inset(0.5f * d, 0.5f * d)
         canvas.drawRoundRect(tmp2, r, r, strokePaint)
 
