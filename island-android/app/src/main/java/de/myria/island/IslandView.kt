@@ -801,6 +801,18 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
                     0x00FFFFFF
                 ), floatArrayOf(0f, 0.46f, 1f), Shader.TileMode.CLAMP)
             canvas.drawCircle(rightX, rect.top + rect.height() * 0.68f, causticRadius, p)
+
+            // Soft overlapping color nodes approximate a living mesh gradient inside the glass.
+            val meshX = rect.left + rect.width() * (0.42f + 0.16f * phase)
+            val meshY = rect.top + rect.height() * 0.52f
+            val meshRadius = rect.height() * 0.78f
+            p.shader = android.graphics.RadialGradient(meshX, meshY, meshRadius,
+                intArrayOf(
+                    withAlpha(0xFFB86CFF.toInt(), 0.05f + 0.09f * shine),
+                    withAlpha(0xFF6FE8FF.toInt(), 0.025f + 0.055f * shine),
+                    0x00FFFFFF
+                ), floatArrayOf(0f, 0.52f, 1f), Shader.TileMode.CLAMP)
+            canvas.drawCircle(meshX, meshY, meshRadius, p)
             p.shader = null
             canvas.restoreToCount(save)
         }
