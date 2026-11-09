@@ -56,7 +56,11 @@ object IconStyle {
     const val DARK = 1
     const val TINTED = 2
     const val CLEAR = 3
-    val names = listOf("Standard", "Dunkel", "Getönt", "Klar")
+    /** Nothing-Look: weißes Symbol auf dunklem Kreis (wie das Nothing Icon Pack) */
+    const val NOTHING = 4
+    /** Nothing-Glyph: Symbol als Punktraster */
+    const val DOTS = 5
+    val names = listOf("Standard", "Dunkel", "Getönt", "Klar", "Nothing", "Punkte")
 }
 
 /** Einstellungen des Launchers */
@@ -110,8 +114,9 @@ class HomePrefs(ctx: Context) {
     var shape: Int
         get() = i("shape", -1)
         set(v) = pi("shape", v)
+    /** -1 = passend zum Look (Nothing → Nothing-Symbole) */
     var iconStyle: Int
-        get() = i("icon_style", IconStyle.STANDARD)
+        get() = i("icon_style", -1)
         set(v) = pi("icon_style", v)
     var tint: Int
         get() = i("tint", 0xFFFF9F0A.toInt())
@@ -199,6 +204,12 @@ class HomePrefs(ctx: Context) {
             // 3.0: erzwungenes Schwarz-Weiß entfernen, Original-Form für Nicht-Apple-Looks
             sp.edit().putBoolean("mono", false).putInt("schema", 3).apply()
         }
+        if (i("schema", 0) < 4) {
+            // 4.0: Icon-Stil „Standard“ war gespeichert, ohne dass man ihn gewählt hatte → wieder „passend“
+            val e = sp.edit()
+            if (sp.getInt("icon_style", -1) == 0) e.remove("icon_style")
+            e.putInt("schema", 4).apply()
+        }
     }
 
     fun label(key: String, def: String) = sp.getString("label_$key", null)?.takeIf { it.isNotBlank() } ?: def
@@ -209,6 +220,34 @@ class HomePrefs(ctx: Context) {
     fun launches(key: String) = sp.getInt("cnt_$key", 0)
 
     /** Effektive Form (eigene Wahl oder passend zum Look) */
+    /** Animationen: -1 passend · 0 Apple · 1 Android · 2 Nothing */
+    var animStyle: Int
+        get() = i("anim_style", -1)
+        set(v) = pi("anim_style", v)
+    val anim: Int
+        get() = if (animStyle in 0..2) animStyle else when (look) {
+            Look.APPLE -> 0
+            Look.NOTHING -> 2
+            else -> 1
+        }
+    /** Haptik beim Antippen */
+    var haptics: Boolean
+        get() = b("haptics", true)
+        set(v) = pb("haptics", v)
+    /** App-Design der Einstellungen: -1 passend · 0 iOS · 1 Nothing · 2 Material */
+    var appDesign: Int
+        get() = i("app_design", -1)
+        set(v) = pi("app_design", v)
+    val effectiveAppDesign: Int
+        get() = if (appDesign in 0..2) appDesign else when (look) {
+            Look.NOTHING -> 1
+            Look.APPLE -> 0
+            else -> 2
+        }
+
+    val effectiveIconStyle: Int
+        get() = if (iconStyle in 0..5) iconStyle else if (look == Look.NOTHING) IconStyle.NOTHING else IconStyle.STANDARD
+
     val effectiveShape: Shape
         get() = Shape.values().getOrNull(shape) ?: Looks.defaultShape(look)
 
@@ -226,7 +265,8 @@ object Looks {
 
     fun defaultShape(look: Look) = when (look) {
         Look.APPLE, Look.HYPEROS -> Shape.SQUIRCLE
-        Look.ANDROID, Look.NOTHING -> Shape.CIRCLE
+        Look.ANDROID -> Shape.SYSTEM
+        Look.NOTHING -> Shape.CIRCLE
         Look.ONEUI -> Shape.PEBBLE
         Look.GALAXY, Look.MAGICOS -> Shape.ROUNDED
         Look.COLOROS, Look.ORIGINOS -> Shape.ROUNDED
@@ -360,6 +400,11 @@ object Looks {
         val ck = "$key/${shape.name}/$sizePx/$style/$tint/$mono/$pack"
         cache.get(ck)?.let { return it }
         val s = sizePx.coerceAtLeast(8)
+        if (style == IconStyle.NOTHING || style == IconStyle.DOTS) {
+            val out = nothingIcon(dr, s, if (shape == Shape.SYSTEM) Shape.CIRCLE else shape, style == IconStyle.DOTS, pack)
+            cache.put(ck, out)
+            return out
+        }
         // Icon-Pack oder „Original“: Icon so lassen, wie es ist (nur Größe)
         if (style == IconStyle.STANDARD && (pack || shape == Shape.SYSTEM)) {
             val b = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
@@ -472,6 +517,119 @@ object Looks {
         val out = if (mono) monochrome(masked) else masked
         cache.put(ck, out)
         return out
+    }
+
+    /**
+     * Silhouette des App-Symbols als Alpha-Maske (weiß = Symbol).
+     * Bevorzugt die einfarbige Ebene (Android 13+), sonst Vordergrund oder Kontrast zum Rand.
+     */
+    private fun glyphMask(dr: Drawable, s: Int, pack: Boolean): Bitmap {
+        val b = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val c = Canvas(b)
+        val pad = (s * 0.25f).toInt()
+        if (dr is AdaptiveIconDrawable && !pack) {
+            val mono = if (Build.VERSION.SDK_INT >= 33) dr.monochrome else null
+            val layer = mono ?: dr.foreground
+            if (layer != null) {
+                layer.setBounds(-pad, -pad, s + pad, s + pad)
+                layer.draw(c)
+                // Vordergrund deckt fast alles ab (Foto-Icon)? → Kontrast-Verfahren
+                if (mono != null || coverage(b) < 0.62f) return b.extractAlpha().also { b.recycle() }
+                c.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR)
+            }
+        }
+        // Kontrast zum Hintergrund: was sich deutlich von der Randfarbe abhebt, ist das Symbol
+        val full = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val fc = Canvas(full)
+        if (dr is AdaptiveIconDrawable && !pack) {
+            dr.background?.let { it.setBounds(-pad, -pad, s + pad, s + pad); it.draw(fc) }
+            dr.foreground?.let { it.setBounds(-pad, -pad, s + pad, s + pad); it.draw(fc) }
+        } else { dr.setBounds(0, 0, s, s); dr.draw(fc) }
+        val px = IntArray(s * s)
+        full.getPixels(px, 0, s, 0, 0, s, s)
+        var er = 0L; var eg = 0L; var eb = 0L; var n = 0
+        for (i in 0 until s) for (j in intArrayOf(1, s - 2)) for (q in intArrayOf(px[j * s + i], px[i * s + j])) {
+            if (Color.alpha(q) > 200) { er += Color.red(q); eg += Color.green(q); eb += Color.blue(q); n++ }
+        }
+        val transparentEdge = n < s
+        val r0 = if (n > 0) (er / n).toInt() else 0; val g0 = if (n > 0) (eg / n).toInt() else 0; val b0 = if (n > 0) (eb / n).toInt() else 0
+        val out = IntArray(s * s)
+        for (i in px.indices) {
+            val q = px[i]
+            val a = Color.alpha(q)
+            val v = if (transparentEdge) a else {
+                val d = abs(Color.red(q) - r0) + abs(Color.green(q) - g0) + abs(Color.blue(q) - b0)
+                if (a < 100) 0 else (d * 2).coerceIn(0, 255).let { if (it < 70) 0 else it }
+            }
+            out[i] = Color.argb(v, 255, 255, 255)
+        }
+        full.recycle()
+        b.setPixels(out, 0, s, 0, 0, s, s)
+        // Alte Icons füllen das Quadrat → Symbol verkleinern, damit es im Kreis Luft hat
+        val small = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val inset = s * (if (transparentEdge) 0.2f else 0.16f)
+        Canvas(small).drawBitmap(b, null, android.graphics.RectF(inset, inset, s - inset, s - inset), Paint(Paint.FILTER_BITMAP_FLAG))
+        b.recycle()
+        return small.extractAlpha().also { small.recycle() }
+    }
+
+    private fun coverage(b: Bitmap): Float {
+        val w = b.width; val h = b.height
+        var on = 0; var all = 0
+        var y = 0
+        while (y < h) { var x = 0; while (x < w) { all++; if (Color.alpha(b.getPixel(x, y)) > 128) on++; x += 4 }; y += 4 }
+        return on.toFloat() / all.coerceAtLeast(1)
+    }
+
+    /** Nothing-Symbol: weiß auf dunklem Kreis – oder als Punktraster (Glyph-Look) */
+    private fun nothingIcon(dr: Drawable, s: Int, shape: Shape, dots: Boolean, pack: Boolean): Bitmap {
+        val out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        val sf = s.toFloat()
+        val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        // Hintergrund: fast schwarz mit feinem Verlauf und hauchdünnem Rand
+        p.shader = LinearGradient(0f, 0f, 0f, sf, 0xFF242424.toInt(), 0xFF141414.toInt(), Shader.TileMode.CLAMP)
+        val path = maskPath(shape, sf)
+        c.drawPath(path, p)
+        p.shader = null
+        p.style = Paint.Style.STROKE
+        p.strokeWidth = sf * 0.012f
+        p.color = 0x22FFFFFF
+        c.drawPath(path, p)
+        p.style = Paint.Style.FILL
+        val mask = glyphMask(dr, s, pack)
+        if (!dots) {
+            p.color = 0xFFF2F2F2.toInt()
+            // Symbol etwas kleiner, damit es wie bei Nothing mittig „schwebt“
+            val ins = sf * 0.06f
+            c.drawBitmap(mask, null, android.graphics.RectF(ins, ins, sf - ins, sf - ins), p)
+        } else {
+            val n = 17
+            val cell = sf / n
+            val w = mask.width
+            val stride = mask.rowBytes
+            val buf = ByteArray(stride * mask.height)
+            mask.copyPixelsToBuffer(java.nio.ByteBuffer.wrap(buf).also { it.rewind() })
+            p.color = 0xFFF2F2F2.toInt()
+            for (gy in 1 until n - 1) for (gx in 1 until n - 1) {
+                // Abdeckung der Zelle messen
+                var sum = 0; var cnt = 0
+                val x0 = (gx * cell).toInt(); val x1 = ((gx + 1) * cell).toInt().coerceAtMost(w)
+                val y0 = (gy * cell).toInt(); val y1 = ((gy + 1) * cell).toInt().coerceAtMost(mask.height)
+                var yy = y0
+                while (yy < y1) { var xx = x0; while (xx < x1) { sum += buf[yy * stride + xx].toInt() and 0xFF; cnt++; xx++ }; yy++ }
+                val cov = if (cnt > 0) sum / (cnt * 255f) else 0f
+                if (cov > 0.32f) c.drawCircle((gx + 0.5f) * cell, (gy + 0.5f) * cell, cell * 0.36f, p)
+            }
+        }
+        mask.recycle()
+        // Ecken außerhalb der Form sauber halten
+        val clean = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val cc = Canvas(clean)
+        cc.drawPath(path, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.BLACK })
+        cc.drawBitmap(out, 0f, 0f, Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN) })
+        out.recycle()
+        return clean
     }
 
     private fun mix(a: Int, b: Int, t: Float) = Color.rgb(

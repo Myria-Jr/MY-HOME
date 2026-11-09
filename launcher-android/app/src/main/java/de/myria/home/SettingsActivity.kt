@@ -14,6 +14,7 @@ import android.graphics.RadialGradient
 import android.graphics.RectF
 import android.graphics.Shader
 import android.graphics.drawable.GradientDrawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -34,13 +35,38 @@ import android.widget.Toast
 class SettingsActivity : Activity() {
 
     private lateinit var prefs: HomePrefs
-    private var dark = false
-    private val bg get() = if (dark) 0xFF0B0B0D.toInt() else 0xFFF2F2F7.toInt()
-    private val card get() = if (dark) 0xFF1C1C1F.toInt() else Color.WHITE
+    private var sysDark = false
+    /** App-Design: 0 iOS · 1 Nothing · 2 Material */
+    private val design get() = prefs.effectiveAppDesign
+    private val nothing get() = design == 1
+    private val material get() = design == 2
+    // Nothing ist immer schwarz
+    private val dark get() = sysDark || nothing
+    private val bg get() = when {
+        nothing -> 0xFF000000.toInt()
+        material -> if (dark) 0xFF141218.toInt() else 0xFFFEF7FF.toInt()
+        else -> if (dark) 0xFF0B0B0D.toInt() else 0xFFF2F2F7.toInt()
+    }
+    private val card get() = when {
+        nothing -> 0xFF111111.toInt()
+        material -> if (dark) 0xFF211F26.toInt() else 0xFFF3EDF7.toInt()
+        else -> if (dark) 0xFF1C1C1F.toInt() else Color.WHITE
+    }
     private val label get() = if (dark) 0xFFF2F2F5.toInt() else 0xFF15151A.toInt()
     private val secondary get() = if (dark) 0x99F2F2F5.toInt() else 0x8A15151A.toInt()
-    private val chipBg get() = if (dark) 0xFF2C2C30.toInt() else 0xFFE9E9EE.toInt()
-    private val accent = 0xFF6C5CE7.toInt()
+    private val chipBg get() = if (nothing) 0xFF1E1E1E.toInt() else if (dark) 0xFF2C2C30.toInt() else 0xFFE9E9EE.toInt()
+    private val accent get() = when {
+        nothing -> 0xFFD71921.toInt()
+        material -> if (Build.VERSION.SDK_INT >= 31) try { getColor(if (dark) android.R.color.system_accent1_200 else android.R.color.system_accent1_600) } catch (_: Exception) { 0xFF6750A4.toInt() } else 0xFF6750A4.toInt()
+        else -> 0xFF6C5CE7.toInt()
+    }
+    /** Überschriften-Schrift je Design: Nothing = Punktschrift, Material = Google Sans, iOS = Inter */
+    private fun headFont(w: Int) = when {
+        nothing -> Looks.namedFont(this, "Doto", 800)
+        material -> Looks.namedFont(this, "Google Sans", w)
+        else -> Looks.font(this, Look.APPLE, w)
+    }
+    private val radius get() = if (nothing) 16f else if (material) 28f else 20f
     private val main = Handler(Looper.getMainLooper())
 
     private lateinit var previewRow: LinearLayout
@@ -52,7 +78,7 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = HomePrefs(this)
-        dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        sysDark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         window.statusBarColor = bg
         window.navigationBarColor = bg
         @Suppress("DEPRECATION")
@@ -102,7 +128,7 @@ class SettingsActivity : Activity() {
             col.addView(TextView(this).apply {
                 text = pages.firstOrNull { it.id == p }?.title ?: ""
                 textSize = 32f
-                typeface = Looks.font(this@SettingsActivity, Look.APPLE, 800)
+                typeface = headFont(800)
                 setTextColor(label)
                 setPadding(dpi(4f), 0, 0, dpi(8f))
             })
@@ -123,6 +149,7 @@ class SettingsActivity : Activity() {
 
     private val pages: List<Page> by lazy { listOf(
         Page("icons", "App-Symbole", "◆", 0xFF5E5CE6.toInt()) { iconsPage(it) },
+        Page("design", "Animationen & Design", "✦", 0xFFFF2D55.toInt()) { designPage(it) },
         Page("home", "Startbildschirm", "▦", 0xFF0A84FF.toInt()) { homePage(it) },
         Page("dock", "Dock & Suche", "▬", 0xFF30B0C7.toInt()) { dockPage(it) },
         Page("drawer", "App-Übersicht", "⋮⋮", 0xFF34C759.toInt()) { drawerPage(it) },
@@ -136,7 +163,7 @@ class SettingsActivity : Activity() {
         col.addView(TextView(this).apply {
             text = "Lumora Home"
             textSize = 34f
-            typeface = Looks.font(this@SettingsActivity, Look.APPLE, 800)
+            typeface = headFont(800)
             setTextColor(label)
             setPadding(dpi(4f), 0, 0, 0)
         })
@@ -171,10 +198,13 @@ class SettingsActivity : Activity() {
             t.chosen = l == prefs.look
             t.setOnClickListener {
                 it.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                val oldDesign = prefs.effectiveAppDesign
                 prefs.look = l
                 tiles.forEach { x -> x.chosen = x.look == l }
                 desc.text = l.subtitle
                 changed()
+                // App-Design folgt dem Look (Nothing → Nothing-Einstellungen)
+                if (prefs.effectiveAppDesign != oldDesign) main.postDelayed({ recreate() }, 160)
             }
             tiles.add(t)
             row.addView(t, LinearLayout.LayoutParams(dpi(116f), dpi(206f)).apply { rightMargin = dpi(10f) })
@@ -183,8 +213,8 @@ class SettingsActivity : Activity() {
         col.addView(desc)
 
         header(col, "Einstellungen")
-        col.addView(card(pages.take(6).map { navRow(it) }))
-        col.addView(card(pages.drop(6).map { navRow(it) }), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(14f) })
+        col.addView(card(pages.take(7).map { navRow(it) }))
+        col.addView(card(pages.drop(7).map { navRow(it) }), LinearLayout.LayoutParams(-1, -2).apply { topMargin = dpi(14f) })
         col.addView(card(listOf(
             action("Hintergrundbild ändern", accent) {
                 try { startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), "Hintergrundbild")) } catch (_: Exception) {}
@@ -219,7 +249,8 @@ class SettingsActivity : Activity() {
     }
 
     private fun navValue(id: String): String = when (id) {
-        "icons" -> (Shape.values().getOrNull(prefs.shape)?.title ?: "Auto") + " · " + IconStyle.names[prefs.iconStyle.coerceIn(0, 3)]
+        "design" -> listOf("Apple", "Android", "Nothing")[prefs.anim] + if (prefs.animStyle < 0) " (passend)" else ""
+        "icons" -> (Shape.values().getOrNull(prefs.shape)?.title ?: "Auto") + " · " + IconStyle.names[prefs.effectiveIconStyle.coerceIn(0, IconStyle.names.size - 1)]
         "home" -> "${prefs.columns} Spalten"
         "drawer" -> listOf("A–Z", "Meistgenutzt", "Neueste")[prefs.drawerSort.coerceIn(0, 2)]
         "badges" -> if (!prefs.badges) "Aus" else if (BadgeService.granted(this)) "An" else "Erlauben"
@@ -250,16 +281,16 @@ class SettingsActivity : Activity() {
         tintRow.visibility = if (prefs.iconStyle == IconStyle.TINTED) View.VISIBLE else View.GONE
         col.addView(card(listOf(
             labeled("Form", HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false; addView(shapeChips) }),
-            labeled("Stil (wie iOS)", chips(IconStyle.names, prefs.iconStyle) {
-                prefs.iconStyle = it
-                tintRow.visibility = if (it == IconStyle.TINTED) View.VISIBLE else View.GONE
+            labeled("Stil", chips(listOf("Passend") + IconStyle.names, prefs.iconStyle + 1) {
+                prefs.iconStyle = it - 1
+                tintRow.visibility = if (it - 1 == IconStyle.TINTED) View.VISIBLE else View.GONE
                 changed()
             }),
             tintRow,
             slider("Größe", 40, 72, prefs.iconDp, "dp") { prefs.iconDp = it; changed() },
             switch("Schwarz-Weiß", prefs.monoIcons) { prefs.monoIcons = it; changed() },
         )))
-        hint(col, "„Original“ zeigt die Icons genau so, wie dein Handy sie liefert. „Getönt“ färbt alle Icons in deiner Farbe, „Klar“ macht sie zu Glas – wie bei iOS 18/26.")
+        hint(col, "„Original“ zeigt die Icons genau so, wie dein Handy sie liefert. „Getönt“ färbt alle Icons in deiner Farbe, „Klar“ macht sie zu Glas (iOS 18/26). „Nothing“ = weiße Symbole auf dunklen Kreisen, „Punkte“ = Symbole als Punktraster wie die Nothing-Glyphen.")
 
         header(col, "App-Namen")
         col.addView(card(listOf(
@@ -268,6 +299,21 @@ class SettingsActivity : Activity() {
             labeled("Schrift", chips(listOf("Auto") + Looks.labelFonts, prefs.labelFont + 1) { prefs.labelFont = it - 1; changed() }),
         )))
         hint(col, "Einzelne Apps umbenennen: App gedrückt halten → „Umbenennen“.")
+    }
+
+    private fun designPage(col: LinearLayout) {
+        col.addView(card(listOf(
+            labeled("Animationen", chips(listOf("Passend", "Apple", "Android", "Nothing"), prefs.animStyle + 1) { prefs.animStyle = it - 1 }),
+            labeled("Design dieser Einstellungen", chips(listOf("Passend", "iOS", "Nothing", "Material"), prefs.appDesign + 1) {
+                prefs.appDesign = it - 1
+                main.postDelayed({ recreate() }, 160)
+            }),
+            switch("Haptik beim Antippen", prefs.haptics) { prefs.haptics = it },
+        )))
+        hint(col, "Apple: Icons drücken sich ein und federn, App-Mediathek zoomt mit Unschärfe, Apps wachsen aus dem Icon.\n" +
+            "Android: Ripple-Effekt, App-Übersicht deckt sich kreisförmig auf, Apps enthüllen sich.\n" +
+            "Nothing: knackig und flach – kurzes Aufleuchten, Apps erscheinen nacheinander, schnelles Einblenden.\n" +
+            "„Passend“ folgt dem gewählten Look. Du kannst aber alles mischen.")
     }
 
     private fun homePage(col: LinearLayout) {
@@ -412,7 +458,7 @@ class SettingsActivity : Activity() {
         apps.forEach { a ->
             val col = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL }
             col.addView(ImageView(this).apply {
-                setImageBitmap(Looks.icon(a.key, a.icon, size, prefs.effectiveShape, prefs.iconStyle, prefs.tint,
+                setImageBitmap(Looks.icon(a.key, a.icon, size, prefs.effectiveShape, prefs.effectiveIconStyle, prefs.tint,
                     prefs.monoIcons, a.packIcon))
             }, LinearLayout.LayoutParams(size, size))
             if (prefs.labels) col.addView(TextView(this).apply {
@@ -437,9 +483,10 @@ class SettingsActivity : Activity() {
 
     private fun header(col: LinearLayout, t: String) {
         col.addView(TextView(this).apply {
-            text = t
-            textSize = 20f
-            typeface = Looks.font(this@SettingsActivity, Look.APPLE, 700)
+            text = if (nothing) t.uppercase() else t
+            textSize = if (nothing) 18f else 20f
+            if (nothing) letterSpacing = 0.08f
+            typeface = headFont(700)
             setTextColor(label)
             setPadding(dpi(4f), dpi(26f), 0, dpi(10f))
         })
@@ -457,7 +504,7 @@ class SettingsActivity : Activity() {
 
     private fun card(rows: List<View>): View = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
-        background = GradientDrawable().apply { cornerRadius = dp(20f); setColor(card) }
+        background = GradientDrawable().apply { cornerRadius = dp(radius); setColor(card); if (nothing) setStroke(maxOf(1, dpi(0.7f)), 0x26FFFFFF) }
         rows.forEachIndexed { i, v ->
             if (i > 0 && v.visibility != View.GONE) addView(View(this@SettingsActivity).apply { setBackgroundColor(if (dark) 0x1AFFFFFF else 0x12000000) },
                 LinearLayout.LayoutParams(-1, maxOf(1, dpi(0.6f))).apply { leftMargin = dpi(16f); rightMargin = dpi(16f) })

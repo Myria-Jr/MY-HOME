@@ -164,6 +164,10 @@ class HomeActivity : Activity() {
         super.onResume()
         if (prefs.iconPack != loadedPack && loadedPack != "\u0000") { Looks.clearCache(); loadApps() }
         updateBadges()
+        if (System.currentTimeMillis() - Apps.lastLaunch < 60 * 60_000L && Apps.lastLaunch > 0) {
+            Apps.lastLaunch = 0L
+            homeReturnAnimation()
+        }
         if (signature() != builtFor) {
             Looks.clearCache()
             applySystemBars()
@@ -430,14 +434,7 @@ class HomeActivity : Activity() {
             homeIcons.add(frame)
         }
 
-        col.setOnTouchListener { v, e ->
-            when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> v.animate().scaleX(0.9f).scaleY(0.9f).setDuration(110).start()
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> v.animate().scaleX(1f).scaleY(1f)
-                    .setDuration(260).setInterpolator(android.view.animation.OvershootInterpolator(2.5f)).start()
-            }
-            false
-        }
+        pressFeedback(col)
         col.setOnClickListener {
             if (editMode) { setEditMode(false); return@setOnClickListener }
             Apps.launch(this, app, iv)
@@ -450,8 +447,68 @@ class HomeActivity : Activity() {
         return frame
     }
 
+    /**
+     * Antipp-Gefühl je Stil:
+     * Apple = eindrücken + federn · Android = Ripple + leicht kleiner · Nothing = kurz abdunkeln, kein Federn
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private fun pressFeedback(v: View) {
+        when (prefs.anim) {
+            1 -> {
+                v.foreground = android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(0x40FFFFFF), null,
+                    GradientDrawable().apply { cornerRadius = dp(20f); setColor(Color.WHITE) })
+                v.setOnTouchListener { x, e ->
+                    when (e.actionMasked) {
+                        MotionEvent.ACTION_DOWN -> x.animate().scaleX(0.95f).scaleY(0.95f).setDuration(90).setInterpolator(ease).start()
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> x.animate().scaleX(1f).scaleY(1f).setDuration(200).setInterpolator(ease).start()
+                    }
+                    false
+                }
+            }
+            2 -> v.setOnTouchListener { x, e ->
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> x.animate().alpha(0.45f).setDuration(60).setInterpolator(null).start()
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> x.animate().alpha(1f).setDuration(140).setInterpolator(null).start()
+                }
+                false
+            }
+            else -> v.setOnTouchListener { x, e ->
+                when (e.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        if (prefs.haptics) x.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                        x.animate().scaleX(0.86f).scaleY(0.86f).setDuration(120).setInterpolator(ease).start()
+                    }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> x.animate().scaleX(1f).scaleY(1f)
+                        .setDuration(380).setInterpolator(android.view.animation.OvershootInterpolator(3f)).start()
+                }
+                false
+            }
+        }
+    }
+
+    /** Rückkehr zum Startbildschirm (nach einer App) – wie iOS: Icons gleiten zurück */
+    private fun homeReturnAnimation() {
+        if (!::home.isInitialized || drawerOpen) return
+        when (prefs.anim) {
+            0 -> {
+                home.scaleX = 1.08f; home.scaleY = 1.08f; home.alpha = 0.3f
+                home.animate().scaleX(1f).scaleY(1f).alpha(1f).setDuration(420)
+                    .setInterpolator(PathInterpolator(0.2f, 0.95f, 0.25f, 1f)).start()
+            }
+            1 -> {
+                home.translationY = dp(36f); home.alpha = 0.4f
+                home.animate().translationY(0f).alpha(1f).setDuration(320).setInterpolator(ease).start()
+            }
+            else -> {
+                home.alpha = 0f
+                home.animate().alpha(1f).setDuration(180).setInterpolator(null).start()
+            }
+        }
+    }
+
     private fun appIcon(app: AppInfo, px: Int) =
-        Looks.icon(app.key, app.icon, px, prefs.effectiveShape, prefs.iconStyle, prefs.tint, prefs.monoIcons, app.packIcon)
+        Looks.icon(app.key, app.icon, px, prefs.effectiveShape, prefs.effectiveIconStyle, prefs.tint, prefs.monoIcons, app.packIcon)
 
     private fun accentColor(): Int = if (Build.VERSION.SDK_INT >= 31)
         try { getColor(android.R.color.system_accent1_500) } catch (_: Exception) { 0xFF3D7BF7.toInt() } else 0xFF3D7BF7.toInt()
@@ -1232,13 +1289,38 @@ class HomeActivity : Activity() {
         drawer.visibility = View.VISIBLE
         drawerSearch.setText("")
         refreshDrawer()
-        when (look) {
-            Look.APPLE -> { drawer.alpha = 0f; drawer.scaleX = 0.94f; drawer.scaleY = 0.94f; drawer.translationY = 0f }
-            Look.NOTHING -> { drawer.alpha = 0f; drawer.translationY = 0f }
-            else -> { drawer.alpha = 0f; drawer.translationY = dp(80f) }
+        when (prefs.anim) {
+            0 -> {
+                // Apple: App-Mediathek zoomt herein, Startbildschirm wird unscharf
+                drawer.alpha = 0f; drawer.scaleX = 0.9f; drawer.scaleY = 0.9f; drawer.translationY = 0f
+                drawer.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(380)
+                    .setInterpolator(PathInterpolator(0.2f, 1.1f, 0.3f, 1f)).start()
+                if (Build.VERSION.SDK_INT >= 31) home.setRenderEffect(android.graphics.RenderEffect.createBlurEffect(dp(18f), dp(18f), android.graphics.Shader.TileMode.CLAMP))
+                home.animate().alpha(0.15f).scaleX(0.94f).scaleY(0.94f).setDuration(320).start()
+            }
+            1 -> {
+                // Android: kreisförmiges Aufdecken von unten (wie Pixel Launcher)
+                drawer.alpha = 1f; drawer.scaleX = 1f; drawer.scaleY = 1f; drawer.translationY = dp(40f)
+                drawer.post {
+                    try {
+                        val r = kotlin.math.hypot(drawer.width.toDouble(), drawer.height.toDouble()).toFloat()
+                        android.view.ViewAnimationUtils.createCircularReveal(drawer, drawer.width / 2, drawer.height, dp(30f), r)
+                            .setDuration(420).apply { interpolator = ease }.start()
+                    } catch (_: Exception) {}
+                    drawer.animate().translationY(0f).setDuration(420).setInterpolator(ease).start()
+                }
+                home.animate().alpha(0f).translationY(-dp(30f)).setDuration(300).start()
+            }
+            else -> {
+                // Nothing: schnell, flach, Apps erscheinen nacheinander wie Punkte, die aufleuchten
+                drawer.alpha = 0f; drawer.scaleX = 1f; drawer.scaleY = 1f; drawer.translationY = 0f
+                drawer.animate().alpha(1f).setDuration(140).setInterpolator(null).start()
+                drawerGrid.layoutAnimation = android.view.animation.LayoutAnimationController(
+                    android.view.animation.AlphaAnimation(0f, 1f).apply { duration = 160 }, 0.04f)
+                drawerGrid.scheduleLayoutAnimation()
+                home.animate().alpha(0f).setDuration(120).setInterpolator(null).start()
+            }
         }
-        drawer.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f).setDuration(320).setInterpolator(ease).start()
-        home.animate().alpha(0f).scaleX(0.96f).scaleY(0.96f).setDuration(260).start()
         if (focusSearch) {
             drawerSearch.requestFocus()
             main.postDelayed({
@@ -1252,14 +1334,16 @@ class HomeActivity : Activity() {
         drawerOpen = false
         (getSystemService(INPUT_METHOD_SERVICE) as InputMethodManager).hideSoftInputFromWindow(drawerSearch.windowToken, 0)
         drawerSearch.clearFocus()
-        home.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(if (animate) 300 else 0).start()
+        if (Build.VERSION.SDK_INT >= 31) home.setRenderEffect(null)
+        home.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f)
+            .setDuration(if (!animate) 0 else if (prefs.anim == 2) 140 else 320).setInterpolator(ease).start()
         if (!animate) {
             drawer.visibility = View.GONE
             return
         }
-        drawer.animate().alpha(0f).translationY(if (look == Look.APPLE || look == Look.NOTHING) 0f else dp(60f))
-            .scaleX(if (look == Look.APPLE) 0.95f else 1f).scaleY(if (look == Look.APPLE) 0.95f else 1f)
-            .setDuration(240).withEndAction { drawer.visibility = View.GONE }.start()
+        drawer.animate().alpha(0f).translationY(if (prefs.anim == 1) dp(60f) else 0f)
+            .scaleX(if (prefs.anim == 0) 0.92f else 1f).scaleY(if (prefs.anim == 0) 0.92f else 1f)
+            .setDuration(if (prefs.anim == 2) 120 else 260).withEndAction { drawer.visibility = View.GONE }.start()
     }
 
     // ------------------------------------------------------------------
@@ -1417,7 +1501,7 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
             Look.ANDROID -> 96f
             Look.ONEUI -> 160f
             Look.GALAXY -> 200f
-            Look.NOTHING -> 156f
+            Look.NOTHING -> 262f
             Look.COLOROS -> 146f
             Look.HYPEROS -> 140f
             Look.MAGICOS -> 152f
@@ -1581,12 +1665,45 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
                 text(SimpleDateFormat("EEEE d. MMM", de).format(now), w - 14 * d, 160 * d, 15f, 500, align = Paint.Align.RIGHT)
             }
             Look.NOTHING -> {
-                text(time, w / 2, 96 * d, 84f, 700, align = Paint.Align.CENTER, display = true)
+                // Nothing OS: große Punkt-Uhr + zwei Kacheln (Datum, Akku als Punktring)
+                text(time, w / 2, 88 * d, 82f, 700, align = Paint.Align.CENTER, display = true)
                 p.clearShadowLayer()
+                val gap = 12 * d
+                val sq = minOf((w - gap - 24 * d) / 2, 150 * d)
+                val top = 108 * d
+                val l1 = (w - (2 * sq + gap)) / 2
+                // Kachel 1: Datum
+                r.set(l1, top, l1 + sq, top + sq)
+                p.color = if (darkText) 0xE6FFFFFF.toInt() else 0xE61B1B1B.toInt()
+                c.drawRoundRect(r, 30 * d, 30 * d, p)
+                val ink = if (darkText) 0xFF111111.toInt() else Color.WHITE
+                text(SimpleDateFormat("EEE", de).format(now).uppercase().replace(".", ""), r.left + 18 * d, r.top + 34 * d, 15f, 500, ink, shadow = false)
                 p.color = 0xFFD71921.toInt()
-                c.drawCircle(w / 2 + 128 * d, 34 * d, 5 * d, p)
-                text(SimpleDateFormat("EEE d MMM", de).format(now).uppercase(), w / 2, 130 * d, 14f, 500, align = Paint.Align.CENTER)
-                batteryGlyph(c, w / 2 - 44 * d, 144 * d, 9 * d)
+                c.drawCircle(r.right - 22 * d, r.top + 28 * d, 5 * d, p)
+                text(SimpleDateFormat("d", de).format(now), r.left + 14 * d, r.bottom - 24 * d, 62f, 700, ink, display = true, shadow = false)
+                text(SimpleDateFormat("MMM", de).format(now).uppercase().replace(".", ""), r.right - 18 * d, r.bottom - 26 * d, 13f, 500,
+                    (ink and 0x00FFFFFF) or 0x99000000.toInt(), align = Paint.Align.RIGHT, shadow = false)
+                // Kachel 2: Akku als Punktring
+                r.set(l1 + sq + gap, top, l1 + 2 * sq + gap, top + sq)
+                p.color = if (darkText) 0xE6FFFFFF.toInt() else 0xE61B1B1B.toInt()
+                c.drawRoundRect(r, 30 * d, 30 * d, p)
+                val cx = r.centerX(); val cy = r.centerY() - 6 * d
+                val rr = sq * 0.32f
+                val n = 28
+                val lv = battery.coerceIn(0, 100)
+                val lit = (lv / 100f * n).toInt()
+                for (i in 0 until n) {
+                    val ang = Math.toRadians(-90.0 + i * 360.0 / n)
+                    p.color = when {
+                        i < lit && lv <= 20 && !charging -> 0xFFD71921.toInt()
+                        i < lit -> ink
+                        else -> (ink and 0x00FFFFFF) or 0x33000000
+                    }
+                    c.drawCircle(cx + (rr * Math.cos(ang)).toFloat(), cy + (rr * Math.sin(ang)).toFloat(), 3.2f * d, p)
+                }
+                text("$lv", cx, cy + 12 * d, 34f, 700, ink, align = Paint.Align.CENTER, display = true, shadow = false)
+                text(if (charging) "LÄDT" else "AKKU", cx, r.bottom - 14 * d, 11f, 500,
+                    (ink and 0x00FFFFFF) or 0x99000000.toInt(), align = Paint.Align.CENTER, shadow = false)
             }
             Look.COLOROS -> {
                 text(time, 10 * d, 84 * d, 72f, 200)

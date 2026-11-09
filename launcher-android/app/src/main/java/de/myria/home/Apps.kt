@@ -19,6 +19,9 @@ class AppInfo(
 
 /** Lädt alle startbaren Apps über LauncherApps (wie echte Launcher). */
 object Apps {
+    /** Zeitpunkt des letzten App-Starts (für die Rückkehr-Animation) */
+    @Volatile var lastLaunch = 0L
+
     @Volatile
     var all: List<AppInfo> = emptyList()
         private set
@@ -45,15 +48,20 @@ object Apps {
     fun byKey(key: String) = all.firstOrNull { it.key == key }
 
     fun launch(ctx: Context, app: AppInfo, view: android.view.View?) {
-        HomePrefs(ctx).countLaunch(app.key)
+        val hp = HomePrefs(ctx)
+        hp.countLaunch(app.key)
+        lastLaunch = System.currentTimeMillis()
         val la = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
         try {
             val bounds = view?.let {
                 val loc = IntArray(2); it.getLocationOnScreen(loc)
                 android.graphics.Rect(loc[0], loc[1], loc[0] + it.width, loc[1] + it.height)
             }
-            val opts = view?.let {
-                android.app.ActivityOptions.makeScaleUpAnimation(it, 0, 0, it.width, it.height).toBundle()
+            // Start-Animation je Stil: Apple wächst aus dem Icon, Android enthüllt sich, Nothing blendet knackig ein
+            val opts = when (hp.anim) {
+                2 -> android.app.ActivityOptions.makeCustomAnimation(ctx, android.R.anim.fade_in, android.R.anim.fade_out).toBundle()
+                1 -> view?.let { android.app.ActivityOptions.makeClipRevealAnimation(it, 0, 0, it.width, it.height).toBundle() }
+                else -> view?.let { android.app.ActivityOptions.makeScaleUpAnimation(it, 0, 0, it.width, it.height).toBundle() }
             }
             la.startMainActivity(app.component, Process.myUserHandle(), bounds, opts)
         } catch (_: Exception) {
