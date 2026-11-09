@@ -60,7 +60,9 @@ object IconStyle {
     const val NOTHING = 4
     /** Nothing-Glyph: Symbol als Punktraster */
     const val DOTS = 5
-    val names = listOf("Standard", "Dunkel", "Getönt", "Klar", "Nothing", "Punkte")
+    /** Material You: Themed Icons in den Farben des Hintergrundbilds (wie Pixel) */
+    const val YOU = 6
+    val names = listOf("Standard", "Dunkel", "Getönt", "Klar", "Nothing", "Punkte", "Material You")
 }
 
 /** Einstellungen des Launchers */
@@ -246,7 +248,7 @@ class HomePrefs(ctx: Context) {
         }
 
     val effectiveIconStyle: Int
-        get() = if (iconStyle in 0..5) iconStyle else if (look == Look.NOTHING) IconStyle.NOTHING else IconStyle.STANDARD
+        get() = if (iconStyle in 0..6) iconStyle else if (look == Look.NOTHING) IconStyle.NOTHING else IconStyle.STANDARD
 
     val effectiveShape: Shape
         get() = Shape.values().getOrNull(shape) ?: Looks.defaultShape(look)
@@ -257,7 +259,42 @@ class HomePrefs(ctx: Context) {
     fun signature(extra: Int) = sp.all.filterKeys { !it.startsWith("cnt_") }.toSortedMap().toString() + extra
 }
 
+/**
+ * Material You: dynamische Farben aus dem Hintergrundbild (Android 12+).
+ * Fallback auf eine ruhige Lila-Palette wie bei Pixel.
+ */
+object You {
+    private val fallback = mapOf(
+        "a1" to intArrayOf(0xFFFFFFFF.toInt(), 0xFFF6EDFF.toInt(), 0xFFEADDFF.toInt(), 0xFFD0BCFF.toInt(), 0xFFB69DF8.toInt(), 0xFF9A82DB.toInt(), 0xFF7F67BE.toInt(), 0xFF6750A4.toInt(), 0xFF4F378B.toInt(), 0xFF381E72.toInt(), 0xFF21005D.toInt(), 0xFF000000.toInt()),
+        "a2" to intArrayOf(0xFFFFFFFF.toInt(), 0xFFF6EDFF.toInt(), 0xFFE8DEF8.toInt(), 0xFFCCC2DC.toInt(), 0xFFB0A7C0.toInt(), 0xFF958DA5.toInt(), 0xFF7A7289.toInt(), 0xFF625B71.toInt(), 0xFF4A4458.toInt(), 0xFF332D41.toInt(), 0xFF1D192B.toInt(), 0xFF000000.toInt()),
+        "n1" to intArrayOf(0xFFFFFFFF.toInt(), 0xFFF5EFF7.toInt(), 0xFFE6E0E9.toInt(), 0xFFCAC5CD.toInt(), 0xFFAEA9B1.toInt(), 0xFF938F96.toInt(), 0xFF79767D.toInt(), 0xFF605D64.toInt(), 0xFF48464C.toInt(), 0xFF322F35.toInt(), 0xFF1D1B20.toInt(), 0xFF000000.toInt()),
+    )
+    private val shades = intArrayOf(0, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000)
+
+    /** pal = "a1" | "a2" | "a3" | "n1" | "n2", shade = 0, 50, 100 … 1000 */
+    fun c(ctx: Context, pal: String, shade: Int): Int {
+        if (Build.VERSION.SDK_INT >= 31) {
+            val name = "system_" + when (pal) { "a1" -> "accent1"; "a2" -> "accent2"; "a3" -> "accent3"; "n2" -> "neutral2"; else -> "neutral1" } + "_" + shade
+            @Suppress("DiscouragedApi")
+            val id = ctx.resources.getIdentifier(name, "color", "android")
+            if (id != 0) try { return ctx.getColor(id) } catch (_: Exception) {}
+        }
+        val arr = fallback[if (pal == "a3") "a1" else if (pal == "n2") "n1" else pal] ?: fallback["n1"]!!
+        return arr[shades.indexOf(shade).coerceAtLeast(0)]
+    }
+
+    fun night(ctx: Context) = (ctx.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+        android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+    /** Farben für Themed Icons: Hintergrund, Symbol */
+    fun iconColors(ctx: Context): Pair<Int, Int> =
+        if (night(ctx)) c(ctx, "a2", 800) to c(ctx, "a1", 100) else c(ctx, "a1", 100) to c(ctx, "a1", 800)
+}
+
 object Looks {
+    /** Aktuelle Material-You-Farben für Themed Icons (Hintergrund, Symbol) – vom Launcher gesetzt */
+    @Volatile var youColors: Pair<Int, Int> = 0xFFEADDFF.toInt() to 0xFF21005D.toInt()
+
     private val cache = LruCache<String, Bitmap>(300)
     private val fonts = HashMap<String, Typeface>()
 
@@ -400,6 +437,14 @@ object Looks {
         val ck = "$key/${shape.name}/$sizePx/$style/$tint/$mono/$pack"
         cache.get(ck)?.let { return it }
         val s = sizePx.coerceAtLeast(8)
+        if (style == IconStyle.YOU) {
+            val (bgc, fgc) = youColors
+            val ck2 = "$ck/$bgc/$fgc"
+            cache.get(ck2)?.let { return it }
+            val out = themedIcon(dr, s, if (shape == Shape.SYSTEM) Shape.CIRCLE else shape, bgc, fgc, pack)
+            cache.put(ck2, out)
+            return out
+        }
         if (style == IconStyle.NOTHING || style == IconStyle.DOTS) {
             val out = nothingIcon(dr, s, if (shape == Shape.SYSTEM) Shape.CIRCLE else shape, style == IconStyle.DOTS, pack)
             cache.put(ck, out)
@@ -579,6 +624,22 @@ object Looks {
         var y = 0
         while (y < h) { var x = 0; while (x < w) { all++; if (Color.alpha(b.getPixel(x, y)) > 128) on++; x += 4 }; y += 4 }
         return on.toFloat() / all.coerceAtLeast(1)
+    }
+
+    /** Material You Themed Icon: Symbol in Akzentfarbe auf heller/dunkler Tonfläche */
+    private fun themedIcon(dr: Drawable, s: Int, shape: Shape, bgc: Int, fgc: Int, pack: Boolean): Bitmap {
+        val out = Bitmap.createBitmap(s, s, Bitmap.Config.ARGB_8888)
+        val c = Canvas(out)
+        val sf = s.toFloat()
+        val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        p.color = bgc
+        c.drawPath(maskPath(shape, sf), p)
+        val mask = glyphMask(dr, s, pack)
+        p.color = fgc
+        val ins = sf * 0.04f
+        c.drawBitmap(mask, null, android.graphics.RectF(ins, ins, sf - ins, sf - ins), p)
+        mask.recycle()
+        return out
     }
 
     /** Nothing-Symbol: weiß auf dunklem Kreis – oder als Punktraster (Glyph-Look) */

@@ -44,12 +44,12 @@ class SettingsActivity : Activity() {
     private val dark get() = sysDark || nothing
     private val bg get() = when {
         nothing -> 0xFF000000.toInt()
-        material -> if (dark) 0xFF141218.toInt() else 0xFFFEF7FF.toInt()
+        material -> if (dark) You.c(this, "n1", 900) else You.c(this, "n1", 50)
         else -> if (dark) 0xFF0B0B0D.toInt() else 0xFFF2F2F7.toInt()
     }
     private val card get() = when {
         nothing -> 0xFF111111.toInt()
-        material -> if (dark) 0xFF211F26.toInt() else 0xFFF3EDF7.toInt()
+        material -> if (dark) You.c(this, "n2", 800) else You.c(this, "a2", 50)
         else -> if (dark) 0xFF1C1C1F.toInt() else Color.WHITE
     }
     private val label get() = if (dark) 0xFFF2F2F5.toInt() else 0xFF15151A.toInt()
@@ -57,7 +57,7 @@ class SettingsActivity : Activity() {
     private val chipBg get() = if (nothing) 0xFF1E1E1E.toInt() else if (dark) 0xFF2C2C30.toInt() else 0xFFE9E9EE.toInt()
     private val accent get() = when {
         nothing -> 0xFFD71921.toInt()
-        material -> if (Build.VERSION.SDK_INT >= 31) try { getColor(if (dark) android.R.color.system_accent1_200 else android.R.color.system_accent1_600) } catch (_: Exception) { 0xFF6750A4.toInt() } else 0xFF6750A4.toInt()
+        material -> You.c(this, "a1", if (dark) 200 else 600)
         else -> 0xFF6C5CE7.toInt()
     }
     /** Überschriften-Schrift je Design: Nothing = Punktschrift, Material = Google Sans, iOS = Inter */
@@ -78,6 +78,7 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = HomePrefs(this)
+        Looks.youColors = You.iconColors(this)
         sysDark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
         window.statusBarColor = bg
         window.navigationBarColor = bg
@@ -529,9 +530,11 @@ class SettingsActivity : Activity() {
     private fun switch(t: String, value: Boolean, onChange: (Boolean) -> Unit): View = rowBase().apply {
         addView(title(t), LinearLayout.LayoutParams(0, -2, 1f))
         // Fix: eigener Schalter – der System-Switch zeichnete auf manchen Handys einen grauen Balken
-        val sw = Toggle(this@SettingsActivity, value, accent, if (dark) 0xFF39393D.toInt() else 0xFFE3E3E8.toInt())
+        val sw = Toggle(this@SettingsActivity, value, accent, if (dark) 0xFF39393D.toInt() else 0xFFE3E3E8.toInt(),
+            m3 = material, onThumb = if (material) You.c(this@SettingsActivity, "a1", if (dark) 800 else 0) else Color.WHITE,
+            outline = if (material) You.c(this@SettingsActivity, "n2", if (dark) 400 else 500) else 0)
         sw.onChange = { v -> sw.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK); onChange(v) }
-        addView(sw, LinearLayout.LayoutParams(dpi(51f), dpi(31f)))
+        addView(sw, if (material) LinearLayout.LayoutParams(dpi(52f), dpi(32f)) else LinearLayout.LayoutParams(dpi(51f), dpi(31f)))
         setOnClickListener { sw.toggle() }
     }
 
@@ -579,8 +582,21 @@ class SettingsActivity : Activity() {
         val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; setPadding(dpi(12f), 0, dpi(12f), 0) }
         val views = ArrayList<TextView>()
         fun mark(sel: Int) = views.forEachIndexed { i, tv ->
-            tv.background = GradientDrawable().apply { cornerRadius = dp(18f); setColor(if (i == sel) accent else chipBg) }
-            tv.setTextColor(if (i == sel) Color.WHITE else label)
+            if (material) {
+                // M3-Filter-Chips: ausgewählt = Tonfläche mit Häkchen, sonst Umriss
+                val on = i == sel
+                tv.background = GradientDrawable().apply {
+                    cornerRadius = dp(8f)
+                    setColor(if (on) You.c(this@SettingsActivity, "a2", if (dark) 700 else 100) else Color.TRANSPARENT)
+                    if (!on) setStroke(maxOf(1, dpi(1f)), You.c(this@SettingsActivity, "n2", if (dark) 600 else 400))
+                }
+                tv.setTextColor(if (on) You.c(this@SettingsActivity, "a2", if (dark) 100 else 900) else label)
+                val base = tv.text.toString().removePrefix("✓  ")
+                tv.text = if (on) "✓  $base" else base
+            } else {
+                tv.background = GradientDrawable().apply { cornerRadius = dp(18f); setColor(if (i == sel) accent else chipBg) }
+                tv.setTextColor(if (i == sel) Color.WHITE else label)
+            }
         }
         options.forEachIndexed { i, o ->
             val tv = TextView(this).apply {
@@ -630,7 +646,11 @@ class SettingsActivity : Activity() {
 
 /** iOS-Schalter (gezeichnet, mit Feder-Animation) */
 @SuppressLint("ViewConstructor")
-class Toggle(ctx: Context, private var on: Boolean, private val onColor: Int, private val offColor: Int) : View(ctx) {
+class Toggle(
+    ctx: Context, private var on: Boolean, private val onColor: Int, private val offColor: Int,
+    /** Material-3-Schalter (Umriss aus, Daumen wächst beim Einschalten) */
+    private val m3: Boolean = false, private val onThumb: Int = Color.WHITE, private val outline: Int = 0,
+) : View(ctx) {
     var onChange: ((Boolean) -> Unit)? = null
     private var pos = if (on) 1f else 0f
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -650,6 +670,7 @@ class Toggle(ctx: Context, private var on: Boolean, private val onColor: Int, pr
     }
 
     override fun onDraw(c: Canvas) {
+        if (m3) { drawM3(c); return }
         val w = width.toFloat(); val h = height.toFloat()
         val t = pos.coerceIn(0f, 1f)
         p.color = android.animation.ArgbEvaluator().evaluate(t, offColor, onColor) as Int
@@ -662,6 +683,39 @@ class Toggle(ctx: Context, private var on: Boolean, private val onColor: Int, pr
         c.drawCircle(x + d / 2, h / 2 + h * 0.03f, d / 2, p)
         p.color = Color.WHITE
         c.drawCircle(x + d / 2, h / 2, d / 2, p)
+    }
+
+    private fun drawM3(c: Canvas) {
+        val w = width.toFloat(); val h = height.toFloat()
+        val t = pos.coerceIn(0f, 1f)
+        val dn = resources.displayMetrics.density
+        r.set(dn, dn, w - dn, h - dn)
+        p.style = Paint.Style.FILL
+        p.color = android.animation.ArgbEvaluator().evaluate(t, offColor, onColor) as Int
+        c.drawRoundRect(r, h / 2, h / 2, p)
+        if (t < 0.99f) {
+            p.style = Paint.Style.STROKE
+            p.strokeWidth = 2 * dn
+            p.color = (outline and 0x00FFFFFF) or (((1 - t) * 255).toInt().coerceIn(0, 255) shl 24)
+            c.drawRoundRect(r, h / 2, h / 2, p)
+            p.style = Paint.Style.FILL
+        }
+        // Daumen: aus = klein (16dp, Umrissfarbe), an = groß (24dp, Kontrastfarbe) mit Häkchen
+        val rad = (8f + 4f * pos) * dn
+        val cx = h / 2 + (w - h) * pos
+        p.color = android.animation.ArgbEvaluator().evaluate(t, outline, onThumb) as Int
+        c.drawCircle(cx, h / 2, rad, p)
+        if (t > 0.6f) {
+            p.style = Paint.Style.STROKE
+            p.strokeWidth = 2 * dn
+            p.strokeCap = Paint.Cap.ROUND
+            p.color = onColor
+            p.alpha = ((t - 0.6f) / 0.4f * 255).toInt().coerceIn(0, 255)
+            c.drawLine(cx - 4.5f * dn, h / 2, cx - 1.2f * dn, h / 2 + 3.3f * dn, p)
+            c.drawLine(cx - 1.2f * dn, h / 2 + 3.3f * dn, cx + 5f * dn, h / 2 - 3.5f * dn, p)
+            p.style = Paint.Style.FILL
+            p.alpha = 255
+        }
     }
 }
 

@@ -383,7 +383,9 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
         // Fix: leere Pille bleibt antippbar, wenn Antippen/Gedrückthalten etwas tut (Kontrollzentrum);
         // sonst kam man nach dem Entsperren nicht mehr ans Kontrollzentrum
         val idleUseful = cfg.idleTap != 0 || cfg.idleLongPress != 0
-        val t = !(locked || mode == IslandView.Mode.HIDDEN ||
+        // Sperrbildschirm: bedienbar, wenn eingeschaltet (nur die Island selbst fängt Berührungen,
+        // der Rest des Sperrbildschirms bleibt frei zum Entsperren)
+        val t = !((locked && !cfg.lockTouch) || mode == IslandView.Mode.HIDDEN ||
             (mode == IslandView.Mode.IDLE && cfg.idleTouchThrough && !idleUseful))
         if (t != touchable) {
             touchable = t

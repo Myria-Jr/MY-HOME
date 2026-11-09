@@ -17,6 +17,8 @@ data class IslandConfig(
     val idleTouchThrough: Boolean = true,
     val hideLandscape: Boolean = true,
     val showOnLockscreen: Boolean = true,
+    /** Auf dem Sperrbildschirm antippen/aufklappen (Musik, Kontrollzentrum, Timer …) */
+    val lockTouch: Boolean = true,
     val idleContent: Int = IDLE_NONE,
 
     // Größe & Position
@@ -260,6 +262,7 @@ object Prefs {
     const val IDLE_TOUCH_THROUGH = "idle_touch_through"
     const val HIDE_LANDSCAPE = "hide_landscape"
     const val LOCKSCREEN = "lockscreen"
+    const val LOCK_TOUCH = "lock_touch"
     const val IDLE_CONTENT = "idle_content"
 
     const val WIDTH = "width"
@@ -392,6 +395,7 @@ object Prefs {
             idleTouchThrough = b(IDLE_TOUCH_THROUGH, d.idleTouchThrough),
             hideLandscape = b(HIDE_LANDSCAPE, d.hideLandscape),
             showOnLockscreen = b(LOCKSCREEN, d.showOnLockscreen),
+            lockTouch = b(LOCK_TOUCH, d.lockTouch),
             idleContent = i(IDLE_CONTENT, d.idleContent),
 
             widthDp = i(WIDTH, d.widthDp),

@@ -95,6 +95,7 @@ class HomeActivity : Activity() {
         super.onCreate(savedInstanceState)
         prefs = HomePrefs(this)
         prefs.migrate()
+        Looks.youColors = You.iconColors(this)
         widgetHost = android.appwidget.AppWidgetHost(this, 0x4C55)
         BadgeService.onChange = { updateBadges() }
         gestures = GestureDetector(this, gestureListener).apply { setIsLongpressEnabled(false) }
@@ -162,6 +163,8 @@ class HomeActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        // Material You: neues Hintergrundbild → neue Farben
+        Looks.youColors = You.iconColors(this)
         if (prefs.iconPack != loadedPack && loadedPack != "\u0000") { Looks.clearCache(); loadApps() }
         updateBadges()
         if (System.currentTimeMillis() - Apps.lastLaunch < 60 * 60_000L && Apps.lastLaunch > 0) {
@@ -222,7 +225,7 @@ class HomeActivity : Activity() {
         }
     }
 
-    private fun signature() = prefs.signature(Apps.all.size)
+    private fun signature() = prefs.signature(Apps.all.size) + Looks.youColors.toString()
 
     private fun loadApps() {
         Thread {
@@ -317,7 +320,39 @@ class HomeActivity : Activity() {
         else -> null
     }
 
-    private fun searchPill(): View = TextView(this).apply {
+    /** Pixel-Suchleiste (Material You): Tonfläche aus dem Hintergrundbild, Suchsymbol links, Mikro rechts */
+    private fun youSearchPill(): View = LinearLayout(this).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        val night = You.night(this@HomeActivity)
+        val surface = if (night) You.c(this@HomeActivity, "n2", 800) else You.c(this@HomeActivity, "n1", 50)
+        val onSurface = if (night) You.c(this@HomeActivity, "n2", 200) else You.c(this@HomeActivity, "n2", 700)
+        background = GradientDrawable().apply { cornerRadius = dp(28f); setColor(surface) }
+        setPadding(dpi(20f), 0, dpi(10f), 0)
+        addView(TextView(this@HomeActivity).apply {
+            text = "⌕"; textSize = 22f; setTextColor(You.c(this@HomeActivity, "a1", if (night) 200 else 600))
+        })
+        addView(TextView(this@HomeActivity).apply {
+            text = "Suchen"
+            textSize = 16f
+            typeface = Looks.font(this@HomeActivity, Look.ANDROID, 500)
+            setTextColor(onSurface)
+            setPadding(dpi(14f), 0, 0, 0)
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        addView(TextView(this@HomeActivity).apply {
+            text = "🎙"
+            textSize = 17f
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(You.c(this@HomeActivity, "a2", if (night) 700 else 100)) }
+            setOnClickListener {
+                try { startActivity(Intent(android.speech.RecognizerIntent.ACTION_WEB_SEARCH).putExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL, android.speech.RecognizerIntent.LANGUAGE_MODEL_WEB_SEARCH)) }
+                catch (_: Exception) { openDrawer(focusSearch = true) }
+            }
+        }, LinearLayout.LayoutParams(dpi(40f), dpi(40f)))
+        setOnClickListener { openDrawer(focusSearch = true) }
+    }
+
+    private fun searchPill(): View = if (look == Look.ANDROID) youSearchPill() else TextView(this).apply {
         text = if (look == Look.APPLE) "⌕  Suchen" else "⌕   Apps & Web durchsuchen"
         typeface = Looks.font(this@HomeActivity, look, 500)
         textSize = if (look == Look.APPLE) 14f else 16f
@@ -346,7 +381,11 @@ class HomeActivity : Activity() {
                 background = GradientDrawable().apply {
                     shape = if (look == Look.NOTHING) GradientDrawable.RECTANGLE else GradientDrawable.OVAL
                     if (look == Look.ANDROID) cornerRadius = dp(4f)
-                    setColor(if (i == page) textColor else (textColor and 0x00FFFFFF) or 0x66000000)
+                    setColor(when {
+                        look == Look.ANDROID && i == page -> You.c(this@HomeActivity, "a1", 200)
+                        i == page -> textColor
+                        else -> (textColor and 0x00FFFFFF) or 0x66000000
+                    })
                 }
             }, LinearLayout.LayoutParams(dpi(if (i == page && look == Look.ANDROID) 16f else 7f), dpi(7f)).apply {
                 leftMargin = dpi(4f); rightMargin = dpi(4f)
@@ -544,7 +583,7 @@ class HomeActivity : Activity() {
             override fun onDraw(c: Canvas) {
                 val sz = width.toFloat()
                 val path = Looks.maskPath(prefs.effectiveShape.let { if (it == Shape.SYSTEM) Shape.ROUNDED else it }, sz)
-                pp.color = if (look == Look.ANDROID) 0xE6E8E2F0.toInt() else 0x59FFFFFF
+                pp.color = if (look == Look.ANDROID) (if (You.night(context)) You.c(context, "n2", 800) else You.c(context, "a2", 100)) else 0x59FFFFFF
                 c.drawPath(path, pp)
                 val n = if (apps.size > 4) 3 else 2
                 val gap = sz * (if (n == 3) 0.07f else 0.1f)
@@ -653,7 +692,7 @@ class HomeActivity : Activity() {
             isClickable = true
             background = GradientDrawable().apply {
                 cornerRadius = dp(if (look == Look.APPLE) 38f else 30f)
-                setColor(when (look) { Look.ANDROID -> 0xF2E9E4F0.toInt(); Look.NOTHING -> 0xF2141414.toInt(); else -> 0x4DFFFFFF })
+                setColor(when (look) { Look.ANDROID -> if (You.night(this@HomeActivity)) You.c(this@HomeActivity, "n1", 900) else You.c(this@HomeActivity, "n1", 50); Look.NOTHING -> 0xF2141414.toInt(); else -> 0x4DFFFFFF })
                 if (look != Look.ANDROID) setStroke(dpi(1f), 0x33FFFFFF)
             }
             setPadding(dpi(14f), dpi(18f), dpi(14f), dpi(18f))
@@ -662,7 +701,7 @@ class HomeActivity : Activity() {
             text = prefs.folderName(id)
             textSize = 22f
             typeface = Looks.font(this@HomeActivity, look, 700, display = true)
-            setTextColor(if (look == Look.ANDROID) 0xFF1B1B1F.toInt() else Color.WHITE)
+            setTextColor(if (look == Look.ANDROID && !You.night(this@HomeActivity)) 0xFF1B1B1F.toInt() else Color.WHITE)
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, dpi(12f))
             setOnClickListener { textDialog("Ordner umbenennen", prefs.folderName(id)) { n -> prefs.setFolderName(id, n); text = n; rebuildHome() } }
@@ -676,7 +715,7 @@ class HomeActivity : Activity() {
                 val v = iconView(a, prefs.iconDp, prefs.labels, false, false)
                 (v.getChildAt(0) as? LinearLayout)?.let { cv ->
                     // Text im Ordner immer lesbar
-                    for (k in 0 until cv.childCount) (cv.getChildAt(k) as? TextView)?.setTextColor(if (look == Look.ANDROID) 0xFF1B1B1F.toInt() else Color.WHITE)
+                    for (k in 0 until cv.childCount) (cv.getChildAt(k) as? TextView)?.setTextColor(if (look == Look.ANDROID && !You.night(this)) 0xFF1B1B1F.toInt() else Color.WHITE)
                     cv.setOnClickListener { Apps.launch(this, a, cv); main.postDelayed({ closeFolder() }, 250) }
                     cv.setOnLongClickListener {
                         it.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
@@ -1084,7 +1123,11 @@ class HomeActivity : Activity() {
 
     private fun buildDrawer() {
         drawer = FrameLayout(this).apply {
-            setBackgroundColor(drawerColor())
+            if (look == Look.ANDROID) background = GradientDrawable().apply {
+                // Material You: Tonfläche mit großen runden Ecken oben
+                cornerRadii = floatArrayOf(dp(32f), dp(32f), dp(32f), dp(32f), 0f, 0f, 0f, 0f)
+                setColor(drawerColor())
+            } else setBackgroundColor(drawerColor())
             visibility = View.GONE
             isClickable = true
             setPadding(0, insetTop, 0, insetBottom)
@@ -1106,7 +1149,10 @@ class HomeActivity : Activity() {
             setHintTextColor(0x99FFFFFF.toInt())
             typeface = Looks.font(this@HomeActivity, look, 400)
             setPadding(dpi(18f), dpi(10f), dpi(18f), dpi(10f))
-            background = GradientDrawable().apply { cornerRadius = dp(if (look == Look.APPLE) 12f else 26f); setColor(0x26FFFFFF) }
+            background = GradientDrawable().apply {
+                cornerRadius = dp(if (look == Look.APPLE) 12f else 28f)
+                setColor(if (look == Look.ANDROID) You.c(this@HomeActivity, "n2", 800) else 0x26FFFFFF)
+            }
             addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -1498,7 +1544,7 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
         var charging = false
         fun heightDp(look: Look) = when (look) {
             Look.APPLE -> 170f
-            Look.ANDROID -> 96f
+            Look.ANDROID -> 104f
             Look.ONEUI -> 160f
             Look.GALAXY -> 200f
             Look.NOTHING -> 262f
@@ -1649,10 +1695,18 @@ class ClockView(ctx: Context, private val look: Look, private val darkText: Bool
                 text("$lvl %", cx, r.bottom - 16 * d, 15f, 600, Color.WHITE, align = Paint.Align.CENTER)
             }
             Look.ANDROID -> {
-                text(SimpleDateFormat("EEE., d. MMM.", de).format(now), 10 * d, 44 * d, 24f, 400)
-                text(time, 10 * d, 78 * d, 16f, 500)
-                p.textSize = 16 * d
-                batteryGlyph(c, 10 * d + p.measureText(time) + 14 * d, 72 * d, 11 * d)
+                // Pixel „Auf einen Blick“: großes Datum, darunter Akku-Chip in Material-You-Farbe
+                text(SimpleDateFormat("EEE., d. MMM.", de).format(now), 12 * d, 46 * d, 28f, 400)
+                val chip = (if (charging) "⚡ " else "") + (if (battery >= 0) "$battery %" else time)
+                p.textSize = 14 * d
+                p.typeface = Looks.font(context, look, 500)
+                val cw = p.measureText(chip) + 28 * d
+                r.set(12 * d, 62 * d, 12 * d + cw, 92 * d)
+                p.clearShadowLayer()
+                p.color = You.c(context, "a2", if (You.night(context)) 700 else 100)
+                c.drawRoundRect(r, 15 * d, 15 * d, p)
+                text(chip, r.left + 14 * d, r.centerY() + 5 * d, 14f, 500,
+                    You.c(context, "a2", if (You.night(context)) 100 else 900), shadow = false)
             }
             Look.ONEUI -> {
                 text(time, w / 2, 96 * d, 76f, 250, align = Paint.Align.CENTER)

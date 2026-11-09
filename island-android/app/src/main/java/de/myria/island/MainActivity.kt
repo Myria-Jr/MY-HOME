@@ -971,6 +971,8 @@ class MainActivity : Activity() {
         )))
         c.addView(section("Sichtbarkeit", listOf(
             switchRow("Auf dem Sperrbildschirm", Prefs.LOCKSCREEN, D.showOnLockscreen),
+            switchRow("Auf dem Sperrbildschirm bedienen", Prefs.LOCK_TOUCH, D.lockTouch,
+                "Musik steuern, Kontrollzentrum, Timer – ohne zu entsperren. Apps öffnen fragt nach dem Entsperren."),
             switchRow("Im Querformat ausblenden", Prefs.HIDE_LANDSCAPE, D.hideLandscape, "Videos & Spiele bleiben frei"),
             switchRow("Leere Pille durchklickbar", Prefs.IDLE_TOUCH_THROUGH, D.idleTouchThrough, "Bei „Immer sichtbar“"),
             navRow("In bestimmten Apps ausblenden", null) { open("hidein") },
