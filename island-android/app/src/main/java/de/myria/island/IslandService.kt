@@ -159,6 +159,8 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
+        // Jede App-/Fensterwechsel: Sperr-Status nachprüfen (falls USER_PRESENT ausblieb)
+        if (locked && !screenOff) { handler.removeCallbacks(recheckLock); handler.post(recheckLock) }
         val pkg = event.packageName?.toString() ?: return
         if (pkg in ignoredPkgs) return
         controller?.foregroundPkg = pkg
@@ -173,7 +175,7 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     private fun effective(): IslandConfig {
         val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
         return if (cfg.powerSaveReduce && pm.isPowerSaveMode)
-            cfg.copy(waveform = false, glow = false, reduceMotion = true, vinyl = false)
+            cfg.copy(glow = false, reduceMotion = true, vinyl = false)
         else cfg
     }
     override fun onInterrupt() {}
@@ -378,8 +380,11 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
     override fun onModeChanged(mode: IslandView.Mode) {
         lastMode = mode
         // Fix Entsperren: auf dem Sperrbildschirm fängt die Island keine Berührungen ab
+        // Fix: leere Pille bleibt antippbar, wenn Antippen/Gedrückthalten etwas tut (Kontrollzentrum);
+        // sonst kam man nach dem Entsperren nicht mehr ans Kontrollzentrum
+        val idleUseful = cfg.idleTap != 0 || cfg.idleLongPress != 0
         val t = !(locked || mode == IslandView.Mode.HIDDEN ||
-            (mode == IslandView.Mode.IDLE && cfg.idleTouchThrough))
+            (mode == IslandView.Mode.IDLE && cfg.idleTouchThrough && !idleUseful))
         if (t != touchable) {
             touchable = t
             tlp.flags = baseFlags()
@@ -841,18 +846,12 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                     locked = (getSystemService(KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
                     updateSuppressed()
                     applyPrivacy()
+                    // Fix „nach Entsperren nicht mehr antippbar“: Der Sperr-Status direkt nach dem
+                    // Einschalten ist oft falsch, und USER_PRESENT kommt dann nie (Sperr-Verzögerung,
+                    // Smart Lock …). Darum mehrfach nachprüfen.
+                    for (ms in longArrayOf(300, 900, 2000, 4000, 8000)) handler.postDelayed(recheckLock, ms)
                 }
-                Intent.ACTION_USER_PRESENT -> {
-                    onUnlockedChecks()
-                    val wasLocked = locked
-                    locked = false
-                    screenOff = false
-                    unlockedAt = System.currentTimeMillis()
-                    updateSuppressed()
-                    applyPrivacy()
-                    // Fix Entsperren: Animation erst, wenn die System-Entsperr-Animation läuft (kein Ruckeln)
-                    if (wasLocked) handler.postDelayed({ controller?.showTransient(UnlockContent()) }, 180)
-                }
+                Intent.ACTION_USER_PRESENT -> unlockedNow()
             }
         }
     }
@@ -1048,6 +1047,27 @@ class IslandService : AccessibilityService(), IslandBus.Listener,
                 }
             } catch (_: Exception) {}
         }.start()
+    }
+
+    /** Gemeinsamer Weg für „entsperrt“ – egal ob per USER_PRESENT oder Nachprüfen */
+    private fun unlockedNow() {
+        val wasLocked = locked
+        locked = false
+        screenOff = false
+        if (!wasLocked && System.currentTimeMillis() - unlockedAt < 1500) return
+        onUnlockedChecks()
+        unlockedAt = System.currentTimeMillis()
+        updateSuppressed()
+        applyPrivacy()
+        // Animation erst, wenn die System-Entsperr-Animation läuft (kein Ruckeln) – nur einmal
+        if (wasLocked) handler.postDelayed({ controller?.showTransient(UnlockContent()) }, 180)
+    }
+
+    private val recheckLock = Runnable {
+        if (screenOff) return@Runnable
+        val l = try { (getSystemService(KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked } catch (_: Exception) { return@Runnable }
+        if (locked && !l) unlockedNow()
+        else if (!locked && l) { locked = true; updateSuppressed() }
     }
 
     private fun registerSystemReceivers() {

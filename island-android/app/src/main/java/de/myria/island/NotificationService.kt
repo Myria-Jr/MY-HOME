@@ -104,6 +104,22 @@ class NotificationService : NotificationListenerService() {
         publish()
     }
 
+    private val mediaLargeIcon = HashMap<String, Bitmap>()
+
+    /** Cover über content://-Adresse (z. B. lokale Musik-Apps) */
+    private fun loadArtUri(md: MediaMetadata): Bitmap? {
+        val uri = md.getString(MediaMetadata.METADATA_KEY_ALBUM_ART_URI)
+            ?: md.getString(MediaMetadata.METADATA_KEY_ART_URI)
+            ?: md.getString(MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI) ?: return null
+        if (!uri.startsWith("content://") && !uri.startsWith("android.resource://") && !uri.startsWith("file://")) return null
+        return try {
+            contentResolver.openInputStream(android.net.Uri.parse(uri))?.use {
+                val o = android.graphics.BitmapFactory.Options().apply { inSampleSize = 2 }
+                android.graphics.BitmapFactory.decodeStream(it, null, o)
+            }
+        } catch (_: Exception) { null }
+    }
+
     private fun publish() {
         val c = current
         val md = c?.metadata
@@ -123,13 +139,20 @@ class NotificationService : NotificationListenerService() {
             ?: appLabel(c.packageName)
 
         val id = c.packageName + "|" + title + "|" + artist
-        if (artCacheKey != id) {
+        // Fix Cover: vorher wurde das Cover nur beim ERSTEN Mal gelesen – kam es etwas später
+        // (wie bei Spotify/YouTube Music üblich), blieb es für das ganze Lied leer.
+        if (artCacheKey != id || artCache == null) {
             val raw = md.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
                 ?: md.getBitmap(MediaMetadata.METADATA_KEY_ART)
                 ?: md.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
+                ?: md.description?.iconBitmap
+                ?: loadArtUri(md)
+                ?: mediaLargeIcon[c.packageName]
             val art = raw?.let { softCopy(it) }
-            artCache = art
-            accentCache = art?.let { Colors.accentOf(it) } ?: DEFAULT_ACCENT
+            if (artCacheKey != id || art != null) {
+                artCache = art
+                accentCache = art?.let { Colors.accentOf(it) } ?: DEFAULT_ACCENT
+            }
             artCacheKey = id
         }
 
@@ -197,6 +220,13 @@ class NotificationService : NotificationListenerService() {
         if (sbn.packageName in cfg.excludedApps) return
 
         if (extras.containsKey(Notification.EXTRA_MEDIA_SESSION)) {
+            // Großes Bild der Medien-Benachrichtigung = Cover (Fallback für Apps ohne Cover in den Metadaten)
+            try {
+                val li = n.getLargeIcon()?.loadDrawable(this)
+                val bmp = (li as? android.graphics.drawable.BitmapDrawable)?.bitmap
+                    ?: (extras.getParcelable(Notification.EXTRA_LARGE_ICON) as? Bitmap)
+                if (bmp != null) mediaLargeIcon[sbn.packageName] = softCopy(bmp)
+            } catch (_: Exception) {}
             refreshSessions()
             return
         }

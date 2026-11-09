@@ -139,7 +139,7 @@ data class IslandConfig(
     val hideInOwnerApp: Boolean = true,
 
     // Verhalten
-    val tapExpands: Boolean = false,
+    val tapExpands: Boolean = true,
     val swipeDownExpands: Boolean = true,
     val autoCollapseSec: Int = 8,
     val haptics: Boolean = true,
@@ -368,7 +368,7 @@ object Prefs {
     const val NOTIF_EXP_LINES = "notif_exp_lines"
     const val HIDE_OWNER = "hide_in_owner_app"
 
-    const val TAP_EXPANDS = "tap_expands_v2"
+    const val TAP_EXPANDS = "tap_expands_v3"
     const val SWIPE_DOWN = "swipe_down_expands"
     const val AUTO_COLLAPSE = "auto_collapse"
     const val HAPTICS = "haptics"

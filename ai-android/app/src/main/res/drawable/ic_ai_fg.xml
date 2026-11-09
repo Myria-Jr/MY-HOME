@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <!-- Vier-Zack-Funkeln (KI) -->
+    <path android:fillColor="#FFB6F23C"
+        android:pathData="M54,30 C56,44 62,50 76,52 C62,54 56,60 54,74 C52,60 46,54 32,52 C46,50 52,44 54,30 Z" />
+    <path android:fillColor="#CCFFFFFF"
+        android:pathData="M70,32 C70.8,36.5 72.5,38.2 77,39 C72.5,39.8 70.8,41.5 70,46 C69.2,41.5 67.5,39.8 63,39 C67.5,38.2 69.2,36.5 70,32 Z" />
+</vector>

@@ -944,7 +944,7 @@ class MainActivity : Activity() {
 
     private fun behaviorPage() = page("Gesten & Haptik", true) { c ->
         c.addView(section("Gesten", listOf(
-            switchRow("Tippen erweitert", Prefs.TAP_EXPANDS, D.tapExpands, "Aus = wie iPhone: Tippen öffnet die App"),
+            switchRow("Tippen erweitert", Prefs.TAP_EXPANDS, D.tapExpands, "An: Tippen zeigt Cover, Skippen & Co. · Aus: Tippen öffnet die App"),
             switchRow("Runterziehen erweitert", Prefs.SWIPE_DOWN, D.swipeDownExpands),
             sliderRow("Automatisch einklappen", Prefs.AUTO_COLLAPSE, D.autoCollapseSec, 3, 30) { "$it s" },
         ), footer = "Gedrückt halten erweitert • Hochwischen klappt ein • Außerhalb tippen schließt."))

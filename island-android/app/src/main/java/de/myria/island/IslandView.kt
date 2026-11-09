@@ -1245,8 +1245,16 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         // Prozent rechts (zählt beim Einstecken hoch)
         numPaint.textSize = h * 0.42f * cfg.textScale
         val shown = if (c.plugged) (fill * 100).toInt().coerceAtMost(c.level) else c.level
-        rightText(canvas, "$shown%", numPaint, color, a)
+        if (Icons.family == Icons.NOTHING) {
+            // Nothing: Punkt-Schrift für die Zahl
+            val old = numPaint.typeface
+            numPaint.typeface = dotoFace
+            rightText(canvas, "$shown%", numPaint, color, a)
+            numPaint.typeface = old
+        } else rightText(canvas, "$shown%", numPaint, color, a)
     }
+
+    private val dotoFace: Typeface by lazy { Fonts.get(context, Fonts.DOTO, 700) }
 
     // ---- Lautlos ----
 
@@ -1678,9 +1686,24 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         val pm = PathMeasure(ringPath, false)
         ringSeg.reset()
         pm.getSegment(0f, pm.length * ringLevel.coerceIn(0f, 1f), ringSeg, true)
-        ringPaint.strokeWidth = 2.2f * d
-        ringPaint.color = if (ringLevel <= 0.2f) RED else GREEN
+        // Rand im Stil des Systems: Nothing = Punkte, Pixel = kräftig in Akzentfarbe, One UI = fein
+        val low = ringLevel <= 0.2f
+        ringPaint.color = chargeColor(low)
+        when (Icons.family) {
+            Icons.NOTHING -> {
+                ringPaint.strokeWidth = 2.6f * d
+                ringPaint.strokeCap = Paint.Cap.ROUND
+                ringPaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(0.1f, 5.2f * d), 0f)
+                // ungeladener Teil als schwache Punkte
+                val dim = Paint(ringPaint).apply { color = withAlpha(Color.WHITE, 0.18f) }
+                canvas.drawPath(ringPath, dim)
+            }
+            Icons.MATERIAL -> { ringPaint.strokeWidth = 3f * d; ringPaint.strokeCap = Paint.Cap.ROUND; ringPaint.pathEffect = null }
+            Icons.ONEUI -> { ringPaint.strokeWidth = 1.6f * d; ringPaint.strokeCap = Paint.Cap.BUTT; ringPaint.pathEffect = null }
+            else -> { ringPaint.strokeWidth = 2.2f * d; ringPaint.strokeCap = Paint.Cap.ROUND; ringPaint.pathEffect = null }
+        }
         canvas.drawPath(ringSeg, ringPaint)
+        ringPaint.pathEffect = null
     }
 
     private fun drawChargingExpanded(canvas: Canvas, c: Content.Charging, a: Float) {
@@ -1711,7 +1734,10 @@ class IslandView(context: Context, private val topInset: Float = 0f) : View(cont
         numPaint.textSize = spx(30f)
         numPaint.color = withAlpha(color, a)
         val shown = (fill * 100).toInt().coerceAtMost(c.level)
+        val oldTf = numPaint.typeface
+        if (Icons.family == Icons.NOTHING) numPaint.typeface = dotoFace
         canvas.drawText("$shown %", tx, cy + 4 * d, numPaint)
+        numPaint.typeface = oldTf
         val parts = ArrayList<String>()
         if (c.level >= 100) parts.add("Voll geladen")
         else if (c.timeLeftMs > 0 && cfg.chargeDetails) {
