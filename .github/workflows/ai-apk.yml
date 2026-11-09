@@ -1,0 +1,49 @@
+name: Lumora AI APK bauen
+
+on:
+  push:
+    paths:
+      - "ai-android/**"
+      - ".github/workflows/home-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai-android
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: APK bauen
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk LumoraAI.apk
+
+      - name: APK als Artifact hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: LumoraAI-APK
+          path: ai-android/LumoraAI.apk
+
+      - name: Release mit APK erstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: lumora-ai-v1.0.${{ github.run_number }}
+          name: Lumora AI 1.0.${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          files: ai-android/LumoraAI.apk
+          body: |
+            ✦ **LumoraAI.apk** herunterladen → installieren → kostenlosen NVIDIA-Schlüssel auf build.nvidia.com holen → einfügen → chatten.
