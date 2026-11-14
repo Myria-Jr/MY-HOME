@@ -319,7 +319,7 @@ Story.Notes = {
 	},
 	{
 		title = "Controls",
-		body = "WASD move · Shift run · C crouch (sneak)\nE / F interact · Click attack with a weapon\nTab phone · 1-9 hotbar",
+		body = "WASD move · Shift run · C crouch (sneak)\nE / F interact · G drop · Click attack\nV switch ego / 3rd person · Tab phone · 1-9 hotbar\nTouch: buttons on the right, context buttons above them",
 	},
 }
 

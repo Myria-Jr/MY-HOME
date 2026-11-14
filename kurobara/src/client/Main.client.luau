@@ -16,6 +16,8 @@ local Prompts = require(here.Prompts)
 local Controls = require(here.Controls)
 local Audio = require(here.Audio)
 local Voice = require(here.Voice)
+local CameraMode = require(here.CameraMode)
+local TouchUI = require(here.TouchUI)
 
 local player = Players.LocalPlayer
 
@@ -24,7 +26,9 @@ Animator.Init(Remotes.PlayAnim)
 BloodFX.Init(Remotes.BloodFX, Mood, Animator)
 HUD.Init()
 Prompts.Init()
-Controls.Init(Remotes.ClientAction, HUD)
+CameraMode.Init(Mood)
+Controls.Init(Remotes.ClientAction, HUD, CameraMode)
+TouchUI.Init(Remotes.ClientAction, HUD, CameraMode, Prompts)
 Audio.Init(Remotes.Sfx)
 Voice.Init(Remotes.Speak, Audio)
 
@@ -37,11 +41,15 @@ end)
 local function enterPlay()
 	HUD.Show(true)
 	Controls.Enable(true)
+	TouchUI.Show(true)
+	CameraMode.Suspend(false)
 end
 
 local function leavePlay()
 	HUD.Show(false)
 	Controls.Enable(false)
+	TouchUI.Show(false)
+	CameraMode.Suspend(true)
 end
 
 Remotes.Notify.OnClientEvent:Connect(function(text: string, kind: string)

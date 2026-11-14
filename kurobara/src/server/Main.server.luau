@@ -104,6 +104,17 @@ Remotes.ClientAction.OnServerEvent:Connect(function(player, action, value)
 		S.GameState.Start(player)
 	elseif action == "Restart" then
 		S.GameState.Restart(player)
+	elseif action == "Attack" then
+		-- touch attack button
+		local tool = S.Items.Equipped(player)
+		if tool then
+			local id = tool:GetAttribute("ItemId")
+			if tool:GetAttribute("Weapon") then
+				S.Combat.Attack(player, tool)
+			elseif id == "Mop" then
+				S.Bodies.Mop(player)
+			end
+		end
 	elseif action == "Crouch" then
 		st.Crouching = value == true
 		S.GameState.RefreshMood(player)

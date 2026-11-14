@@ -167,8 +167,8 @@ local function buildToasts()
 end
 
 local function buildHint()
-	local p = Glass.Panel(gui, { size = UDim2.fromOffset(420, 34), pos = UDim2.new(0, 16, 1, -16), anchor = Vector2.new(0, 1), radius = 17, alpha = 0.45 })
-	local t = Glass.Label(p, "Shift run  ·  C sneak  ·  E interact  ·  Click attack  ·  Tab phone", 13, Enum.FontWeight.Medium, UI.SubInk)
+	local p = Glass.Panel(gui, { size = UDim2.fromOffset(500, 34), pos = UDim2.new(0, 16, 1, -16), anchor = Vector2.new(0, 1), radius = 17, alpha = 0.45 })
+	local t = Glass.Label(p, "Shift run  ·  C sneak  ·  E interact  ·  Click attack  ·  V ego/3rd  ·  Tab phone", 13, Enum.FontWeight.Medium, UI.SubInk)
 	t.Size = UDim2.fromScale(1, 1)
 	t.TextXAlignment = Enum.TextXAlignment.Center
 	refs.hint = p
@@ -339,7 +339,7 @@ function HUD.Show(on: boolean)
 end
 
 function HUD.FlashHint()
-	if refs.hint then
+	if refs.hint and not game:GetService("UserInputService").TouchEnabled then
 		refs.hint.Visible = true
 		task.delay(18, function()
 			refs.hint.Visible = false

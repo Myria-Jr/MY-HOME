@@ -6,6 +6,7 @@ local StarterGui = game:GetService("StarterGui")
 local Controls = {}
 local remote: RemoteEvent
 local HUD
+local CameraMode
 local crouching = false
 
 local function run(_, state: Enum.UserInputState)
@@ -35,29 +36,31 @@ local function phone(_, state: Enum.UserInputState)
 	return Enum.ContextActionResult.Sink
 end
 
+local function camera(_, state: Enum.UserInputState)
+	if state == Enum.UserInputState.Begin and CameraMode then
+		CameraMode.Toggle()
+	end
+	return Enum.ContextActionResult.Sink
+end
+
+-- keyboard + gamepad only; touch devices get the glass buttons from TouchUI
 function Controls.Enable(on: boolean)
 	if on then
-		ContextActionService:BindAction("KB_Run", run, true, Enum.KeyCode.LeftShift, Enum.KeyCode.ButtonL3)
-		ContextActionService:BindAction("KB_Crouch", crouch, true, Enum.KeyCode.C, Enum.KeyCode.ButtonR3)
-		ContextActionService:BindAction("KB_Phone", phone, true, Enum.KeyCode.Tab, Enum.KeyCode.ButtonSelect)
-		pcall(function()
-			ContextActionService:SetTitle("KB_Run", "Run")
-			ContextActionService:SetTitle("KB_Crouch", "Sneak")
-			ContextActionService:SetTitle("KB_Phone", "Phone")
-			ContextActionService:SetPosition("KB_Run", UDim2.new(1, -170, 1, -150))
-			ContextActionService:SetPosition("KB_Crouch", UDim2.new(1, -230, 1, -100))
-			ContextActionService:SetPosition("KB_Phone", UDim2.new(1, -110, 1, -210))
-		end)
+		ContextActionService:BindAction("KB_Run", run, false, Enum.KeyCode.LeftShift, Enum.KeyCode.ButtonL3)
+		ContextActionService:BindAction("KB_Crouch", crouch, false, Enum.KeyCode.C, Enum.KeyCode.ButtonR3)
+		ContextActionService:BindAction("KB_Phone", phone, false, Enum.KeyCode.Tab, Enum.KeyCode.ButtonSelect)
+		ContextActionService:BindAction("KB_Camera", camera, false, Enum.KeyCode.V, Enum.KeyCode.ButtonY)
 	else
-		for _, a in { "KB_Run", "KB_Crouch", "KB_Phone" } do
+		for _, a in { "KB_Run", "KB_Crouch", "KB_Phone", "KB_Camera" } do
 			ContextActionService:UnbindAction(a)
 		end
 	end
 end
 
-function Controls.Init(r: RemoteEvent, hud)
+function Controls.Init(r: RemoteEvent, hud, cameraMode)
 	remote = r
 	HUD = hud
+	CameraMode = cameraMode
 	-- no reset button, no player list; keep the hotbar
 	task.spawn(function()
 		for _ = 1, 20 do

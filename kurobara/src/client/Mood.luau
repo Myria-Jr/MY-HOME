@@ -17,6 +17,14 @@ local flashFrame: Frame
 local grade: ColorCorrectionEffect
 local flashCC: ColorCorrectionEffect
 local shake = { power = 0, untilT = 0 }
+local baseOffset = Vector3.zero
+local baseFov = 70
+
+-- set by CameraMode: where the camera normally sits + its field of view
+function Mood.SetBase(offset: Vector3, fov: number)
+	baseOffset = offset
+	baseFov = fov
+end
 local seenPulse = 0
 
 local function tween(i: Instance, t: number, props, style: Enum.EasingStyle?, dir: Enum.EasingDirection?)
@@ -100,9 +108,9 @@ function Mood.Init()
 			local now = os.clock()
 			if now < shake.untilT then
 				local p = shake.power * ((shake.untilT - now) / 0.5)
-				hum.CameraOffset = Vector3.new((math.random() - 0.5) * p, (math.random() - 0.5) * p, (math.random() - 0.5) * p * 0.5)
-			elseif hum.CameraOffset.Magnitude > 0 then
-				hum.CameraOffset = Vector3.zero
+				hum.CameraOffset = baseOffset + Vector3.new((math.random() - 0.5) * p, (math.random() - 0.5) * p, (math.random() - 0.5) * p * 0.5)
+			elseif hum.CameraOffset ~= baseOffset then
+				hum.CameraOffset = baseOffset
 			end
 		end
 	end)
@@ -122,7 +130,7 @@ function Mood.KillFlash(power: number)
 	flashCC.TintColor = Color3.fromRGB(255, 150, 155)
 	tween(flashCC, 0.9, { Saturation = 0, Contrast = 0, Brightness = 0, TintColor = Color3.new(1, 1, 1) }, Enum.EasingStyle.Quint)
 	local cam = workspace.CurrentCamera
-	local fov = 70
+	local fov = baseFov
 	cam.FieldOfView = fov - 12
 	tween(cam, 0.6, { FieldOfView = fov }, Enum.EasingStyle.Back)
 end

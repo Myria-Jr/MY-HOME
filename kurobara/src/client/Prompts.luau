@@ -126,6 +126,31 @@ local function build(prompt: ProximityPrompt, inputType: Enum.ProximityPromptInp
 	end)
 end
 
+-- prompts currently on screen, closest first
+function Prompts.Visible(from: Vector3?): { ProximityPrompt }
+	local list = {}
+	for prompt in shown do
+		if prompt.Parent and prompt.Enabled then
+			table.insert(list, prompt)
+		end
+	end
+	if from then
+		local function pos(p: ProximityPrompt): Vector3
+			local parent = p.Parent
+			if parent and parent:IsA("Attachment") then
+				return parent.WorldPosition
+			elseif parent and parent:IsA("BasePart") then
+				return parent.Position
+			end
+			return from
+		end
+		table.sort(list, function(a, b)
+			return (pos(a) - from).Magnitude < (pos(b) - from).Magnitude
+		end)
+	end
+	return list
+end
+
 function Prompts.Init()
 	ProximityPromptService.PromptShown:Connect(function(prompt, inputType)
 		if prompt.Style ~= Enum.ProximityPromptStyle.Custom then
