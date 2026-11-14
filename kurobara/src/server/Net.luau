@@ -14,6 +14,11 @@ function Net.StopAnim(model: Model, layer: string?)
 	Remotes.PlayAnim:FireAllClients(model, false, layer or "*", 1)
 end
 
+-- One-shot sound effect on every client (name = a key in Shared/AudioSheet or AudioIds)
+function Net.Sfx(name: string, target: any?, volume: number?, pitch: number?)
+	Remotes.Sfx:FireAllClients(name, target, volume, pitch)
+end
+
 function Net.Notify(player: Player?, text: string, kind: string?)
 	if player then
 		Remotes.Notify:FireClient(player, text, kind or "info")

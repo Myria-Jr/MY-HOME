@@ -188,6 +188,23 @@ function GameState.RefreshMood(player: Player)
 	end
 end
 
+-- Nyx's inner voice (shown + whispered on the client). Rate-limited unless forced.
+function GameState.Thought(player: Player?, category: string, index: number?)
+	if not player or GameState.Phase ~= "Playing" then
+		return
+	end
+	local list = Story.Thoughts[category]
+	local st = states[player]
+	if not list or not st then
+		return
+	end
+	if not index and os.clock() < (st.NextThought or 0) then
+		return
+	end
+	st.NextThought = os.clock() + 14
+	S.Net.Notify(player, index and list[math.clamp(index, 1, #list)] or Util.pick(list), "thought")
+end
+
 function GameState.Seen(player: Player, rec, kind: string)
 	S.Net.Screen(player, "Seen", { name = rec.def.name, kind = kind })
 end
@@ -234,6 +251,9 @@ function GameState.StartInvestigation()
 	end
 	GameState.Investigating = true
 	S.Net.Notify(nil, "🔍 Ryo Amamiya started asking questions.", "warn")
+	task.delay(3, function()
+		GameState.Thought(GameState.MainPlayer(), "Ryo")
+	end)
 end
 
 function GameState.SetSuspicion(v: number)
@@ -260,6 +280,9 @@ function GameState.CallPolice(reason: string)
 	workspace:SetAttribute("PoliceETA", GameState.PoliceETA)
 	S.Net.Notify(nil, reason, "warn")
 	S.Net.Notify(nil, "🚨 The police are on their way.", "warn")
+	task.delay(2.5, function()
+		GameState.Thought(GameState.MainPlayer(), "Police")
+	end)
 end
 
 local function livingWitness()
@@ -350,6 +373,12 @@ function GameState.StartDay()
 			dayName = Config.Days[GameState.Day],
 			objective = Story.Objectives[GameState.Day],
 		})
+		local day = GameState.Day
+		task.delay(4.5, function()
+			if GameState.Day == day then
+				GameState.Thought(player, "Morning", day)
+			end
+		end)
 	end
 end
 
@@ -532,6 +561,25 @@ function GameState.Start_Loop()
 					st.NextIdle = os.clock() + 9 + math.random() * 8
 					local clip = st.NearHaru and "HairTwirl" or Util.pick({ "HairTwirl", "HugSelf", "Sway", "LookAround" })
 					S.Net.Anim(char, clip, "Action")
+				end
+				-- inner voice triggers
+				if st.NearHaru and not st.WasNearHaru then
+					GameState.Thought(player, "Haru")
+				end
+				st.WasNearHaru = st.NearHaru
+				local unstable = st.BPM >= Config.BPM.Unstable
+				if unstable and not st.WasUnstable then
+					GameState.Thought(player, "Unstable", nil)
+				end
+				st.WasUnstable = unstable
+				local mirei = S.NPC.Get("Mirei")
+				if haru and mirei and S.NPC.Present(haru) and S.NPC.Present(mirei) and os.clock() > (st.NextJealous or 0) then
+					local close = (haru.root.Position - mirei.root.Position).Magnitude < 8
+					if close and (haru.root.Position - hrp.Position).Magnitude < 30 then
+						st.NextJealous = os.clock() + 70
+						GameState.Thought(player, "Jealous")
+						GameState.AddBPM(player, 6)
+					end
 				end
 				GameState.RefreshMood(player)
 			end

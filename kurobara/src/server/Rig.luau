@@ -6,6 +6,7 @@ local Players = game:GetService("Players")
 local CollectionService = game:GetService("CollectionService")
 
 local Shared = game:GetService("ReplicatedStorage"):WaitForChild("Shared")
+local Remotes = game:GetService("ReplicatedStorage"):WaitForChild("Remotes")
 local Util = require(Shared.Util)
 local Config = require(Shared.Config)
 
@@ -368,6 +369,43 @@ function Rig.SetBlush(model: Model, on: boolean)
 	end
 end
 
+-- ── Voices (text-to-speech profile stored on the model) ──────────────────────
+local function nameHash(s: string): number
+	local h = 0
+	for i = 1, #s do
+		h = (h * 33 + string.byte(s, i)) % 9973
+	end
+	return h
+end
+
+function Rig.ApplyVoice(model: Model, def, role: string?)
+	local V = Config.Voice
+	local cast = V.Cast[def.id or ""]
+	local id, pitch, speed
+	if cast then
+		id, pitch, speed = cast.id, cast.pitch, cast.speed
+	else
+		local list = def.gender == "F" and V.FemaleVoices or V.MaleVoices
+		local h = nameHash(def.name or "x")
+		id = list[(h % #list) + 1]
+		pitch = (h % 5) - 2
+		speed = 1 + ((h % 5) - 2) * 0.03
+		if def.persona == "Gossip" then
+			pitch += 2
+			speed += 0.12
+		elseif def.persona == "Delinquent" then
+			pitch -= 3
+		elseif role == "Teacher" then
+			pitch -= 1
+			speed -= 0.06
+		end
+	end
+	model:SetAttribute("Gender", def.gender or "F")
+	model:SetAttribute("VoiceId", id)
+	model:SetAttribute("VoicePitch", pitch)
+	model:SetAttribute("VoiceSpeed", speed)
+end
+
 -- ── Creating rigs ────────────────────────────────────────────────────────────
 function Rig.CreateNPC(def, role: string?): Model
 	local look = lookFor(def)
@@ -395,6 +433,7 @@ function Rig.CreateNPC(def, role: string?): Model
 			p.CollisionGroup = "NPC"
 		end
 	end
+	Rig.ApplyVoice(model, def, role)
 	model:SetAttribute("NPCId", def.id)
 	model:SetAttribute("DisplayName", def.name)
 	return model
@@ -618,7 +657,10 @@ local function anchorPart(model: Model): BasePart?
 	return (fh or model:FindFirstChild("Head")) :: BasePart?
 end
 
-function Rig.Say(model: Model, text: string, color: Color3?, duration: number?)
+function Rig.Say(model: Model, text: string, color: Color3?, duration: number?, silent: boolean?)
+	if not silent then
+		Remotes.Speak:FireAllClients(model, text)
+	end
 	local adornee = anchorPart(model)
 	if not adornee then
 		return

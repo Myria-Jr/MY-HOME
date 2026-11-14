@@ -67,7 +67,7 @@ function Interact.Shower(player: Player, zone: BasePart)
 	if water then
 		water.Enabled = true
 	end
-	Util.playSound(Config.Sounds.Water, zone, 0.5, 0.6)
+	S.Net.Sfx("Water", zone, 0.6)
 	busyFor(player, st, "Shower", 3.2)
 	if water then
 		water.Enabled = false
@@ -85,12 +85,12 @@ function Interact.Sink(player: Player, basin: BasePart)
 	end
 	local tool = S.Items.Equipped(player)
 	if tool and tool:GetAttribute("Bloody") then
-		Util.playSound(Config.Sounds.Water, basin, 0.4, 1.1)
+		S.Net.Sfx("Water", basin, 0.45, 1.1)
 		busyFor(player, st, "Wash", 2.2)
 		S.Blood.SetWeaponBloody(tool, false)
 		S.Net.Notify(player, tool.Name .. " is clean. No prints, no blood.", "info")
 	elseif st.Bloodiness > 0 then
-		Util.playSound(Config.Sounds.Water, basin, 0.4, 1.1)
+		S.Net.Sfx("Water", basin, 0.45, 1.1)
 		busyFor(player, st, "Wash", 1.6)
 		st.Bloodiness = math.max(0, st.Bloodiness - 12)
 		local stains = player.Character and player.Character:FindFirstChild("Stains")

@@ -225,7 +225,7 @@ function ItemService.SpawnPickup(entry)
 				glassPane.CanCollide = false
 			end
 			local char = player.Character
-			Util.playSound(Config.Sounds.Glass, char and char:FindFirstChild("Head"), 0.8)
+			S.Net.Sfx("Glass", char and char:FindFirstChild("Head"), 0.9)
 		end
 		S.Net.Notify(player, "Got " .. def.display .. (Items.IsWeapon(entry.item) and " · click to attack" or ""), "info")
 	end)

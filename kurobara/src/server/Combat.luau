@@ -26,7 +26,7 @@ function Combat.Hook(tool: Tool)
 	end)
 	tool.Equipped:Connect(function()
 		local char = tool.Parent
-		Util.playSound(Config.Sounds.Unsheath, char and char:FindFirstChild("Head"), 0.35, 1.2)
+		S.Net.Sfx("Unsheath", char and char:FindFirstChild("Head"), 0.4)
 	end)
 end
 
@@ -59,7 +59,7 @@ function Combat.Attack(player: Player, tool: Tool)
 	if not target then
 		st.Busy = true
 		S.Net.Anim(char, "Swing", "Action")
-		Util.playSound(Config.Sounds.Slash, hrp, 0.4, 0.9 + math.random() * 0.2)
+		S.Net.Sfx("Slash", hrp, 0.45)
 		task.wait(0.6)
 		st.Busy = false
 		return
@@ -76,7 +76,7 @@ function Combat.Attack(player: Player, tool: Tool)
 		-- he saw it coming
 		st.Busy = true
 		S.Net.Anim(char, "Swing", "Action")
-		Util.playSound(Config.Sounds.Slash, hrp, 0.5, 1.1)
+		S.Net.Sfx("Slash", hrp, 0.5, 1.1)
 		S.NPC.Dodge(target)
 		task.wait(0.6)
 		st.Busy = false
@@ -160,8 +160,8 @@ function Combat.KillSequence(player: Player, st, tool: Tool, def, rec)
 				attacker = char,
 				victim = vm,
 			})
-			Util.playSound(Config.Sounds[def.sound] or Config.Sounds.Stab, vroot, 0.7, 0.85 + math.random() * 0.3)
-			Util.playSound(Config.Sounds.Splat, vroot, 0.5 + 0.2 * def.blood, 0.8 + math.random() * 0.4)
+			S.Net.Sfx(def.sound or "Stab", vroot, 0.85)
+			S.Net.Sfx("Splat", vroot, 0.5 + 0.2 * def.blood)
 			S.Net.Anim(vm, "Hit", "Hit")
 			if def.kneelAfter and i == def.kneelAfter then
 				S.Net.Anim(vm, "Kneel", "Base")
@@ -180,6 +180,13 @@ function Combat.KillSequence(player: Player, st, tool: Tool, def, rec)
 			S.Blood.Stain(char, math.ceil(def.bloodiness / 9 / #hits) + 1)
 			S.GameState.AddBloodiness(player, def.bloodiness / #hits)
 			S.Net.Screen(player, final and "KillFlash" or "HitShake", { power = def.blood })
+			if final then
+				task.delay(0.25, function()
+					if vm.Parent then
+						S.Rig.Say(vm, Util.pick(Story.Lines.Dying), Color3.fromRGB(205, 175, 185), 2.2)
+					end
+				end)
+			end
 		end)
 	end
 
@@ -193,6 +200,9 @@ function Combat.KillSequence(player: Player, st, tool: Tool, def, rec)
 	st.Busy = false
 	S.GameState.AddBPM(player, Config.BPM.PerKill)
 	S.GameState.RefreshMood(player)
+	task.delay(2.5, function()
+		S.GameState.Thought(player, "Kill")
+	end)
 end
 
 -- Fire axe on an existing body: chop it apart.
@@ -231,8 +241,8 @@ function Combat.DismemberBody(player: Player, body: Model)
 		task.delay(t, function()
 			local hitPos = torso.Parent and torso.Position or hrp.Position + dir * 3
 			S.Blood.FX("Hit", { pos = hitPos, dir = Vector3.new(0, -1, 0) + dir * 0.3, power = 1.6, final = i == 2, killer = player.UserId })
-			Util.playSound(Config.Sounds.Splat, hrp, 0.8, 0.7 + math.random() * 0.3)
-			Util.playSound(Config.Sounds.Thud, hrp, 0.6, 0.6)
+			S.Net.Sfx("Splat", hrp, 0.8, 0.85)
+			S.Net.Sfx("Blunt", hrp, 0.7, 0.8)
 			S.Net.Screen(player, i == 2 and "KillFlash" or "HitShake", { power = 1.4 })
 			S.Blood.Stain(char, 3)
 			S.GameState.AddBloodiness(player, 14)

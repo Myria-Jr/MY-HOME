@@ -420,12 +420,14 @@ function Bodies.Dispose(player: Player, what: string): boolean
 		Util.mesh(mound, Enum.MeshType.Sphere)
 		mound.Parent = workspace.Evidence
 		vanish(target, 0.6)
+		S.Net.Sfx("BodyDrop", S.World.Interact.DigPlot, 0.7, 0.8)
 		S.Net.Notify(player, "Buried. The roses will love it.", "info")
 	elseif what == "Incinerator" then
 		S.Net.Anim(char, "Carry", "Action")
 		task.wait(0.8)
 		S.Net.StopAnim(char, "Action")
 		local mouth = S.World.Interact.Incinerator
+		S.Net.Sfx("Burn", mouth, 0.9)
 		target:PivotTo(CFrame.new(mouth.Position + Vector3.new(0, 0, -2)))
 		vanish(target, 1.2)
 		local smoke = mouth.Parent and mouth.Parent:FindFirstChild("Chimney")

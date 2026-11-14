@@ -129,19 +129,30 @@ Config.Kill = {
 	ConeDegrees = 80,
 }
 
--- ── Sound ────────────────────────────────────────────────────────────────────
--- Built-in Roblox sounds. Swap in your own uploaded sound IDs (rbxassetid://123…) for a better mix.
-Config.Sounds = {
-	Slash = "rbxasset://sounds/swordslash.wav",
-	Stab = "rbxasset://sounds/swordlunge.wav",
-	Unsheath = "rbxasset://sounds/unsheath.wav",
-	Splat = "rbxasset://sounds/splat.wav",
-	Thud = "rbxasset://sounds/hit.wav",
-	Glass = "rbxasset://sounds/glassbreak.wav",
-	Hurt = "rbxasset://sounds/uuhhh.mp3",
-	Bell = "rbxasset://sounds/electronicpingshort.wav",
-	Click = "rbxasset://sounds/clickfast.wav",
-	Water = "rbxasset://sounds/impact_water.mp3",
+-- ── Audio & voices ───────────────────────────────────────────────────────────
+-- Sound IDs go in Shared/AudioIds. Voices use Roblox text-to-speech (no upload needed).
+-- TTS voice IDs: 1 British m · 2 British f · 3 US m · 4 US f · 5 US m2 · 6 US f2 · 7 Aus m · 8 Aus f
+Config.Audio = {
+	SfxVolume = 1.0,
+	MusicVolume = 0.32,
+}
+
+Config.Voice = {
+	Enabled = true,
+	Thoughts = true, -- Nyx's whispered inner voice
+	MaxConcurrent = 3,
+	MaxDistance = 60,
+	FemaleVoices = { "2", "4", "6", "8" },
+	MaleVoices = { "1", "3", "5", "7" },
+	Nyx = { id = "2", pitch = -1, speed = 0.94 },
+	PA = { id = "6", pitch = 0, speed = 1.0 },
+	-- per-character overrides (by NPC id)
+	Cast = {
+		Haru = { id = "1", pitch = -1, speed = 0.95 },
+		Mirei = { id = "6", pitch = 3, speed = 1.1 },
+		Ryo = { id = "5", pitch = 1, speed = 1.16 },
+		Kuroda = { id = "7", pitch = -4, speed = 0.92 },
+	},
 }
 
 -- ── UI ───────────────────────────────────────────────────────────────────────

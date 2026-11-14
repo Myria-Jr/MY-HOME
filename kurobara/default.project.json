@@ -2,27 +2,40 @@
   "name": "Kurobara",
   "tree": {
     "$className": "DataModel",
-
     "ReplicatedStorage": {
       "Shared": {
         "$path": "src/shared"
       },
       "Remotes": {
         "$className": "Folder",
-        "PlayAnim": { "$className": "RemoteEvent" },
-        "BloodFX": { "$className": "RemoteEvent" },
-        "ScreenFX": { "$className": "RemoteEvent" },
-        "Notify": { "$className": "RemoteEvent" },
-        "ClientAction": { "$className": "RemoteEvent" }
+        "PlayAnim": {
+          "$className": "RemoteEvent"
+        },
+        "BloodFX": {
+          "$className": "RemoteEvent"
+        },
+        "ScreenFX": {
+          "$className": "RemoteEvent"
+        },
+        "Notify": {
+          "$className": "RemoteEvent"
+        },
+        "ClientAction": {
+          "$className": "RemoteEvent"
+        },
+        "Speak": {
+          "$className": "RemoteEvent"
+        },
+        "Sfx": {
+          "$className": "RemoteEvent"
+        }
       }
     },
-
     "ServerScriptService": {
       "Server": {
         "$path": "src/server"
       }
     },
-
     "StarterPlayer": {
       "$properties": {
         "CameraMaxZoomDistance": 28,
@@ -36,23 +49,23 @@
       "StarterPlayerScripts": {
         "Client": {
           "$path": "src/client"
+        },
+        "RbxCharacterSounds": {
+          "$path": "src/charsounds/RbxCharacterSounds.client.luau"
         }
       }
     },
-
     "Players": {
       "$properties": {
         "CharacterAutoLoads": false
       }
     },
-
     "Workspace": {
       "$properties": {
         "StreamingEnabled": false,
         "Gravity": 196.2
       }
     },
-
     "Lighting": {
       "$properties": {
         "Technology": "Future",
@@ -61,10 +74,10 @@
         "GlobalShadows": true
       }
     },
-
     "SoundService": {
       "$properties": {
-        "RespectFilteringEnabled": true
+        "RespectFilteringEnabled": true,
+        "DefaultListenerLocation": "Camera"
       }
     }
   }

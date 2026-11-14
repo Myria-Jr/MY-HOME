@@ -22,7 +22,7 @@ Items.Weapons = {
 	Bat = {
 		display = "Baseball Bat", clip = "Bat", hits = { 0.55, 1.2 }, duration = 1.8,
 		blood = 0.75, bloodiness = 26, suspicion = 0.55, focus = "Head", victimClip = "Grabbed",
-		kneelAfter = 1, blunt = true, sound = "Thud", spawn = "Gym",
+		kneelAfter = 1, blunt = true, sound = "Blunt", spawn = "Gym",
 	},
 	FireAxe = {
 		display = "Fire Axe", clip = "Axe", hits = { 0.68, 1.33 }, duration = 2.0,

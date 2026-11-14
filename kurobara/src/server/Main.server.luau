@@ -72,6 +72,10 @@ function S.SpawnCharacter(player: Player)
 		end
 	end
 	char:SetAttribute("IsNyx", true)
+	char:SetAttribute("Gender", "F")
+	char:SetAttribute("VoiceId", Config.Voice.Nyx.id)
+	char:SetAttribute("VoicePitch", Config.Voice.Nyx.pitch)
+	char:SetAttribute("VoiceSpeed", Config.Voice.Nyx.speed)
 	local st = S.GameState.Get(player)
 	if st then
 		st.BaseClip, st.MoodClip, st.Expression = nil, nil, nil
@@ -114,6 +118,7 @@ end)
 
 -- ── Go ───────────────────────────────────────────────────────────────────────
 S.NPC.SpawnAll()
+S.NPC.SocialLoop()
 S.Interact.Setup()
 S.Items.RespawnMissing()
 S.Clock.Set(Config.Time.DayStart)

@@ -52,6 +52,33 @@ rojo build -o Kurobara.rbxl   # neue .rbxl bauen
 
 **3 Enden:** HEARTBEAT ♥ · STILL BEATING ◆ · SILENCE ✕
 
+## Sounds & Stimmen 🔊
+
+Die Standard-Sounds von Roblox (Schritte, Sprung, „oof“) sind raus. Alles ist jetzt selbst gemacht.
+
+**Stimmen funktionieren sofort.** Jede Sprechblase wird über Roblox Text-to-Speech laut gesprochen. Jede Figur hat ihre eigene Stimme, Tonhöhe und Geschwindigkeit, und Schreie laufen über einen Verzerrer. Dazu gibt es Durchsagen zur Schulglocke und Nyx' geflüsterte Gedanken. Die Stimmen kannst du in `Config.Voice` ändern.
+
+**Effekte & Musik: einmal 4 Dateien hochladen**
+
+Die Dateien liegen in `audio/` und sind komplett selbst synthetisiert:
+
+| Datei | Inhalt |
+|---|---|
+| `kurobara_sfx_sheet.ogg` | alle 25 Effekte in einer Datei: Stechen, Schneiden, Schläge, Splatter, Herzschlag, Schulgong, Sirene, Schritte, Horror-Sting … |
+| `music_calm.ogg` | Spieluhr-Theme |
+| `music_tension.ogg` | Drone mit Herzschlag (hoher BPM / Polizei) |
+| `music_chase.ogg` | Verfolgungsjagd |
+
+1. In Studio **Asset Manager → Bulk Import** öffnen und die 4 Dateien auswählen. Alternativ geht es über create.roblox.com → Creations → Audio.
+2. Jede Datei rechtsklicken und **Copy Asset ID** wählen.
+3. In Studio **ReplicatedStorage → Shared → AudioIds** öffnen und die IDs als `"rbxassetid://123…"` einfügen.
+
+Roblox begrenzt die Zahl der Audio-Uploads pro Monat. Deshalb stecken alle Effekte in einer einzigen Datei. Solange keine IDs eingetragen sind, bleiben die Effekte stumm. Die Stimmen laufen trotzdem.
+
+**Echte Schreie (optional):** In `AudioIds` gibt es die Listen `ScreamF`, `ScreamM`, `Gasp` und `NyxLaugh`. Dort kannst du eigene Aufnahmen eintragen, zum Beispiel selbst aufgenommen 🎤, oder Sounds aus dem Creator Store (Toolbox → Audio → „scream“). Solange die Listen leer sind, schreit die Text-to-Speech-Stimme.
+
+Neu generieren: `python3 tools/make_audio.py` (braucht numpy und ffmpeg).
+
 ## Gore-Einstellung ⚠️
 
 In `src/shared/Config.luau`:

@@ -13,6 +13,7 @@ local Util = require(Shared.Util)
 local NPC = {}
 NPC.List = {}
 NPC.Paused = true
+NPC.Chasers = 0
 local S
 local awayFolder: Folder
 
@@ -458,9 +459,9 @@ function NPC.Brain(rec)
 				NPC.GoTo(rec, target)
 			end
 			NPC.Perceive(rec)
-			if rec.state == "Routine" and rec.atSpot and os.clock() > (rec.nextIdle or 0) then
+			if rec.state == "Routine" and rec.atSpot and not rec.talking and os.clock() > (rec.nextIdle or 0) then
 				NPC.IdleAction(rec)
-			elseif os.clock() > chatter and rec.role == "Student" and rec.atSpot then
+			elseif os.clock() > chatter and rec.role == "Student" and rec.atSpot and not rec.talking then
 				chatter = os.clock() + math.random(18, 45)
 				S.Net.Anim(rec.model, "Talk", "Action")
 			end
@@ -824,6 +825,11 @@ function NPC.Film(rec)
 		rec.hum:MoveTo(rec.root.Position)
 		S.Net.Anim(rec.model, "Phone", "Action")
 		S.Rig.Say(rec.model, Util.pick(Story.Lines.Phone), Config.UI.Warn, 2.5)
+		task.delay(1.2, function()
+			if rec.alive then
+				S.Net.Sfx("Shutter", rec.root, 0.8)
+			end
+		end)
 		if player then
 			S.Net.Screen(player, "Flash", {})
 		end
@@ -847,6 +853,12 @@ function NPC.Chase(rec, kind: string)
 	S.Rig.Say(rec.model, Util.pick(chaseLines), Config.UI.Warn, 2.5)
 	local player, st = S.GameState.MainPlayer()
 	task.spawn(function()
+		NPC.Chasers += 1
+		workspace:SetAttribute("Chase", true)
+		local function done()
+			NPC.Chasers = math.max(0, NPC.Chasers - 1)
+			workspace:SetAttribute("Chase", NPC.Chasers > 0)
+		end
 		local started = os.clock()
 		local lastSeen = os.clock()
 		local speed = kind == "Teacher" and Config.NPC.ChaseSpeed or Config.NPC.HeroChaseSpeed
@@ -863,6 +875,7 @@ function NPC.Chase(rec, kind: string)
 			if d <= Config.NPC.CatchDistance and st and not st.Attacking then
 				rec.hum:MoveTo(rec.root.Position)
 				S.Net.Anim(rec.model, "Arrest", "Action")
+				done()
 				S.GameState.GameOver(player, kind == "Teacher" and "Apprehended" or "Overpowered")
 				return
 			end
@@ -881,9 +894,113 @@ function NPC.Chase(rec, kind: string)
 				else
 					NPC.Flee(rec, "Murder")
 				end
+				done()
 				return
 			end
 			task.wait(0.2)
+		end
+		done()
+	end)
+end
+
+-- ── Conversations & lessons ──────────────────────────────────────────────────
+local function conversationPool()
+	local GS = S.GameState
+	local rumor = not GS.RivalDown and GS.Day < Config.ConfessionDay
+	local friday = not GS.RivalDown and GS.Day == Config.ConfessionDay
+	local missing = #GS.Killed > 0
+	local pool = {}
+	for _, c in Story.Conversations do
+		if c.when == "always" or (c.when == "rumor" and rumor) or (c.when == "friday" and friday) or (c.when == "missing" and missing) then
+			table.insert(pool, c)
+			if c.when ~= "always" then
+				table.insert(pool, c) -- topical talk is twice as likely
+			end
+		end
+	end
+	return pool
+end
+
+function NPC.Converse(a, b, convo)
+	a.talking, b.talking = true, true
+	local ta, tb = a.token, b.token
+	local missing = S.GameState.Killed[#S.GameState.Killed] or "someone"
+	for _, line in convo.lines do
+		if a.token ~= ta or b.token ~= tb or not (present(a) and present(b)) or a.state ~= "Routine" or b.state ~= "Routine" or NPC.Paused then
+			break
+		end
+		local speaker = line[1] == "A" and a or b
+		local listener = speaker == a and b or a
+		local text = line[2]:gsub("{missing}", missing)
+		if not speaker.sitting then
+			faceDir(speaker, listener.root.Position - speaker.root.Position)
+		end
+		if not listener.sitting then
+			faceDir(listener, speaker.root.Position - listener.root.Position)
+		end
+		S.Net.Anim(speaker.model, "Talk", "Action")
+		S.Rig.Say(speaker.model, text, nil, 3.6)
+		task.wait(2.2 + #text * 0.05)
+	end
+	a.talking, b.talking = false, false
+	a.nextIdle = os.clock() + 5
+	b.nextIdle = os.clock() + 5
+end
+
+-- People near Nyx chat with each other; teachers lecture to whoever is still in class.
+function NPC.SocialLoop()
+	task.spawn(function()
+		while true do
+			task.wait(6 + math.random() * 5)
+			if NPC.Paused or S.GameState.Phase ~= "Playing" then
+				continue
+			end
+			local player = S.GameState.MainPlayer()
+			local char = player and player.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if not hrp then
+				continue
+			end
+			local near = {}
+			for _, rec in NPC.List do
+				if present(rec) and rec.state == "Routine" and rec.atSpot and not rec.talking then
+					local d = (rec.root.Position - hrp.Position).Magnitude
+					if d < 45 then
+						table.insert(near, { rec = rec, d = d })
+					end
+					if rec.role == "Teacher" and rec.targetKey == "Front" and d < 45 and os.clock() > (rec.nextLecture or 0) then
+						rec.nextLecture = os.clock() + 14 + math.random() * 8
+						S.Net.Anim(rec.model, "Point", "Action")
+						S.Rig.Say(rec.model, Util.pick(Story.Lecture), nil, 3.5)
+						task.delay(1.5, function()
+							if rec.model and rec.model.Parent then
+								S.Net.Anim(rec.model, false, "Action")
+							end
+						end)
+					end
+				end
+			end
+			table.sort(near, function(x, y)
+				return x.d < y.d
+			end)
+			local started = false
+			for _, x in near do
+				if started then
+					break
+				end
+				if x.rec.role == "Student" and not x.rec.sitting then
+					for _, y in near do
+						if y.rec ~= x.rec and y.rec.role == "Student" and not y.rec.sitting and (y.rec.root.Position - x.rec.root.Position).Magnitude < 9 then
+							local pool = conversationPool()
+							if #pool > 0 then
+								task.spawn(NPC.Converse, x.rec, y.rec, Util.pick(pool))
+								started = true
+							end
+							break
+						end
+					end
+				end
+			end
 		end
 	end)
 end
@@ -1073,6 +1190,9 @@ function NPC.Kill(rec, info)
 	end
 	if ut then
 		S.Blood.Pool(ut.Position, 5 + (info and info.weapon and info.weapon.blood or 1) * 2, 9, { victim = rec.def.name })
+		task.delay(0.35, function()
+			S.Net.Sfx("BodyDrop", ut, 0.9)
+		end)
 	end
 	S.Bodies.Setup(model)
 	if info and info.weapon and info.weapon.dismember and Config.Gore().Dismember then

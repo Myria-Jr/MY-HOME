@@ -270,6 +270,38 @@ function HUD.Toast(text: string, kind: string?)
 	end)
 end
 
+-- Nyx's inner voice: soft italic line low on the screen
+function HUD.Thought(text: string)
+	local old = gui:FindFirstChild("Thought")
+	if old then
+		old:Destroy()
+	end
+	local t = Instance.new("TextLabel")
+	t.Name = "Thought"
+	t.BackgroundTransparency = 1
+	t.AnchorPoint = Vector2.new(0.5, 1)
+	t.Position = UDim2.new(0.5, 0, 1, -96)
+	t.Size = UDim2.new(0.7, 0, 0, 30)
+	t.Text = "“" .. text .. "”"
+	t.TextSize = 21
+	t.TextWrapped = true
+	t.FontFace = Font.new(Config.UI.Font, Enum.FontWeight.Medium, Enum.FontStyle.Italic)
+	t.TextColor3 = Color3.fromRGB(255, 196, 214)
+	t.TextStrokeColor3 = Color3.fromRGB(40, 0, 14)
+	t.TextStrokeTransparency = 0.55
+	t.TextTransparency = 1
+	t.Parent = gui
+	Glass.tween(t, 0.8, { TextTransparency = 0, TextStrokeTransparency = 0.55 })
+	task.delay(math.max(3.5, #text * 0.07), function()
+		if t.Parent then
+			Glass.tween(t, 1, { TextTransparency = 1, TextStrokeTransparency = 1 })
+			task.delay(1.05, function()
+				t:Destroy()
+			end)
+		end
+	end)
+end
+
 function HUD.Seen(name: string, kind: string)
 	refs.seenBig.Text = kind == "Murder" and "WITNESSED" or "SEEN"
 	refs.seenSmall.Text = "by " .. name

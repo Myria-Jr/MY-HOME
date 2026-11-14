@@ -1,0 +1,3 @@
+-- KUROBARA · intentionally empty.
+-- A LocalScript with this name replaces Roblox's default character sounds
+-- (footsteps, jump, landing, "oof"). Nyx's own footsteps live in Client/Audio.

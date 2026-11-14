@@ -110,7 +110,8 @@ Story.Lines = {
 		"Uniform rules apply after school too, Amane.",
 		"If you see anything strange, report it to me.",
 	},
-	Scream = { "AAAAAAH!!", "SOMEONE HELP!!", "OH MY GOD—", "NO NO NO NO", "MURDER!!", "S-STAY AWAY!!" },
+	Scream = { "AAAAAAH!!", "SOMEONE HELP!!", "OH MY GOD!!", "NO NO NO NO!!", "MURDER!!", "S-STAY AWAY!!", "HELP ME!!", "PLEASE NO!!", "WHY?!", "SHE'S GOT A KNIFE!!" },
+	Dying = { "please…", "why…", "mom…", "I can't… breathe…", "it's cold…" },
 	Corpse = { "Is— is that a body?!", "SHE'S NOT MOVING!", "Call the police!!", "Blood… so much blood…" },
 	Blood = { "Is that… blood?", "Why is the floor red?", "Something's wrong here…" },
 	Bloody = { "Why are you covered in blood?!", "Nyx…? What happened to you?", "D-don't come closer!" },
@@ -136,6 +137,121 @@ Story.Lines = {
 		"You look like someone who keeps secrets. I like that. Professionally.",
 	},
 	Dodge = { "I KNEW IT!", "Nice try.", "Not today, Amane!" },
+}
+
+-- ── Conversations between classmates ─────────────────────────────────────────
+-- A / B = the two speakers. {missing} = someone who disappeared, {haru}, {mirei}
+-- when: "always" · "rumor" (Mirei hasn't confessed yet) · "missing" (someone is gone) · "friday"
+Story.Conversations = {
+	{ when = "always", lines = {
+		{ "A", "Did you finish the essay for Okada?" },
+		{ "B", "I wrote four hundred words about my cat." },
+		{ "A", "The topic was the Meiji Restoration." },
+		{ "B", "My cat is very historical." },
+	} },
+	{ when = "always", lines = {
+		{ "A", "The vending machine ate my coins again." },
+		{ "B", "You have to kick it on the left side. Gently. Like a horse." },
+		{ "A", "I'm not kicking a horse." },
+	} },
+	{ when = "always", lines = {
+		{ "A", "Have you noticed the new girl in 2-A?" },
+		{ "B", "Nyx? She's… quiet." },
+		{ "A", "She smiled at me yesterday. I think. It was hard to tell." },
+		{ "B", "Lucky you. She just stares at me." },
+	} },
+	{ when = "always", lines = {
+		{ "A", "If you could delete one class forever, which one?" },
+		{ "B", "PE. Kuroda makes us run in the rain." },
+		{ "A", "Kuroda runs in the rain FOR FUN." },
+	} },
+	{ when = "always", lines = {
+		{ "A", "Okay, ranking the cafeteria food. Go." },
+		{ "B", "Melon bread, then curry, then whatever Tuesday was." },
+		{ "A", "Tuesday was soup." },
+		{ "B", "Was it?" },
+	} },
+	{ when = "always", lines = {
+		{ "A", "I heard the roses by the gate turn black at night." },
+		{ "B", "They're just dark red. You need glasses." },
+		{ "A", "Then why do they call it Kurobara?" },
+		{ "B", "…Okay, that's a good point." },
+	} },
+	{ when = "rumor", lines = {
+		{ "A", "Is it true? Mirei's confessing to Haru on Friday?" },
+		{ "B", "On the rooftop. At sunset. She's been planning for weeks." },
+		{ "A", "That's so romantic I might throw up." },
+		{ "B", "He's definitely going to say yes." },
+	} },
+	{ when = "rumor", lines = {
+		{ "A", "Mirei bought a new ribbon just for Friday." },
+		{ "B", "And she's growing lilies because Haru likes them." },
+		{ "A", "Some people have all the luck." },
+	} },
+	{ when = "rumor", lines = {
+		{ "A", "Haru reads by the fountain every single morning." },
+		{ "B", "Same book too. I think he just likes the fountain." },
+		{ "A", "Or someone who walks past the fountain…" },
+	} },
+	{ when = "missing", lines = {
+		{ "A", "Has anyone heard from {missing}?" },
+		{ "B", "Not since yesterday. The teachers won't say anything." },
+		{ "A", "Their bag was still in the classroom." },
+		{ "B", "Stop. You're scaring me." },
+	} },
+	{ when = "missing", lines = {
+		{ "A", "My mom says I should walk home in a group now." },
+		{ "B", "Because of {missing}?" },
+		{ "A", "Because of {missing}." },
+	} },
+	{ when = "missing", lines = {
+		{ "A", "Ryo from the Mystery Club keeps asking everyone questions." },
+		{ "B", "He asked me what time I left yesterday. Like a cop." },
+		{ "A", "Do you think he knows something?" },
+	} },
+	{ when = "friday", lines = {
+		{ "A", "Today's the day! Mirei's big confession!" },
+		{ "B", "I'm going up to the roof after school to watch." },
+		{ "A", "You can't just watch someone confess!" },
+		{ "B", "Watch me." },
+	} },
+}
+
+-- What teachers say while they teach (only heard if you skip class)
+Story.Lecture = {
+	"Page one hundred and twelve, everyone.",
+	"Eyes on the board, not on your phones.",
+	"Who can tell me what a metaphor is? Anyone?",
+	"This will be on the test. Yes, all of it.",
+	"Kenta, if you're asleep, please snore quieter.",
+	"The answer is not 'Haru Seto'. Focus.",
+	"An empty seat… has anyone seen Amane?",
+}
+
+-- PA announcements at the school bell
+Story.PA = {
+	Class1 = "Good morning, Kurobara Academy. First period begins now. Please go to your classrooms.",
+	Lunch = "Lunch break has started. Please do not run in the hallways.",
+	Class2 = "Lunch break is over. Afternoon classes begin now.",
+	AfterSchool = "Classes are over for today. Club activities may begin. Please stay safe.",
+	Leaving = "The school will close soon. Please head home.",
+}
+
+-- Nyx's inner voice
+Story.Thoughts = {
+	Morning = {
+		"Monday. Five days. My heart is already counting.",
+		"Tuesday. Mirei laughed yesterday. I could hear it through two walls.",
+		"Wednesday. Halfway. Everything feels very loud today.",
+		"Thursday. Tomorrow she climbs those stairs. Unless she doesn't.",
+		"Friday. Sunset is a deadline.",
+	},
+	Haru = { "He's right there. Breathe, Nyx. Breathe.", "He tucked his hair behind his ear. I'll remember that forever.", "If I stand here long enough, maybe he'll look up." },
+	Kill = { "It's quiet now.", "Was that me? …That was me.", "One less voice in the hallway.", "My hands are shaking. No. They're warm." },
+	Unstable = { "Too loud. Everything is too loud.", "Smile. Smile. Smile.", "Why is everyone looking at me?" },
+	Police = { "Stay calm. Clean. Smile. You're just a student.", "Sirens. Don't run. Running is guilty." },
+	Jealous = { "She's standing too close to him.", "She touched his sleeve. She TOUCHED his sleeve.", "That laugh. I want it to stop." },
+	Ryo = { "Ryo is watching. Ryo is always watching.", "He writes everything down. Everything." },
 }
 
 Story.Objectives = {

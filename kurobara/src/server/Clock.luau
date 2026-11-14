@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared.Config)
+local Story = require(Shared.Story)
 
 local Clock = {}
 Clock.Minutes = Config.Time.DayStart
@@ -45,7 +46,7 @@ end
 local function onPeriodChanged()
 	local p = Config.Periods[periodIndex]
 	publish()
-	S.Net.Screen(nil, "Bell", { label = p.label, class = p.class == true })
+	S.Net.Screen(nil, "Bell", { label = p.label, class = p.class == true, pa = Story.PA[p.id] })
 	if p.class then
 		S.Net.Notify(nil, "🔔 Class is starting. Your seat is in 2-A.", "info")
 	elseif p.id == "Lunch" then

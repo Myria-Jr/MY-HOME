@@ -14,6 +14,8 @@ local HUD = require(here.HUD)
 local Screens = require(here.Screens)
 local Prompts = require(here.Prompts)
 local Controls = require(here.Controls)
+local Audio = require(here.Audio)
+local Voice = require(here.Voice)
 
 local player = Players.LocalPlayer
 
@@ -23,6 +25,8 @@ BloodFX.Init(Remotes.BloodFX, Mood, Animator)
 HUD.Init()
 Prompts.Init()
 Controls.Init(Remotes.ClientAction, HUD)
+Audio.Init(Remotes.Sfx)
+Voice.Init(Remotes.Speak, Audio)
 
 Screens.Init(function()
 	Remotes.ClientAction:FireServer("Start")
@@ -41,7 +45,12 @@ local function leavePlay()
 end
 
 Remotes.Notify.OnClientEvent:Connect(function(text: string, kind: string)
-	HUD.Toast(text, kind)
+	if kind == "thought" then
+		HUD.Thought(text)
+		Voice.Think(text)
+	else
+		HUD.Toast(text, kind)
+	end
 end)
 
 Remotes.ScreenFX.OnClientEvent:Connect(function(kind: string, d)
@@ -54,6 +63,7 @@ Remotes.ScreenFX.OnClientEvent:Connect(function(kind: string, d)
 		Mood.Flash()
 	elseif kind == "KillCam" then
 		Mood.KillCam(d)
+		Audio.Play("Sting", nil, { volume = 0.7, vary = 0 })
 	elseif kind == "Seen" then
 		Mood.Seen()
 		HUD.Seen(d.name or "someone", d.kind or "")
@@ -73,20 +83,12 @@ Remotes.ScreenFX.OnClientEvent:Connect(function(kind: string, d)
 		leavePlay()
 		Screens.Ending(d)
 	elseif kind == "Bell" then
-		-- a soft two-tone chime
-		local s = Instance.new("Sound")
-		s.SoundId = "rbxasset://sounds/electronicpingshort.wav"
-		s.Volume = 0.5
-		s.PlaybackSpeed = 0.6
-		s.Parent = workspace.CurrentCamera
-		s:Play()
-		task.delay(0.35, function()
-			s.PlaybackSpeed = 0.5
-			s:Play()
-			task.delay(2, function()
-				s:Destroy()
+		Audio.Play("Bell", nil, { volume = 0.75, vary = 0 })
+		if d.pa then
+			task.delay(4.8, function()
+				Voice.Announce(d.pa)
 			end)
-		end)
+		end
 	end
 end)
 
