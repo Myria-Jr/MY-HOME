@@ -1,0 +1,71 @@
+{
+  "name": "Kurobara",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "Shared": {
+        "$path": "src/shared"
+      },
+      "Remotes": {
+        "$className": "Folder",
+        "PlayAnim": { "$className": "RemoteEvent" },
+        "BloodFX": { "$className": "RemoteEvent" },
+        "ScreenFX": { "$className": "RemoteEvent" },
+        "Notify": { "$className": "RemoteEvent" },
+        "ClientAction": { "$className": "RemoteEvent" }
+      }
+    },
+
+    "ServerScriptService": {
+      "Server": {
+        "$path": "src/server"
+      }
+    },
+
+    "StarterPlayer": {
+      "$properties": {
+        "CameraMaxZoomDistance": 28,
+        "CameraMinZoomDistance": 4,
+        "CharacterWalkSpeed": 11,
+        "CharacterJumpPower": 0,
+        "CharacterUseJumpPower": true,
+        "LoadCharacterAppearance": false,
+        "EnableMouseLockOption": false
+      },
+      "StarterPlayerScripts": {
+        "Client": {
+          "$path": "src/client"
+        }
+      }
+    },
+
+    "Players": {
+      "$properties": {
+        "CharacterAutoLoads": false
+      }
+    },
+
+    "Workspace": {
+      "$properties": {
+        "StreamingEnabled": false,
+        "Gravity": 196.2
+      }
+    },
+
+    "Lighting": {
+      "$properties": {
+        "Technology": "Future",
+        "ClockTime": 7.5,
+        "Brightness": 2.2,
+        "GlobalShadows": true
+      }
+    },
+
+    "SoundService": {
+      "$properties": {
+        "RespectFilteringEnabled": true
+      }
+    }
+  }
+}
