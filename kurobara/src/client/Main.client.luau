@@ -19,7 +19,7 @@ local player = Players.LocalPlayer
 
 Mood.Init()
 Animator.Init(Remotes.PlayAnim)
-BloodFX.Init(Remotes.BloodFX, Mood)
+BloodFX.Init(Remotes.BloodFX, Mood, Animator)
 HUD.Init()
 Prompts.Init()
 Controls.Init(Remotes.ClientAction, HUD)
@@ -52,6 +52,8 @@ Remotes.ScreenFX.OnClientEvent:Connect(function(kind: string, d)
 		Mood.HitShake(d.power or 1)
 	elseif kind == "Flash" then
 		Mood.Flash()
+	elseif kind == "KillCam" then
+		Mood.KillCam(d)
 	elseif kind == "Seen" then
 		Mood.Seen()
 		HUD.Seen(d.name or "someone", d.kind or "")

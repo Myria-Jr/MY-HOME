@@ -190,6 +190,7 @@ function NPC.NewDay()
 			rec.witness = false
 			rec.filmed = false
 			rec.reported = false
+			rec.reportedSusp = false
 			rec.patrolIndex = 1
 			if rec.role == "Teacher" then
 				rec.arrival = 7 * 60 + math.random(0, 10)
@@ -349,6 +350,10 @@ function NPC.Target(rec)
 		end
 		return at("Lounge")
 	end
+	-- Ryo tails Nyx between classes once he's suspicious
+	if def.persona == "Detective" and S.GameState.Investigating and period ~= "Class1" and period ~= "Class2" then
+		return "Follow", { follow = true }
+	end
 	-- the confession
 	if day == Config.ConfessionDay and minute >= Config.ConfessionTime - 15 and (rec.isHaru or rec.isRival) then
 		return at("RoofConfess", rec.isHaru and 1 or 2)
@@ -394,6 +399,11 @@ function NPC.GoTo(rec, target)
 	rec.token += 1
 	local token = rec.token
 	NPC.Unsit(rec)
+	rec.atSpot = false
+	if target.follow then
+		task.spawn(NPC.Follow, rec, token)
+		return
+	end
 	task.spawn(function()
 		local dest
 		if target.seat then
@@ -415,6 +425,8 @@ function NPC.GoTo(rec, target)
 		elseif target.cf then
 			faceDir(rec, target.cf.LookVector)
 		end
+		rec.atSpot = true
+		rec.nextIdle = os.clock() + 2 + math.random() * 6
 		if target.exit then
 			NPC.Leave(rec)
 		elseif target.patrol then
@@ -446,16 +458,49 @@ function NPC.Brain(rec)
 				NPC.GoTo(rec, target)
 			end
 			NPC.Perceive(rec)
-			if os.clock() > chatter and rec.role == "Student" then
+			if rec.state == "Routine" and rec.atSpot and os.clock() > (rec.nextIdle or 0) then
+				NPC.IdleAction(rec)
+			elseif os.clock() > chatter and rec.role == "Student" and rec.atSpot then
 				chatter = os.clock() + math.random(18, 45)
-				if math.random() < 0.35 then
-					S.Net.Anim(rec.model, "Talk", "Action")
-				end
+				S.Net.Anim(rec.model, "Talk", "Action")
 			end
 		elseif rec.state == "Shaken" and present(rec) then
 			-- cowering until the day ends
 		end
 		task.wait(Config.Vision.TickRate + math.random() * 0.15)
+	end
+end
+
+-- Little things people do while waiting around
+local IDLE = {
+	Default = { "LookAround", "PhoneIdle", "Stretch", "Talk", "Yawn", "Laugh", "HandsBehind", "Wave" },
+	Seated = { "Write", "Write", "LookAround", "Yawn", "Talk" },
+	Teacher = { "LookAround", "ArmsCrossed", "HandsBehind", "Talk" },
+	Delinquent = { "ArmsCrossed", "Stretch", "LookAround", "Laugh" },
+	Gossip = { "Talk", "Laugh", "PhoneIdle", "Wave", "Talk" },
+	Detective = { "PhoneIdle", "LookAround", "ArmsCrossed" },
+}
+local HOLD = { ArmsCrossed = true, HandsBehind = true, PhoneIdle = true }
+
+function NPC.IdleAction(rec)
+	rec.nextIdle = os.clock() + 6 + math.random() * 10
+	local pool
+	if rec.sitting then
+		pool = IDLE.Seated
+	elseif rec.role == "Teacher" then
+		pool = IDLE.Teacher
+	else
+		pool = IDLE[rec.def.persona] or IDLE.Default
+	end
+	local clip = Util.pick(pool)
+	S.Net.Anim(rec.model, clip, "Action")
+	if HOLD[clip] then
+		local token = rec.token
+		task.delay(3 + math.random() * 3, function()
+			if rec.token == token and rec.model and rec.model.Parent then
+				S.Net.Anim(rec.model, false, "Action")
+			end
+		end)
 	end
 end
 
@@ -592,10 +637,17 @@ function NPC.ReactPlayer(rec, severity: number, kind: string, _dist: number)
 		S.Rig.SetExpression(model, "Scared")
 		if rec.role == "Teacher" then
 			NPC.Chase(rec, "Teacher")
-		elseif rec.def.persona == "Hero" then
-			NPC.Chase(rec, "Hero")
-		elseif rec.def.persona == "Phone" then
+		elseif rec.def.persona == "Hero" or rec.def.persona == "Delinquent" then
+			NPC.Chase(rec, rec.def.persona)
+		elseif rec.def.persona == "Phone" or rec.def.persona == "Detective" then
+			if rec.def.persona == "Detective" then
+				S.GameState.SetSuspicion(100)
+			end
 			NPC.Film(rec)
+		elseif rec.def.persona == "Gossip" then
+			NPC.Gossip(rec)
+			NPC.Scream(rec.root.Position, rec)
+			NPC.Flee(rec, "Murder")
 		else
 			S.Rig.Say(model, Util.pick(Story.Lines.Scream), Config.UI.Warn, 2.5)
 			NPC.Scream(rec.root.Position, rec)
@@ -606,9 +658,19 @@ function NPC.ReactPlayer(rec, severity: number, kind: string, _dist: number)
 		S.Rig.Alert(model, "!")
 		if rec.role == "Teacher" then
 			NPC.Chase(rec, "Teacher")
+		elseif rec.def.persona == "Delinquent" then
+			NPC.Chase(rec, "Delinquent")
+		elseif rec.def.persona == "Detective" then
+			S.Rig.Say(model, "That's blood. I'm writing this down.", Config.UI.Warn, 3)
+			S.GameState.StartInvestigation()
+			S.GameState.AddSuspicion(Config.Detective.Major)
 		else
 			S.Rig.SetExpression(model, "Scared")
 			S.Rig.Say(model, Util.pick(Story.Lines.Bloody), Config.UI.Warn, 3)
+			if rec.def.persona == "Gossip" then
+				S.GameState.AddRep(player, -10)
+				NPC.Gossip(rec)
+			end
 			NPC.Flee(rec, "Report")
 		end
 	else
@@ -620,7 +682,16 @@ function NPC.ReactPlayer(rec, severity: number, kind: string, _dist: number)
 		elseif kind == "Mopping" then
 			lines = { "Why are you mopping…?", "Did someone spill something?" }
 		end
-		S.Rig.Say(model, Util.pick(lines), nil, 3)
+		if rec.def.persona == "Detective" then
+			lines = Story.Lines.Detective
+			S.GameState.AddSuspicion(Config.Detective.Minor)
+		elseif rec.def.persona == "Gossip" then
+			S.GameState.AddRep(player, -3)
+			NPC.Gossip(rec)
+		end
+		if rec.def.persona ~= "Gossip" then
+			S.Rig.Say(model, Util.pick(lines), nil, 3)
+		end
 		local char = player.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 		if hrp and not rec.sitting then
@@ -644,6 +715,7 @@ function NPC.ReactCorpse(rec, pos: Vector3)
 	if player then
 		S.Net.Notify(player, rec.def.name .. " found a body!", "warn")
 	end
+	S.GameState.StartInvestigation()
 	if rec.role == "Teacher" then
 		S.GameState.CallPolice(rec.def.name .. " found a body.")
 		rec.token += 1
@@ -771,12 +843,16 @@ function NPC.Chase(rec, kind: string)
 	NPC.Unsit(rec)
 	rec.state = "Chase"
 	setTalk(rec, false)
-	S.Rig.Say(rec.model, Util.pick(kind == "Teacher" and Story.Lines.TeacherChase or Story.Lines.Hero), Config.UI.Warn, 2.5)
+	local chaseLines = kind == "Teacher" and Story.Lines.TeacherChase or (kind == "Delinquent" and Story.Lines.Delinquent or Story.Lines.Hero)
+	S.Rig.Say(rec.model, Util.pick(chaseLines), Config.UI.Warn, 2.5)
 	local player, st = S.GameState.MainPlayer()
 	task.spawn(function()
 		local started = os.clock()
 		local lastSeen = os.clock()
 		local speed = kind == "Teacher" and Config.NPC.ChaseSpeed or Config.NPC.HeroChaseSpeed
+		if kind == "Delinquent" then
+			speed += 0.6
+		end
 		while rec.token == token and rec.alive and S.GameState.Phase == "Playing" do
 			local char = player and player.Character
 			local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
@@ -810,6 +886,136 @@ function NPC.Chase(rec, kind: string)
 			task.wait(0.2)
 		end
 	end)
+end
+
+-- ── Personalities ────────────────────────────────────────────────────────────
+-- Gossips make sure everyone nearby hears about it
+function NPC.Gossip(rec)
+	S.Rig.Say(rec.model, Util.pick(Story.Lines.Gossip), Config.UI.Love, 3)
+	S.Net.Anim(rec.model, "Point", "Action")
+	task.delay(1.2, function()
+		if rec.model and rec.model.Parent then
+			S.Net.Anim(rec.model, false, "Action")
+		end
+	end)
+	for _, other in NPC.List do
+		if other ~= rec and present(other) and other.state == "Routine" and (other.root.Position - rec.root.Position).Magnitude < 40 then
+			other.alertUntil = os.clock() + 6
+		end
+	end
+end
+
+function NPC.SeesPlayer(rec): boolean
+	local player = S.GameState.MainPlayer()
+	local char = player and player.Character
+	local ut = char and char:FindFirstChild("UpperTorso") :: BasePart?
+	if not ut or not present(rec) then
+		return false
+	end
+	return canSee(rec, ut.Position, char)
+end
+
+-- Ryo saw the attack coming: hop back, shout, run for it with everything he wrote down
+function NPC.Dodge(rec)
+	local player = S.GameState.MainPlayer()
+	NPC.Unsit(rec)
+	rec.token += 1
+	rec.witness = true
+	rec.filmed = true
+	S.Rig.Say(rec.model, Util.pick(Story.Lines.Dodge), Config.UI.Warn, 2.5)
+	S.Rig.Alert(rec.model, "!!")
+	S.Rig.SetExpression(rec.model, "Scared")
+	local char = player and player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if hrp then
+		local away = Util.flat(rec.root.Position - hrp.Position)
+		if away.Magnitude > 0.1 then
+			rec.root.CFrame = CFrame.lookAt(rec.root.Position + away.Unit * 3, rec.root.Position + away.Unit * 6)
+		end
+	end
+	S.GameState.SetSuspicion(100)
+	if player then
+		S.GameState.Seen(player, rec, "Murder")
+		S.GameState.AddRep(player, -25)
+	end
+	NPC.Flee(rec, "Murder")
+end
+
+-- Suspicion maxed: he takes his notebook to a teacher
+function NPC.DetectiveReport()
+	for _, rec in NPC.List do
+		if rec.def.persona == "Detective" and present(rec) and not rec.reportedSusp and rec.state == "Routine" then
+			rec.reportedSusp = true
+			rec.witness = true
+			S.Rig.Say(rec.model, "That's enough. I'm going to the teachers.", Config.UI.Warn, 3)
+			local player = S.GameState.MainPlayer()
+			if player then
+				S.Net.Notify(player, "🔍 Ryo is taking his notes to a teacher. Stop him!", "warn")
+			end
+			NPC.Flee(rec, "Report")
+		end
+	end
+end
+
+-- Ryo keeps his distance, watches, writes. His suspicion only climbs while he can see you.
+function NPC.Follow(rec, token: number)
+	local lastLine = os.clock()
+	local lastPath = 0
+	while rec.token == token and rec.alive and rec.state == "Routine" do
+		if NPC.Paused then
+			task.wait(0.5)
+			continue
+		end
+		local player = S.GameState.MainPlayer()
+		local char = player and player.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+		local ut = char and char:FindFirstChild("UpperTorso") :: BasePart?
+		if not (hrp and ut) then
+			task.wait(0.5)
+			continue
+		end
+		local to = Util.flat(hrp.Position - rec.root.Position)
+		local d = to.Magnitude
+		local sees = canSee(rec, ut.Position, char, true)
+		if d > Config.Detective.FollowDistance + 3 then
+			rec.hum.WalkSpeed = d > 45 and 15 or Config.NPC.WalkSpeed + 2
+			if sees then
+				rec.hum:MoveTo(hrp.Position - to.Unit * Config.Detective.FollowDistance)
+			elseif os.clock() - lastPath > 1.2 then
+				lastPath = os.clock()
+				local path = PathfindingService:CreatePath(AGENT)
+				local ok = pcall(function()
+					path:ComputeAsync(rec.root.Position, hrp.Position)
+				end)
+				if ok and path.Status == Enum.PathStatus.Success then
+					local wps = path:GetWaypoints()
+					local wp = wps[math.min(3, #wps)]
+					if wp then
+						rec.hum:MoveTo(wp.Position)
+					end
+				end
+			end
+		else
+			rec.hum:MoveTo(rec.root.Position)
+			if d > 0.1 then
+				faceDir(rec, to)
+			end
+		end
+		if sees then
+			S.GameState.AddSuspicion(Config.Detective.WatchPerSecond * 0.4)
+			if os.clock() - lastLine > 22 and d < 30 then
+				lastLine = os.clock()
+				S.Rig.Say(rec.model, Util.pick(Story.Lines.Detective), nil, 3)
+				S.Net.Anim(rec.model, "Phone", "Action")
+				task.delay(1.6, function()
+					if rec.model and rec.model.Parent then
+						S.Net.Anim(rec.model, false, "Action")
+					end
+				end)
+			end
+		end
+		task.wait(0.4)
+	end
 end
 
 -- ── Combat hooks ─────────────────────────────────────────────────────────────

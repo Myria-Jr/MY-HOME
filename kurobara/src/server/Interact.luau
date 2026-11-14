@@ -267,6 +267,13 @@ function Interact.Talk(player: Player, rec)
 		end
 	elseif rec.isRival then
 		S.Rig.Say(rec.model, Util.pick(Story.Lines.Mirei), nil, 4)
+	elseif rec.def.persona == "Detective" then
+		if S.GameState.Investigating then
+			S.Rig.Say(rec.model, Util.pick(Story.Lines.Detective), nil, 4)
+			S.GameState.AddSuspicion(first and 4 or 1)
+		else
+			S.Rig.Say(rec.model, Util.pick(Story.Lines.DetectiveTalk), nil, 4)
+		end
 	elseif rec.role == "Teacher" then
 		S.Rig.Say(rec.model, Util.pick(Story.Lines.Teacher), nil, 3.5)
 	else

@@ -177,8 +177,11 @@ function Bodies.StartDrag(player: Player, body: Model)
 		local last = torso.Position
 		while st.Dragging == body and torso.Parent do
 			local fresh = workspace:GetServerTimeNow() - (body:GetAttribute("DeathTime") or 0) < 240
-			if fresh and (torso.Position - last).Magnitude > 2 then
-				S.Blood.Pool(torso.Position, 0.9 + math.random() * 0.8, 0.8)
+			if fresh and (torso.Position - last).Magnitude > 1.8 then
+				S.Blood.Smear(last, torso.Position, 0.9 + math.random() * 0.6)
+				if math.random() < 0.25 then
+					S.Blood.Pool(torso.Position, 0.8 + math.random() * 0.6, 0.8)
+				end
 				last = torso.Position
 			end
 			task.wait(0.35)

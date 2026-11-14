@@ -132,6 +132,61 @@ C.Laugh = { length = 1.6, keys = {
 	{ 1.6, {} },
 } }
 
+-- ── Idle life ────────────────────────────────────────────────────────────────
+C.LookAround = { length = 2.6, keys = {
+	{ 0, {} },
+	{ 0.5, { Neck = R(4, 42), Waist = R(0, 10) } },
+	{ 1.1, { Neck = R(4, 40), Waist = R(0, 10) } },
+	{ 1.6, { Neck = R(-2, -40), Waist = R(0, -10) } },
+	{ 2.1, { Neck = R(-2, -38), Waist = R(0, -9) } },
+	{ 2.6, {} },
+} }
+C.ArmsCrossed = { length = 0.45, hold = true, keys = { { 0, {} }, { 0.45, { RS = R(62, 52), RE = R(98), LS = R(58, -52), LE = R(102), Waist = R(4), Neck = R(4, 0, 4) } } } }
+C.HandsBehind = { length = 0.45, hold = true, keys = { { 0, {} }, { 0.45, { RS = R(-22, -20, 6), RE = R(45, 30), LS = R(-22, 20, -6), LE = R(45, -30), Waist = R(5), Neck = R(6) } } } }
+C.PhoneIdle = { length = 0.4, hold = true, keys = { { 0, {} }, { 0.4, { RS = R(72, -18), RE = R(85), LS = R(55, 20), LE = R(70), Neck = R(-20) } } } }
+C.Stretch = { length = 2.2, keys = {
+	{ 0, {} },
+	{ 0.6, { RS = R(172, 0, 12), LS = R(172, 0, -12), RE = R(10), LE = R(10), Waist = R(12), Neck = R(18) } },
+	{ 1.4, { RS = R(176, 0, 18), LS = R(176, 0, -18), RE = R(5), LE = R(5), Waist = R(16, 0, 4), Neck = R(22) } },
+	{ 2.2, {} },
+} }
+C.Yawn = { length = 2.2, keys = {
+	{ 0, {} },
+	{ 0.5, { RS = R(140, -35), RE = R(125), Neck = R(20), Waist = R(8) } },
+	{ 1.5, { RS = R(142, -36), RE = R(128), Neck = R(24), Waist = R(10) } },
+	{ 2.2, {} },
+} }
+C.Write = { length = 1.4, keys = {
+	{ 0, {} },
+	{ 0.3, { RS = R(52, 18), RE = R(62), LS = R(40, -20), LE = R(70), Neck = R(-22) } },
+	{ 0.6, { RS = R(54, 10), RE = R(58), LS = R(40, -20), LE = R(70), Neck = R(-22) } },
+	{ 0.9, { RS = R(52, 20), RE = R(64), LS = R(40, -20), LE = R(70), Neck = R(-24) } },
+	{ 1.4, {} },
+} }
+-- Nyx only
+C.HairTwirl = { length = 2.8, keys = {
+	{ 0, {} },
+	{ 0.5, { RS = R(150, -42, 12), RE = R(128), Neck = R(-4, 0, 12), Waist = R(0, 0, 3) } },
+	{ 0.9, { RS = R(152, -40, 12), RE = R(138), Neck = R(-4, 0, 14) } },
+	{ 1.3, { RS = R(150, -42, 12), RE = R(124), Neck = R(-4, 0, 12) } },
+	{ 1.7, { RS = R(152, -40, 12), RE = R(138), Neck = R(-4, 0, 14) } },
+	{ 2.2, { RS = R(150, -42, 12), RE = R(126), Neck = R(-4, 0, 12) } },
+	{ 2.8, {} },
+} }
+C.HugSelf = { length = 3.2, keys = {
+	{ 0, {} },
+	{ 0.6, { RS = R(55, 62), RE = R(112), LS = R(55, -62), LE = R(112), Waist = R(-10), Neck = R(-14, 0, 8) } },
+	{ 2.4, { RS = R(57, 64), RE = R(114), LS = R(57, -64), LE = R(114), Waist = R(-12, 0, 2), Neck = R(-16, 0, 10) } },
+	{ 3.2, {} },
+} }
+C.Sway = { length = 3.2, keys = {
+	{ 0, {} },
+	{ 0.8, { Root = T(0, 0, 0, 0, 0, 3), Neck = R(0, 0, -9), RS = R(6, 0, 4), LS = R(6, 0, -4) } },
+	{ 1.6, { Root = T(0, 0, 0, 0, 0, -3), Neck = R(0, 0, 9), RS = R(6, 0, 4), LS = R(6, 0, -4) } },
+	{ 2.4, { Root = T(0, 0, 0, 0, 0, 3), Neck = R(0, 0, -9) } },
+	{ 3.2, {} },
+} }
+
 -- ── Attacks (Action layer). Hit times must match Items.Weapons[...].hits ─────
 local kRaise = { LS = R(85, -15), LE = R(10), RS = R(152, 0, 16), RE = R(35), Waist = R(-5, 14), Neck = R(-6) }
 local kStab = { LS = R(80, -15), LE = R(10), RS = R(55, 0, 4), RE = R(4), Waist = R(-20, -10), Neck = R(-14) }

@@ -219,7 +219,7 @@ function Rig.Dress(model: Model, look, role: string?)
 		bc:Destroy()
 	end
 	local female = look.gender == "F"
-	local top = UNIFORM.Blazer
+	local top = look.top or UNIFORM.Blazer
 	local bottom = female and UNIFORM.Skirt or UNIFORM.Pants
 	if role == "Teacher" then
 		top = female and UNIFORM.TeacherF or UNIFORM.TeacherM
@@ -274,6 +274,14 @@ function Rig.Dress(model: Model, look, role: string?)
 		local ls = lt.Size
 		addDeco(model, lt, Vector3.new(ls.X * 1.12, 1.25, ls.Z * 1.32), lt.CFrame * CFrame.new(0, -0.42, 0), bottom, "Skirt")
 		addDeco(model, lt, Vector3.new(ls.X * 1.14, 0.12, ls.Z * 1.34), lt.CFrame * CFrame.new(0, -0.98, 0), bottom:Lerp(Color3.new(0, 0, 0), 0.35), "SkirtHem")
+	end
+
+	if look.prop == "Notebook" then
+		local lh = part("LeftHand")
+		if lh then
+			addDeco(model, lh, Vector3.new(0.12, 0.85, 0.62), lh.CFrame * CFrame.new(0.1, -0.25, -0.1), Color3.fromRGB(40, 44, 70), "Notebook")
+			addDeco(model, lh, Vector3.new(0.13, 0.78, 0.04), lh.CFrame * CFrame.new(0.1, -0.25, -0.42), Color3.fromRGB(245, 240, 225), "Pages")
+		end
 	end
 
 	model:SetAttribute("EyeColor", look.eyeColor)

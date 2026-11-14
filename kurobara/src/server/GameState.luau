@@ -17,6 +17,9 @@ GameState.RivalDown = false
 GameState.PoliceETA = nil :: number?
 GameState.PhotoEvidence = false
 GameState.Killed = {} :: { string }
+GameState.Suspicion = 0
+GameState.Investigating = false
+GameState.SuspicionReported = false
 local S
 local states: { [Player]: any } = {}
 
@@ -41,6 +44,8 @@ local function newState()
 		Running = false,
 		LastTalk = {},
 		NextLaugh = 0,
+		StillSince = 0,
+		NextIdle = 0,
 		BaseClip = nil,
 		MoodClip = nil,
 		Expression = nil,
@@ -83,6 +88,8 @@ function GameState.Sync(player: Player)
 	workspace:SetAttribute("Day", GameState.Day)
 	workspace:SetAttribute("DayName", Config.Days[GameState.Day])
 	workspace:SetAttribute("Phase", GameState.Phase)
+	workspace:SetAttribute("Suspicion", math.floor(GameState.Suspicion + 0.5))
+	workspace:SetAttribute("Investigating", GameState.Investigating)
 	workspace:SetAttribute("Objective", GameState.RivalDown and "Mirei is gone. Don't get caught." or Story.Objectives[GameState.Day])
 end
 
@@ -188,6 +195,16 @@ end
 function GameState.OnVictimKilled(rec)
 	table.insert(GameState.Killed, rec.def.name)
 	local player = GameState.MainPlayer()
+	if rec.def.persona == "Detective" then
+		GameState.Investigating = false
+		GameState.Suspicion = 0
+		if player then
+			S.Net.Notify(player, "No more questions.", "love")
+		end
+	else
+		-- someone went missing: Ryo gets curious
+		task.delay(20, GameState.StartInvestigation)
+	end
 	if rec.isRival then
 		GameState.RivalDown = true
 		if player then
@@ -200,6 +217,39 @@ function GameState.OnVictimKilled(rec)
 end
 
 function GameState.MarkGone(_name: string, _model: Instance?) end
+
+-- ── Ryo's investigation ──────────────────────────────────────────────────────
+local function detectiveAlive(): boolean
+	for _, rec in S.NPC.List do
+		if rec.def.persona == "Detective" and rec.alive then
+			return true
+		end
+	end
+	return false
+end
+
+function GameState.StartInvestigation()
+	if GameState.Investigating or not detectiveAlive() then
+		return
+	end
+	GameState.Investigating = true
+	S.Net.Notify(nil, "🔍 Ryo Amamiya started asking questions.", "warn")
+end
+
+function GameState.SetSuspicion(v: number)
+	GameState.Suspicion = Util.clamp(v, 0, 100)
+	if GameState.Suspicion >= 100 and not GameState.SuspicionReported and GameState.Phase == "Playing" then
+		GameState.SuspicionReported = true
+		S.NPC.DetectiveReport()
+	end
+end
+
+function GameState.AddSuspicion(n: number)
+	if GameState.Phase ~= "Playing" or not detectiveAlive() then
+		return
+	end
+	GameState.SetSuspicion(GameState.Suspicion + n)
+end
 
 -- ── Police ───────────────────────────────────────────────────────────────────
 function GameState.CallPolice(reason: string)
@@ -341,6 +391,8 @@ function GameState.EndDay(reason: string)
 	GameState.PoliceETA = nil
 	workspace:SetAttribute("PoliceETA", nil)
 	GameState.PhotoEvidence = false
+	GameState.Suspicion = math.max(0, GameState.Suspicion - Config.Detective.NightDecay)
+	GameState.SuspicionReported = false
 
 	if GameState.RivalDown then
 		GameState.Ending((st and st.Affection or 0) >= 25 and "Good" or "Neutral")
@@ -424,6 +476,9 @@ function GameState.Restart(player: Player)
 	GameState.PoliceETA = nil
 	GameState.PhotoEvidence = false
 	GameState.Killed = {}
+	GameState.Suspicion = 0
+	GameState.Investigating = false
+	GameState.SuspicionReported = false
 	workspace:SetAttribute("PoliceETA", nil)
 	states[player] = newState()
 	S.SpawnCharacter(player)
@@ -468,6 +523,15 @@ function GameState.Start_Loop()
 					S.Net.Anim(char, "Laugh", "Action")
 					S.Rig.Say(char, Util.pick({ "hehe… hahaha…", "ahaha— shh. shh.", "hahahaha" }), Config.UI.Accent, 2.5)
 					S.NPC.Scream(hrp.Position, nil)
+				end
+				-- idle fidgets when she stands still
+				local still = hrp.AssemblyLinearVelocity.Magnitude < 0.6
+				if not still or st.Busy or st.Dragging or st.Carrying or st.Crouching then
+					st.StillSince = os.clock()
+				elseif os.clock() - st.StillSince > 5 and os.clock() > st.NextIdle then
+					st.NextIdle = os.clock() + 9 + math.random() * 8
+					local clip = st.NearHaru and "HairTwirl" or Util.pick({ "HairTwirl", "HugSelf", "Sway", "LookAround" })
+					S.Net.Anim(char, clip, "Action")
 				end
 				GameState.RefreshMood(player)
 			end

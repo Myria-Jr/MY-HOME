@@ -173,7 +173,12 @@ local function wallX(x1: number, x2: number, z: number, y1: number, y2: number, 
 		if o.glass then
 			glass(box(o.a, o.bottom, z - 0.08, o.b, o.top, z + 0.08, COL.Glass, nil, parent, "Window"))
 			deco(box((o.a + o.b) / 2 - 0.1, o.bottom, z - 0.15, (o.a + o.b) / 2 + 0.1, o.top, z + 0.15, COL.Trim, nil, parent, "Mullion"))
+			deco(box(o.a, (o.bottom + o.top) / 2 - 0.08, z - 0.15, o.b, (o.bottom + o.top) / 2 + 0.08, z + 0.15, COL.Trim, nil, parent, "Transom"))
 			box(o.a, o.bottom - 0.2, z - t / 2 - 0.25, o.b, o.bottom, z + t / 2 + 0.25, COL.Trim, nil, parent, "Sill")
+			deco(box(o.a - 0.2, o.top, z - t / 2 - 0.12, o.b + 0.2, o.top + 0.3, z + t / 2 + 0.12, COL.Trim, nil, parent, "Lintel"))
+			for _, x in { o.a, o.b } do
+				deco(box(x - 0.12, o.bottom, z - t / 2 - 0.08, x + 0.12, o.top, z + t / 2 + 0.08, COL.Trim, nil, parent, "Jamb"))
+			end
 		end
 		cursor = math.max(cursor, o.b)
 	end
@@ -201,7 +206,12 @@ local function wallZ(z1: number, z2: number, x: number, y1: number, y2: number, 
 		if o.glass then
 			glass(box(x - 0.08, o.bottom, o.a, x + 0.08, o.top, o.b, COL.Glass, nil, parent, "Window"))
 			deco(box(x - 0.15, o.bottom, (o.a + o.b) / 2 - 0.1, x + 0.15, o.top, (o.a + o.b) / 2 + 0.1, COL.Trim, nil, parent, "Mullion"))
+			deco(box(x - 0.15, (o.bottom + o.top) / 2 - 0.08, o.a, x + 0.15, (o.bottom + o.top) / 2 + 0.08, o.b, COL.Trim, nil, parent, "Transom"))
 			box(x - t / 2 - 0.25, o.bottom - 0.2, o.a, x + t / 2 + 0.25, o.bottom, o.b, COL.Trim, nil, parent, "Sill")
+			deco(box(x - t / 2 - 0.12, o.top, o.a - 0.2, x + t / 2 + 0.12, o.top + 0.3, o.b + 0.2, COL.Trim, nil, parent, "Lintel"))
+			for _, zz in { o.a, o.b } do
+				deco(box(x - t / 2 - 0.08, o.bottom, zz - 0.12, x + t / 2 + 0.08, o.top, zz + 0.12, COL.Trim, nil, parent, "Jamb"))
+			end
 		end
 		cursor = math.max(cursor, o.b)
 	end
@@ -773,7 +783,7 @@ end
 -- ── Grounds ──────────────────────────────────────────────────────────────────
 local function buildGrounds()
 	local g = folder("Grounds")
-	box(-500, -2, -500, 500, 0, 500, COL.Grass, Enum.Material.Grass, g, "Ground")
+	box(-500, -2.05, -500, 500, -0.05, 500, COL.Grass, Enum.Material.Grass, g, "Ground")
 	box(-112, 0, -32, 112, 0.06, 32, COL.Sidewalk, Enum.Material.Concrete, g, "Apron")
 
 	-- Courtyard path + fountain plaza
@@ -870,8 +880,13 @@ local function buildGrounds()
 
 	-- Sports field
 	local field = folder("Field", g)
-	box(-45, 0, -145, 25, 0.08, -60, Color3.fromRGB(176, 134, 92), Enum.Material.Ground, field, "Track")
-	box(-38, 0.08, -138, 18, 0.1, -67, Color3.fromRGB(96, 140, 74), Enum.Material.Grass, field, "Pitch")
+	local trackCol = Color3.fromRGB(176, 134, 92)
+	box(-45, 0, -145, 25, 0.08, -138, trackCol, Enum.Material.Ground, field, "Track")
+	box(-45, 0, -67, 25, 0.08, -60, trackCol, Enum.Material.Ground, field, "Track")
+	box(-45, 0, -138, -38, 0.08, -67, trackCol, Enum.Material.Ground, field, "Track")
+	box(18, 0, -138, 25, 0.08, -67, trackCol, Enum.Material.Ground, field, "Track")
+	Builder.Lawns = Builder.Lawns or {}
+	table.insert(Builder.Lawns, { -38, -138, 18, -67 })
 	for _, z in { -138, -67 } do
 		deco(box(-38, 0.1, z - 0.15, 18, 0.12, z + 0.15, COL.White, nil, field, "Line"))
 	end
@@ -1073,6 +1088,223 @@ local function buildHome()
 	sign("AMANE", CFrame.lookAt(Vector3.new(-50, 7, 123.4), Vector3.new(-50, 7, 110)), Vector2.new(3, 0.8), h, COL.White, COL.Trim)
 end
 
+-- ── Extra detail pass (graphics) ─────────────────────────────────────────────
+local function pottedPlant(pos: Vector3, parent: Instance)
+	cyl(pos + Vector3.new(0, 0.9, 0), 1.8, 1.6, Color3.fromRGB(180, 110, 80), Enum.Material.Slate, parent).Name = "Pot"
+	deco(ball(pos + Vector3.new(0, 2.6, 0), 2.4, COL.Leaf, Enum.Material.Grass, parent))
+	deco(ball(pos + Vector3.new(0.4, 3.4, 0.2), 1.6, COL.Leaf:Lerp(Color3.new(1, 1, 1), 0.08), Enum.Material.Grass, parent))
+end
+
+local function pinboard(cf: CFrame, parent: Instance)
+	deco(P(Vector3.new(5, 3, 0.15), cf, Color3.fromRGB(176, 136, 92), Enum.Material.Wood, parent, "Pinboard"))
+	for _ = 1, 5 do
+		local off = Vector3.new(math.random(-18, 18) / 10, math.random(-10, 10) / 10, -0.1)
+		local paper = P(Vector3.new(0.8 + math.random() * 0.5, 1 + math.random() * 0.4, 0.04), cf * CFrame.new(off) * CFrame.Angles(0, 0, math.rad(math.random(-8, 8))), Color3.fromHSV(math.random(), 0.25, 1), Enum.Material.SmoothPlastic, parent, "Poster")
+		deco(paper)
+	end
+end
+
+local function car(cf: CFrame, color: Color3, parent: Instance)
+	local f = folder("Car", parent)
+	P(Vector3.new(4.6, 1.6, 9), cf * CFrame.new(0, 1.5, 0), color, Enum.Material.SmoothPlastic, f, "Body").Reflectance = 0.15
+	local cabin = P(Vector3.new(4.2, 1.5, 5), cf * CFrame.new(0, 3, 0.4), color:Lerp(Color3.new(0, 0, 0), 0.15), Enum.Material.SmoothPlastic, f, "Cabin")
+	cabin.Reflectance = 0.1
+	deco(P(Vector3.new(4.3, 1.1, 4.4), cf * CFrame.new(0, 3.05, 0.4), Color3.fromRGB(40, 50, 60), Enum.Material.Glass, f, "Windows")).Transparency = 0.2
+	for _, wx in { -2.2, 2.2 } do
+		for _, wz in { -2.9, 2.9 } do
+			local w = P(Vector3.new(0.7, 1.6, 1.6), cf * CFrame.new(wx, 0.8, wz) * CFrame.Angles(0, 0, 0), COL.Black, Enum.Material.SmoothPlastic, f, "Wheel")
+			w.Shape = Enum.PartType.Cylinder
+		end
+	end
+	for _, hx in { -1.5, 1.5 } do
+		deco(P(Vector3.new(0.9, 0.4, 0.1), cf * CFrame.new(hx, 1.7, -4.52), Color3.fromRGB(255, 250, 230), Enum.Material.Neon, f, "Headlight"))
+		deco(P(Vector3.new(0.9, 0.35, 0.1), cf * CFrame.new(hx, 1.8, 4.52), Color3.fromRGB(200, 20, 30), Enum.Material.Neon, f, "Taillight"))
+	end
+end
+
+local function details()
+	local d = folder("Details")
+	-- curtains inside every classroom window, baseboards, pinboards, plants
+	for _, r in ROOMS do
+		local zA, zB = roomZ(r)
+		local cx = (r.x1 + r.x2) / 2
+		if not r.open and not r.highWindows and r.id ~= "Stairs" then
+			local wallZin = r.side == "S" and zB - 0.62 or zA + 0.62
+			for _, wc in { cx - 7, cx + 7 } do
+				for _, edge in { -1, 1 } do
+					local x0 = wc + edge * 3
+					local c = box(x0 - edge * 1.1, 3.2, wallZin - 0.06, x0, 10.2, wallZin + 0.06, Color3.fromRGB(236, 228, 210), Enum.Material.Fabric, d, "Curtain")
+					deco(c)
+				end
+			end
+		end
+		local face = r.side == "S" and 3.4 or -3.4
+		if not r.open then
+			pinboard(CFrame.lookAt(Vector3.new(cx - 8, 6, face), Vector3.new(cx - 8, 6, face * 2)), d)
+		end
+	end
+	for _, z in { -3.45, 3.45 } do
+		deco(box(-100, FLOOR_Y, z - 0.06, 100, 1.0, z + 0.06, COL.Trim, nil, d, "Baseboard"))
+	end
+	for _, x in { -92, -30, 30, 92 } do
+		pottedPlant(Vector3.new(x, FLOOR_Y, -2.4), d)
+	end
+	pottedPlant(Vector3.new(-8, FLOOR_Y, 17), d)
+	pottedPlant(Vector3.new(8, FLOOR_Y, 17), d)
+
+	-- facade: pilasters, entrance canopy + steps, hedges
+	for x = -95, 95, 10 do
+		if math.abs(x) > 8 then
+			deco(box(x - 0.6, 0, 20.4, x + 0.6, 12.3, 21.0, Color3.fromRGB(222, 214, 200), nil, d, "Pilaster"))
+			deco(box(x - 0.6, 0, -21.0, x + 0.6, 12.3, -20.4, Color3.fromRGB(222, 214, 200), nil, d, "Pilaster"))
+		end
+	end
+	box(-8, 9.6, 20.5, 8, 10.3, 27, COL.Trim, Enum.Material.Slate, d, "Canopy")
+	deco(box(-8.2, 10.3, 26.8, 8.2, 10.6, 27.2, COL.Crimson, nil, d, "CanopyEdge"))
+	for _, x in { -7, 7 } do
+		cyl(Vector3.new(x, 4.8, 26), 9.6, 0.8, COL.Cream, Enum.Material.Marble, d).Name = "CanopyPillar"
+	end
+	local cl = box(-4, 9.25, 22, 4, 9.55, 26, Color3.fromRGB(255, 244, 225), Enum.Material.Neon, d, "CanopyLight")
+	deco(cl)
+	light(cl, 16, 0.8)
+	box(-6, 0, 20.5, 6, 0.3, 24, Color3.fromRGB(200, 196, 190), Enum.Material.Concrete, d, "Step")
+	for _, side in { -1, 1 } do
+		local x1, x2 = side < 0 and -96 or 12, side < 0 and -12 or 96
+		box(x1, 0, 21.2, x2, 2.4, 23.4, Color3.fromRGB(62, 104, 58), Enum.Material.Grass, d, "Hedge")
+	end
+
+	-- clock tower above the entrance
+	local tower = folder("ClockTower", d)
+	box(-6, ROOF_Y, 13, 6, ROOF_Y + 9, 20.4, COL.Cream, nil, tower, "Tower")
+	box(-6.6, ROOF_Y + 9, 12.4, 6.6, ROOF_Y + 9.8, 21, COL.Trim, Enum.Material.Slate, tower, "TowerCap")
+	local face = cyl(Vector3.new(0, ROOF_Y + 5, 20.5), 0.3, 6, COL.White, nil, tower)
+	face.CFrame = CFrame.new(0, ROOF_Y + 5, 20.55) * CFrame.Angles(0, math.rad(90), 0)
+	face.Name = "ClockFace"
+	deco(face)
+	local ringP = cyl(Vector3.new(0, ROOF_Y + 5, 20.5), 0.25, 6.6, COL.Trim, nil, tower)
+	ringP.CFrame = CFrame.new(0, ROOF_Y + 5, 20.45) * CFrame.Angles(0, math.rad(90), 0)
+	deco(ringP)
+	local hourHand = deco(P(Vector3.new(0.25, 1.6, 0.1), CFrame.new(0, ROOF_Y + 5.6, 20.75), COL.Black, nil, tower, "HourHand"))
+	local minuteHand = deco(P(Vector3.new(0.18, 2.4, 0.1), CFrame.new(0, ROOF_Y + 6, 20.8), COL.Black, nil, tower, "MinuteHand"))
+	World.ClockHands = { hour = hourHand, minute = minuteHand, center = Vector3.new(0, ROOF_Y + 5, 20.75) }
+	sign("KUROBARA", CFrame.lookAt(Vector3.new(0, ROOF_Y + 1.2, 20.5), Vector3.new(0, ROOF_Y + 1.2, 40)), Vector2.new(9, 1.4), tower, COL.White, COL.Crimson)
+
+	-- the street: utility poles with sagging wires, parked cars, a vending machine by the gate
+	local poles = {}
+	for x = -180, 180, 30 do
+		local base = Vector3.new(x, 0.3, 117.5)
+		cyl(base + Vector3.new(0, 7, 0), 14, 0.6, Color3.fromRGB(110, 106, 100), Enum.Material.Concrete, d).Name = "UtilityPole"
+		deco(box(x - 0.15, 12.8, 115.9, x + 0.15, 13.1, 119.1, Color3.fromRGB(90, 86, 80), nil, d, "CrossArm"))
+		table.insert(poles, base + Vector3.new(0, 12.9, 0))
+	end
+	for i = 1, #poles - 1 do
+		for _, off in { -1.3, 0, 1.3 } do
+			local a = poles[i] + Vector3.new(0, 0, off)
+			local b = poles[i + 1] + Vector3.new(0, 0, off)
+			local m = (a + b) / 2 - Vector3.new(0, 0.9, 0)
+			for _, seg in { { a, m }, { m, b } } do
+				local p0, p1 = seg[1], seg[2]
+				deco(P(Vector3.new(0.06, 0.06, (p1 - p0).Magnitude), CFrame.lookAt((p0 + p1) / 2, p1), COL.Black, nil, d, "Wire"))
+			end
+		end
+	end
+	car(CFrame.new(-90, 0.1, 106.5) * CFrame.Angles(0, math.rad(90), 0), Color3.fromRGB(200, 205, 210), d)
+	car(CFrame.new(60, 0.1, 93.5) * CFrame.Angles(0, math.rad(-90), 0), Color3.fromRGB(150, 24, 36), d)
+	car(CFrame.new(150, 0.1, 106.5) * CFrame.Angles(0, math.rad(90), 0), Color3.fromRGB(30, 34, 44), d)
+	box(13, 0, 82, 15.5, 7, 84.5, Color3.fromRGB(30, 80, 160), nil, d, "StreetVending")
+	deco(box(13.3, 3, 81.9, 15.2, 6.4, 82, Color3.fromRGB(255, 255, 230), Enum.Material.Neon, d, "VendingGlow"))
+
+	-- flower planters along the courtyard path
+	for z = 28, 74, 9 do
+		for _, x in { -6.5, 6.5 } do
+			box(x - 0.8, 0, z - 2, x + 0.8, 0.9, z + 2, COL.Trim, Enum.Material.Slate, d, "PathPlanter")
+			for k = -1, 1 do
+				deco(ball(Vector3.new(x, 1.2, z + k * 1.2), 0.8, Color3.fromHSV(math.random(), 0.55, 1), nil, d))
+			end
+		end
+	end
+end
+
+-- Real (waving) grass in the lawns: terrain on top of the ground plate
+local function terrainLawns()
+	local terrain = workspace.Terrain
+	local lawns = Builder.Lawns or {}
+	table.insert(lawns, { -110, 22, -18, 78 })
+	table.insert(lawns, { 18, 22, 110, 78 })
+	for _, l in lawns do
+		local x1, z1, x2, z2 = l[1], l[2], l[3], l[4]
+		local ok = pcall(function()
+			terrain:FillBlock(CFrame.new((x1 + x2) / 2, -2, (z1 + z2) / 2), Vector3.new(x2 - x1, 4, z2 - z1), Enum.Material.Grass)
+		end)
+		if not ok then
+			box(x1, -0.05, z1, x2, 0, z2, COL.Grass, Enum.Material.Grass, Map, "Lawn")
+		end
+	end
+	pcall(function()
+		terrain:SetMaterialColor(Enum.Material.Grass, Color3.fromRGB(96, 132, 72))
+		terrain.Decoration = true
+	end)
+end
+
+-- ── Time of day: light, haze and grade follow the clock ──────────────────────
+local TOD = {
+	{ t = 7, amb = Color3.fromRGB(72, 62, 82), out = Color3.fromRGB(150, 128, 140), bright = 1.8, atm = Color3.fromRGB(226, 192, 204), decay = Color3.fromRGB(146, 104, 124), haze = 2.1, tint = Color3.fromRGB(255, 236, 230), exp = 0.15, rays = 0.1 },
+	{ t = 9.5, amb = Color3.fromRGB(62, 60, 72), out = Color3.fromRGB(128, 124, 138), bright = 2.3, atm = Color3.fromRGB(205, 200, 216), decay = Color3.fromRGB(112, 96, 126), haze = 1.3, tint = Color3.fromRGB(252, 250, 255), exp = 0.05, rays = 0.05 },
+	{ t = 14.5, amb = Color3.fromRGB(64, 60, 70), out = Color3.fromRGB(134, 126, 134), bright = 2.4, atm = Color3.fromRGB(210, 200, 210), decay = Color3.fromRGB(120, 96, 116), haze = 1.3, tint = Color3.fromRGB(255, 250, 248), exp = 0.05, rays = 0.05 },
+	{ t = 16.6, amb = Color3.fromRGB(82, 62, 70), out = Color3.fromRGB(172, 122, 112), bright = 2.2, atm = Color3.fromRGB(244, 182, 150), decay = Color3.fromRGB(186, 92, 90), haze = 2.2, tint = Color3.fromRGB(255, 226, 206), exp = 0.12, rays = 0.14 },
+	{ t = 17.6, amb = Color3.fromRGB(66, 48, 74), out = Color3.fromRGB(140, 92, 124), bright = 1.7, atm = Color3.fromRGB(206, 140, 176), decay = Color3.fromRGB(126, 60, 104), haze = 2.6, tint = Color3.fromRGB(255, 212, 226), exp = 0.06, rays = 0.12 },
+	{ t = 18.5, amb = Color3.fromRGB(40, 36, 60), out = Color3.fromRGB(80, 74, 110), bright = 1.0, atm = Color3.fromRGB(120, 110, 160), decay = Color3.fromRGB(60, 50, 90), haze = 2.0, tint = Color3.fromRGB(220, 220, 255), exp = 0, rays = 0.02 },
+}
+
+function Builder.TimeOfDay(minutes: number)
+	local h = minutes / 60
+	local a, b = TOD[1], TOD[#TOD]
+	for i = 1, #TOD - 1 do
+		if h >= TOD[i].t and h <= TOD[i + 1].t then
+			a, b = TOD[i], TOD[i + 1]
+			break
+		end
+	end
+	local k = 0
+	if b.t > a.t then
+		k = math.clamp((h - a.t) / (b.t - a.t), 0, 1)
+	elseif h > a.t then
+		k = 1
+	end
+	local function lerp(x: number, y: number)
+		return x + (y - x) * k
+	end
+	Lighting.Ambient = a.amb:Lerp(b.amb, k)
+	Lighting.OutdoorAmbient = a.out:Lerp(b.out, k)
+	Lighting.Brightness = lerp(a.bright, b.bright)
+	Lighting.ExposureCompensation = lerp(a.exp, b.exp)
+	local atm = Lighting:FindFirstChild("Atmosphere") :: Atmosphere?
+	if atm then
+		atm.Color = a.atm:Lerp(b.atm, k)
+		atm.Decay = a.decay:Lerp(b.decay, k)
+		atm.Haze = lerp(a.haze, b.haze)
+	end
+	local cc = Lighting:FindFirstChild("Grade") :: ColorCorrectionEffect?
+	if cc then
+		cc.TintColor = a.tint:Lerp(b.tint, k)
+	end
+	local rays = Lighting:FindFirstChild("SunRays") :: SunRaysEffect?
+	if rays then
+		rays.Intensity = lerp(a.rays, b.rays)
+	end
+	-- the clock tower keeps real (game) time
+	local hands = World.ClockHands
+	if hands and hands.hour.Parent then
+		local function place(part: BasePart, frac: number, len: number, zoff: number)
+			local ang = frac * math.pi * 2
+			local dir = Vector3.new(math.sin(ang), math.cos(ang), 0) -- clockwise as seen from the courtyard
+			part.CFrame = CFrame.new(hands.center + dir * len / 2 + Vector3.new(0, 0, zoff)) * CFrame.Angles(0, 0, -ang)
+		end
+		place(hands.hour, (h % 12) / 12, 1.6, 0)
+		place(hands.minute, (minutes % 60) / 60, 2.4, 0.05)
+	end
+end
+
 -- ── Lighting ─────────────────────────────────────────────────────────────────
 function Builder.SetupLighting()
 	Lighting.Ambient = Color3.fromRGB(60, 56, 70)
@@ -1110,7 +1342,23 @@ function Builder.SetupLighting()
 	cc.Contrast = 0.08
 	cc.Saturation = 0.04
 	cc.TintColor = Color3.fromRGB(255, 246, 250)
-	ensure("Sky", "Sky")
+	local sky = ensure("Sky", "Sky") :: Sky
+	sky.SunAngularSize = 14
+	sky.MoonAngularSize = 9
+	local dof = ensure("DepthOfFieldEffect", "DepthOfField") :: DepthOfFieldEffect
+	dof.FarIntensity = 0.12
+	dof.FocusDistance = 60
+	dof.InFocusRadius = 60
+	dof.NearIntensity = 0
+	local clouds = workspace.Terrain:FindFirstChildOfClass("Clouds")
+	if not clouds then
+		clouds = Instance.new("Clouds")
+		clouds.Parent = workspace.Terrain
+	end
+	clouds.Cover = 0.55
+	clouds.Density = 0.55
+	clouds.Color = Color3.fromRGB(255, 246, 250)
+	Builder.TimeOfDay(7.5 * 60)
 end
 
 function Builder.Build()
@@ -1127,7 +1375,9 @@ function Builder.Build()
 		buildGrounds()
 		buildStreet()
 		buildHome()
+		details()
 		Map.Parent = workspace
+		terrainLawns()
 	end
 	Builder.SetupLighting()
 	for _, name in { "NPCs", "Evidence", "Items" } do

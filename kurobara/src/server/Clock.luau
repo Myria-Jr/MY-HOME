@@ -63,6 +63,7 @@ function Clock.Set(minute: number)
 	local changed = idx ~= periodIndex
 	periodIndex = idx
 	Lighting.ClockTime = minute / 60
+	S.Builder.TimeOfDay(minute)
 	publish()
 	if changed then
 		onPeriodChanged()
@@ -87,6 +88,7 @@ function Clock.Start()
 		if acc > 0.25 then
 			acc = 0
 			workspace:SetAttribute("Clock", Clock.Minutes)
+			S.Builder.TimeOfDay(Clock.Minutes)
 		end
 		-- Friday sunset: the confession
 		if S.GameState.Day == Config.ConfessionDay and Clock.Minutes >= Config.ConfessionTime and not S.GameState.RivalDown then

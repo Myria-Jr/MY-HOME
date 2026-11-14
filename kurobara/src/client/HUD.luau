@@ -105,20 +105,23 @@ local function buildHeart()
 	end
 	refs.heart, refs.heartScale, refs.bpm, refs.status, refs.bars = heart, hs, bpm, status, bars
 
-	local s = Glass.Panel(gui, { size = UDim2.fromOffset(244, 86), pos = UDim2.new(1, -16, 0, 110), anchor = Vector2.new(1, 0), radius = 22, alpha = 0.4 })
+	local s = Glass.Panel(gui, { size = UDim2.fromOffset(244, 108), pos = UDim2.new(1, -16, 0, 110), anchor = Vector2.new(1, 0), radius = 22, alpha = 0.4 })
 	Glass.pad(s, 16, 10)
 	local rows = {
 		{ "Reputation", Color3.fromRGB(100, 210, 255), "rep" },
 		{ "Blood on you", Config.Blood.Fresh, "blood" },
 		{ "Haru ♥", UI.Love, "aff" },
+		{ "Ryo 🔍", Color3.fromRGB(255, 214, 10), "susp" },
 	}
 	for i, r in rows do
 		local y = (i - 1) * 22
 		local l = Glass.Label(s, r[1], 12, Enum.FontWeight.SemiBold, UI.SubInk)
 		l.Position = UDim2.fromOffset(0, y)
 		l.Size = UDim2.fromOffset(90, 18)
-		local _, fill = Glass.Bar(s, r[2], UDim2.new(1, -96, 0, 6), UDim2.fromOffset(96, y + 6))
+		local track, fill = Glass.Bar(s, r[2], UDim2.new(1, -96, 0, 6), UDim2.fromOffset(96, y + 6))
 		refs[r[3]] = fill
+		refs[r[3] .. "Label"] = l
+		refs[r[3] .. "Track"] = track
 	end
 end
 
@@ -388,6 +391,11 @@ function HUD.Init()
 		refs.rep.BackgroundColor3 = rep < -40 and UI.Warn or Color3.fromRGB(100, 210, 255)
 		refs.blood.Size = UDim2.fromScale(math.clamp((player:GetAttribute("Bloodiness") or 0) / 100, 0, 1), 1)
 		refs.aff.Size = UDim2.fromScale(math.clamp((player:GetAttribute("Affection") or 0) / 40, 0, 1), 1)
+		local susp = workspace:GetAttribute("Suspicion") or 0
+		local investigating = workspace:GetAttribute("Investigating") == true
+		refs.susp.Size = UDim2.fromScale(math.clamp(susp / 100, 0, 1), 1)
+		refs.susp.BackgroundColor3 = susp >= 70 and UI.Warn or Color3.fromRGB(255, 214, 10)
+		refs.suspLabel.TextColor3 = investigating and (susp >= 70 and UI.Warn or UI.Ink) or Color3.fromRGB(110, 110, 125)
 
 		-- police
 		local eta = workspace:GetAttribute("PoliceETA")

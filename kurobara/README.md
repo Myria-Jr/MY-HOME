@@ -43,6 +43,9 @@ rojo build -o Kurobara.rbxl   # neue .rbxl bauen
 - **Waffen:** Box Cutter (Kunstraum), Kitchen Knife (Cafeteria + Zuhause), Baseball Bat (Turnhalle), Fire Axe (Glaskasten im Flur), Garden Shears (Gewächshaus). Jede Waffe hat ihre eigene Kill-Animation.
 - **Leichen:** ziehen (E), mit der Axt zerlegen (F), in Müllsäcke packen, im Verbrennungsofen verbrennen, im Garten vergraben (Schaufel) oder als Sack in den Container werfen.
 - **Spuren:** Blutlachen aufwischen (Mop), blutige Uniform duschen/verbrennen/wechseln, Waffen am Waschbecken waschen.
+- **Ryo Amamiya 🔍 (Gegenspieler):** Sobald jemand verschwindet, folgt er dir zwischen den Stunden und schreibt alles auf. Bei 100 % geht er zu den Lehrern. Er sieht Angriffe von vorne kommen, also nur von hinten.
+- **Mitschüler mit Persönlichkeit:** Gossips erzählen es sofort allen, Delinquents (weißes Hemd) sind schnell und haben keine Angst, Leute im Occult Club sind still. Alle haben Idle-Animationen und schauen dich an, wenn du nah kommst.
+- **Blut:** organische Lachen, die braun trocknen, blutige Fußabdrücke, Schleifspuren, Spritzer mit Zacken, Wand- und Deckentropfen, Blutklumpen (Extreme), Killcam mit Letterbox und Hitstop.
 - **Herzschlag (BPM) = Wahnsinn:** Kills treiben ihn hoch. Ab 140 zuckt Nyx, ab 175 lacht sie unkontrolliert. Nähe zu Haru und das Tagebuch zuhause beruhigen.
 - **NPCs:** *Cowards* rennen zum Tor, *Heroes* jagen dich, *Phone*-Leute filmen dich, **Lehrer kann man nicht besiegen**. Wenn Haru dich sieht, ist alles vorbei.
 - **Polizei:** kommt ca. 2,5 Minuten nach einem Anruf. Lebende Zeugen, Videos, Blut an dir oder eine blutige Waffe bedeuten Verhaftung.

@@ -72,6 +72,16 @@ function Combat.Attack(player: Player, tool: Tool)
 		Combat.TeacherCounter(player, st, target)
 		return
 	end
+	if target.def.persona == "Detective" and S.NPC.SeesPlayer(target) then
+		-- he saw it coming
+		st.Busy = true
+		S.Net.Anim(char, "Swing", "Action")
+		Util.playSound(Config.Sounds.Slash, hrp, 0.5, 1.1)
+		S.NPC.Dodge(target)
+		task.wait(0.6)
+		st.Busy = false
+		return
+	end
 	Combat.KillSequence(player, st, tool, def, target)
 end
 
@@ -126,6 +136,13 @@ function Combat.KillSequence(player: Player, st, tool: Tool, def, rec)
 	end
 
 	local hits = def.hits
+	if Config.Gore().KillCam then
+		task.delay(math.max(0, hits[#hits] - 0.45), function()
+			if vm.Parent then
+				S.Net.Screen(player, "KillCam", { attacker = char, victim = vm, duration = 1.35 })
+			end
+		end)
+	end
 	for i, t in hits do
 		task.delay(t, function()
 			if not vm.Parent then
@@ -140,6 +157,8 @@ function Combat.KillSequence(player: Player, st, tool: Tool, def, rec)
 				final = final,
 				blunt = def.blunt == true,
 				killer = player.UserId,
+				attacker = char,
+				victim = vm,
 			})
 			Util.playSound(Config.Sounds[def.sound] or Config.Sounds.Stab, vroot, 0.7, 0.85 + math.random() * 0.3)
 			Util.playSound(Config.Sounds.Splat, vroot, 0.5 + 0.2 * def.blood, 0.8 + math.random() * 0.4)

@@ -21,15 +21,18 @@ Config.GorePreset = "Extreme"
 Config.GorePresets = {
 	Extreme = {
 		Droplets = 1.0, Dismember = true, Arterial = true, ScreenBlood = true,
-		PoolScale = 1.0, MaxSplats = 520, WallDrips = true,
+		PoolScale = 1.0, MaxSplats = 1100, WallDrips = true,
+		Jets = true, Clots = true, Footprints = true, KillCam = true, Hitstop = true,
 	},
 	Restricted17 = {
 		Droplets = 0.75, Dismember = false, Arterial = true, ScreenBlood = true,
-		PoolScale = 0.9, MaxSplats = 360, WallDrips = true,
+		PoolScale = 0.9, MaxSplats = 700, WallDrips = true,
+		Jets = true, Clots = false, Footprints = true, KillCam = true, Hitstop = true,
 	},
 	Mild = {
 		Droplets = 0.25, Dismember = false, Arterial = false, ScreenBlood = false,
-		PoolScale = 0.5, MaxSplats = 80, WallDrips = false,
+		PoolScale = 0.5, MaxSplats = 120, WallDrips = false,
+		Jets = false, Clots = false, Footprints = false, KillCam = true, Hitstop = true,
 	},
 }
 
@@ -107,6 +110,14 @@ Config.NPC = {
 	HeroChaseSpeed = 18.5,
 	CatchDistance = 3.6,
 	ScreamRadius = 34,
+}
+
+Config.Detective = {
+	FollowDistance = 15,
+	WatchPerSecond = 0.55, -- suspicion while he watches you after someone went missing
+	Minor = 8, -- weapon / creepy
+	Major = 30, -- blood on you
+	NightDecay = 25,
 }
 
 Config.Police = {

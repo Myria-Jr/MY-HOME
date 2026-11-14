@@ -45,6 +45,16 @@ Story.Students = {
 	{ id = "Yuto", name = "Yuto Ishikawa", gender = "M", hair = "Short", hairColor = Color3.fromRGB(95, 65, 40), eyeColor = Color3.fromRGB(90, 70, 50), persona = "Coward", class = "1B", morning = "Courtyard", lunch = "Cafeteria", club = "Library" },
 	{ id = "Nanami", name = "Nanami Kuroe", gender = "F", hair = "Bob", hairColor = Color3.fromRGB(20, 60, 60), eyeColor = Color3.fromRGB(40, 160, 150), persona = "Coward", class = "1B", morning = "Fountain", lunch = "Courtyard", club = "Garden" },
 	{ id = "Riku", name = "Riku Hayama", gender = "M", hair = "Short", hairColor = Color3.fromRGB(55, 40, 30), eyeColor = Color3.fromRGB(80, 60, 45), persona = "Coward", class = "1B", morning = "Gate", lunch = "Cafeteria", club = "Cafeteria" },
+	-- the loud ones
+	{ id = "Kotone", name = "Kotone Mizuhara", gender = "F", hair = "Twintails", hairColor = Color3.fromRGB(250, 220, 140), eyeColor = Color3.fromRGB(70, 140, 230), persona = "Gossip", class = "2A", morning = "Lobby", lunch = "Cafeteria", club = "Music" },
+	{ id = "Yuna", name = "Yuna Shiraishi", gender = "F", hair = "Bob", hairColor = Color3.fromRGB(240, 150, 190), eyeColor = Color3.fromRGB(220, 90, 150), persona = "Gossip", class = "1B", morning = "Fountain", lunch = "Courtyard", club = "Art" },
+	-- delinquents: white shirts, no blazer, fast and not scared of you
+	{ id = "Daisuke", name = "Daisuke Kurokawa", gender = "M", hair = "Spiky", hairColor = Color3.fromRGB(235, 220, 170), eyeColor = Color3.fromRGB(150, 110, 50), persona = "Delinquent", class = "3A", morning = "Field", lunch = "Roof", club = "Field", top = Color3.fromRGB(236, 236, 240), height = 1.06 },
+	{ id = "Tetsu", name = "Tetsu Ogawa", gender = "M", hair = "Short", hairColor = Color3.fromRGB(220, 110, 40), eyeColor = Color3.fromRGB(120, 70, 30), persona = "Delinquent", class = "1B", morning = "Field", lunch = "Roof", club = "Gym", top = Color3.fromRGB(236, 236, 240), height = 1.03 },
+	-- occult club: pale, quiet, notices everything and tells no one
+	{ id = "Akane", name = "Akane Fujisaki", gender = "F", hair = "Long", hairColor = Color3.fromRGB(14, 12, 18), eyeColor = Color3.fromRGB(120, 60, 160), persona = "Coward", class = "1B", morning = "Library", lunch = "Roof", club = "Library", skin = Color3.fromRGB(246, 232, 228) },
+	-- the one who asks questions
+	{ id = "Ryo", name = "Ryo Amamiya", gender = "M", hair = "Messy", hairColor = Color3.fromRGB(30, 34, 56), eyeColor = Color3.fromRGB(150, 160, 180), glasses = true, prop = "Notebook", persona = "Detective", class = "2A", morning = "Lobby", lunch = "Cafeteria", club = "Library" },
 }
 
 Story.Haru = {
@@ -110,6 +120,22 @@ Story.Lines = {
 	Hero = { "STOP RIGHT THERE!", "You're not getting away!", "I've got you!" },
 	TeacherChase = { "AMANE! STOP!", "Don't move!", "Somebody call the police!" },
 	Haunted = { "Where is everyone…?", "Has anyone seen my friend?" },
+	Gossip = { "OMG did you SEE that?!", "Everyone's gonna hear about this.", "Nyx is SO weird, I'm telling everyone.", "Group chat. Now." },
+	Delinquent = { "You picked the wrong guy.", "Oi! Drop it!", "You're done, creep!" },
+	Detective = {
+		"Where were you during lunch, Nyx?",
+		"Interesting. Very interesting.",
+		"I'm writing this down.",
+		"People don't just disappear.",
+		"Your story keeps changing, you know.",
+		"Mystery Club rule one: the quiet ones always know something.",
+	},
+	DetectiveTalk = {
+		"Mystery Club meets in the library. We have one member. Me.",
+		"Did you know the black roses only grew after the old incinerator was built?",
+		"You look like someone who keeps secrets. I like that. Professionally.",
+	},
+	Dodge = { "I KNEW IT!", "Nice try.", "Not today, Amane!" },
 }
 
 Story.Objectives = {
@@ -166,6 +192,10 @@ Story.Notes = {
 	{
 		title = "Haru Seto · 3-A",
 		body = "Mornings by the fountain, reading.\nLunch on the rooftop.\nAfter school in the library.\nBeing near him slows your heartbeat.\nTalking to him raises his affection.",
+	},
+	{
+		title = "Ryo Amamiya · 2-A",
+		body = "Mystery Club. Sits right behind you.\nOnce someone goes missing, he starts following you.\nWatch the 🔍 meter. At 100 he goes to the teachers.\nHe sees attacks coming — only from behind.",
 	},
 	{
 		title = "Rules of the game",

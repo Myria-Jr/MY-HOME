@@ -131,6 +131,69 @@ function Mood.HitShake(power: number)
 	Mood.Shake(0.35 * (power or 1), 0.25)
 end
 
+-- Cinematic killcam: letterbox bars, a slow side dolly with a dutch tilt, then back to normal
+local killcamActive = false
+function Mood.KillCam(d)
+	if killcamActive or not Config.Gore().KillCam then
+		return
+	end
+	local attacker, victim = d.attacker, d.victim
+	local aRoot = attacker and attacker:FindFirstChild("HumanoidRootPart")
+	local vRoot = victim and victim:FindFirstChild("HumanoidRootPart")
+	if not (aRoot and vRoot) then
+		return
+	end
+	killcamActive = true
+	local cam = workspace.CurrentCamera
+	local duration = d.duration or 1.4
+	local bars = {}
+	for i, y in { 0, 1 } do
+		local b = Instance.new("Frame")
+		b.AnchorPoint = Vector2.new(0, y)
+		b.Position = UDim2.fromScale(0, y)
+		b.Size = UDim2.fromScale(1, 0)
+		b.BackgroundColor3 = Color3.new(0, 0, 0)
+		b.BorderSizePixel = 0
+		b.ZIndex = 10
+		b.Parent = gui
+		tween(b, 0.25, { Size = UDim2.fromScale(1, 0.11) })
+		bars[i] = b
+	end
+	local a, v = aRoot.Position, vRoot.Position
+	local dir = Vector3.new(v.X - a.X, 0, v.Z - a.Z)
+	dir = dir.Magnitude > 0.1 and dir.Unit or Vector3.zAxis
+	local side = Vector3.new(-dir.Z, 0, dir.X) * (math.random() < 0.5 and 1 or -1)
+	local mid = (a + v) / 2 + Vector3.new(0, 0.4, 0)
+	local from = mid + side * 7.5 + Vector3.new(0, 0.6, 0) - dir * 2
+	local to = mid + side * 5 + Vector3.new(0, 1.2, 0) + dir * 0.8
+	local tilt = math.random() < 0.5 and 1 or -1
+	cam.CameraType = Enum.CameraType.Scriptable
+	local t0 = os.clock()
+	local conn
+	conn = RunService.RenderStepped:Connect(function()
+		local k = math.clamp((os.clock() - t0) / duration, 0, 1)
+		local e = 1 - (1 - k) ^ 3
+		local focus = (aRoot.Position + vRoot.Position) / 2 + Vector3.new(0, 0.4, 0)
+		cam.CFrame = CFrame.lookAt(from:Lerp(to, e), focus) * CFrame.Angles(0, 0, math.rad(tilt * (8 - 6 * e)))
+		if k >= 1 then
+			conn:Disconnect()
+			cam.CameraType = Enum.CameraType.Custom
+			local char = player.Character
+			local hum = char and char:FindFirstChildOfClass("Humanoid")
+			if hum then
+				cam.CameraSubject = hum
+			end
+			for _, b in bars do
+				tween(b, 0.3, { Size = UDim2.fromScale(1, 0) })
+				task.delay(0.35, function()
+					b:Destroy()
+				end)
+			end
+			killcamActive = false
+		end
+	end)
+end
+
 function Mood.Flash()
 	flashFrame.BackgroundTransparency = 0.05
 	tween(flashFrame, 0.6, { BackgroundTransparency = 1 })
@@ -169,6 +232,13 @@ function Mood.ScreenBlood(intensity: number)
 		g.Rotation = math.random(0, 360)
 		g.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(150, 150, 150))
 		g.Parent = f
+		if big or d > 40 then
+			local rim = Instance.new("UIStroke")
+			rim.Color = Config.Blood.Dark
+			rim.Thickness = math.max(2, d * 0.05)
+			rim.Transparency = 0.25
+			rim.Parent = f
+		end
 		f.Parent = bloodLayer
 		-- drip
 		if math.random() < 0.6 then
