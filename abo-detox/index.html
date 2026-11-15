@@ -515,8 +515,25 @@
   function spend(units) { const q = quotaState(); q.u += units; store.set('aboDetox.quota', JSON.stringify(q)); renderQuota(); }
   function renderQuota() {
     const left = Math.max(0, Math.floor((10000 - quotaState().u) / 50));
-    $('quota').textContent = `≈ ${left} frei`;
+    $('quota').textContent = left ? `≈ ${left} frei` : `0 frei · ab ${resetTime()}`;
   }
+  // Google resets the quota at midnight Pacific time → show that in local time
+  function resetTime() {
+    const now = new Date();
+    const pt = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(now).split(':').map(Number);
+    const msLeft = (86400 - (pt[0] * 3600 + pt[1] * 60 + pt[2])) * 1000;
+    return new Date(now.getTime() + msLeft).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  }
+  const isQuota = (e) => e && (e.reason === 'quotaExceeded' || e.reason === 'dailyLimitExceeded' || e.reason === 'rateLimitExceeded' || (e.status === 403 && /quota/i.test(e.message || '')));
+  function markQuotaFull() { const q = quotaState(); q.u = Math.max(q.u, 10000); store.set('aboDetox.quota', JSON.stringify(q)); renderQuota(); }
+
+  /* ================= remembered lists + selections (survive app restarts) ================= */
+  const memo = {
+    loadSel(v) { try { return new Set(JSON.parse(store.get('aboDetox.sel.' + v.key) || '[]')); } catch { return new Set(); } },
+    saveSel(v) { store.set('aboDetox.sel.' + v.key, JSON.stringify([...v.sel])); },
+    loadItems(v) { try { return JSON.parse(store.get('aboDetox.items.' + v.key) || 'null'); } catch { return null; } },
+    saveItems(v) { if (v.items) store.set('aboDetox.items.' + v.key, JSON.stringify(v.items)); },
+  };
 
   /* ================= auth ================= */
   let token = null, pendingToken = null, gisLoaded = null;
@@ -641,7 +658,7 @@
       afterDelete(n) { pl.count = Math.max(0, (pl.count || 0) - n); pl.sub = `${fmt(pl.count)} Videos`; },
     };
   }
-  for (const v of Object.values(views)) { v.items = null; v.sel = new Set(); }
+  for (const [k, v] of Object.entries(views)) { v.key = k; v.items = null; v.sel = new Set(); }
 
   let current = 'subs';   // key into views
   let detail = null;      // playlist sub-view (not in views map)
@@ -655,7 +672,7 @@
     await ensureLoaded(cur());
   }
   async function openPlaylist(pl) {
-    detail = playlistView(pl); detail.items = null; detail.sel = new Set();
+    detail = playlistView(pl); detail.key = 'pl.' + pl.id; detail.items = null; detail.sel = new Set();
     $('search').value = '';
     window.scrollTo({ top: 0 });
     await ensureLoaded(detail);
@@ -670,13 +687,26 @@
     content.append(loader, txt);
     try {
       v.items = await v.load((n) => { txt.textContent = `${fmt(n)} geladen …`; });
+      memo.saveItems(v);
     } catch (e) {
-      v.items = null;
-      content.textContent = '';
-      const box = el('div', 'empty'); box.append(icon('close'), el('div', '', 'Laden fehlgeschlagen: ' + e.message));
-      content.append(box);
-      return;
+      const cached = memo.loadItems(v);
+      if (isQuota(e)) markQuotaFull();
+      if (cached) {
+        // Quota full / offline: keep working with the last known list so the selection can still be edited
+        v.items = cached;
+        snack(isQuota(e) ? `Tageslimit voll. Du siehst die gespeicherte Liste, löschen geht wieder ab ${resetTime()}.` : 'Konnte nicht neu laden, zeige die gespeicherte Liste.', 7000);
+      } else {
+        v.items = null;
+        content.textContent = '';
+        const box = el('div', 'empty');
+        box.append(icon('close'), el('div', '', isQuota(e) ? `Google-Tageslimit ist voll. Ab ${resetTime()} Uhr geht's weiter.` : 'Laden fehlgeschlagen: ' + e.message));
+        content.append(box);
+        return;
+      }
     }
+    // restore what was marked last time (only ids that still exist)
+    const ids = new Set(v.items.map((x) => x.id));
+    for (const id of memo.loadSel(v)) if (ids.has(id)) v.sel.add(id);
     if (cur() === v) render();
   }
   function renderChrome() {
@@ -750,6 +780,7 @@
   function toggle(node) {
     const v = cur(); const id = node.dataset.id;
     v.sel.has(id) ? v.sel.delete(id) : v.sel.add(id);
+    memo.saveSel(v);
     node.classList.toggle('sel', v.sel.has(id));
     if (node.getAttribute('role') === 'checkbox') node.setAttribute('aria-checked', v.sel.has(id));
     if (navigator.vibrate) try { navigator.vibrate(8); } catch {}
@@ -796,16 +827,19 @@
         if (DEMO) await sleep(160); else await v.del(it);
         done++; removeItem(v, it);
       } catch (e) {
-        if (e.reason === 'quotaExceeded' || e.reason === 'rateLimitExceeded' || (e.status === 403 && /quota/i.test(e.message))) { quotaHit = true; break; }
+        if (isQuota(e)) { quotaHit = true; break; }
         if (e.status === 404) { done++; removeItem(v, it); }
         else { failed++; console.warn('Fehler bei', it, e); }
       }
       step();
     }
     v.afterDelete?.(done);
+    memo.saveSel(v); memo.saveItems(v);
+    if (v.afterDelete && views.playlists.items) memo.saveItems(views.playlists);
+    if (quotaHit) markQuotaFull();
     running = false; progress = 1; drawWave();
     setTimeout(() => { closeDialog(); render(); }, 350);
-    if (quotaHit) snack(`Google-Tageslimit erreicht nach ${done}. Morgen geht's weiter, die Auswahl bleibt.`, 8000);
+    if (quotaHit) snack(`Tageslimit erreicht nach ${fmt(done)}. Deine Auswahl ist gespeichert, ab ${resetTime()} Uhr einfach weitermachen.`, 9000);
     else if (stopRequested) snack(`Gestoppt. ${fmt(done)} erledigt.`);
     else snack(failed ? `${fmt(done)} erledigt, ${failed} hakten. Nochmal versuchen?` : `${fmt(done)} weg. Ahh, frische Luft. ✨`);
   }
@@ -866,6 +900,7 @@
     if (act === 'all') ids.forEach((id) => v.sel.add(id));
     if (act === 'none') ids.forEach((id) => v.sel.delete(id));
     if (act === 'invert') ids.forEach((id) => v.sel.has(id) ? v.sel.delete(id) : v.sel.add(id));
+    memo.saveSel(v);
     render();
   });
   $('fab').addEventListener('click', openDialog);
@@ -880,7 +915,6 @@
   window.__onBack = () => {
     if ($('scrim').classList.contains('show')) { if (!running) closeDialog(); return true; }
     if (detail) { $('back').click(); return true; }
-    if (cur().sel?.size) { cur().sel.clear(); render(); return true; }
     if (!$('app').classList.contains('hidden') && current !== 'subs') { show('subs'); return true; }
     return false;
   };
