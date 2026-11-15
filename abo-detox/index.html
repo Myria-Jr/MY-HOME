@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Abo Detox</title>
+<meta name="description" content="YouTube-Abos in einem Rutsch aufräumen.">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  :root {
+    --bg: #f2f2f7;
+    --ink: #1c1c1e;
+    --ink-2: #6e6e73;
+    --glass: rgba(255,255,255,.55);
+    --glass-strong: rgba(255,255,255,.78);
+    --stroke: rgba(255,255,255,.7);
+    --stroke-soft: rgba(0,0,0,.06);
+    --shadow: 0 8px 32px rgba(30,30,60,.10), 0 1px 0 rgba(255,255,255,.6) inset;
+    --accent: #0a84ff;
+    --danger: #ff3b30;
+    --danger-tint: rgba(255,59,48,.12);
+    --blob-1: #ff9ec7;
+    --blob-2: #8ec5ff;
+    --blob-3: #c6a8ff;
+    --radius: 22px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #000;
+      --ink: #f5f5f7;
+      --ink-2: #98989f;
+      --glass: rgba(40,40,46,.50);
+      --glass-strong: rgba(44,44,50,.80);
+      --stroke: rgba(255,255,255,.12);
+      --stroke-soft: rgba(255,255,255,.06);
+      --shadow: 0 8px 32px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.08) inset;
+      --danger-tint: rgba(255,69,58,.18);
+      --blob-1: #7a2350;
+      --blob-2: #163e75;
+      --blob-3: #3d2577;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* drifting colour blobs behind the glass */
+  .ambient { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+  .ambient i {
+    position: absolute; width: 55vmax; height: 55vmax; border-radius: 50%;
+    filter: blur(80px); opacity: .55;
+    animation: drift 26s ease-in-out infinite alternate;
+  }
+  .ambient i:nth-child(1) { background: var(--blob-1); top: -20vmax; left: -15vmax; }
+  .ambient i:nth-child(2) { background: var(--blob-2); bottom: -25vmax; right: -15vmax; animation-delay: -9s; }
+  .ambient i:nth-child(3) { background: var(--blob-3); top: 30%; left: 40%; width: 35vmax; height: 35vmax; animation-delay: -17s; }
+  @keyframes drift { to { transform: translate(6vmax, -4vmax) scale(1.1); } }
+  @media (prefers-reduced-motion: reduce) { .ambient i { animation: none; } }
+
+  .glass {
+    background: var(--glass);
+    backdrop-filter: blur(28px) saturate(180%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%);
+    border: 1px solid var(--stroke);
+    box-shadow: var(--shadow);
+    border-radius: var(--radius);
+  }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 16px 120px; }
+
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+    background: linear-gradient(145deg, #ff5f6d, #ff2d55); color: #fff;
+    box-shadow: 0 6px 18px rgba(255,45,85,.35), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  h1 { font-size: 22px; letter-spacing: -.02em; margin: 0; font-weight: 700; }
+  .sub { color: var(--ink-2); font-size: 13px; margin: 0; }
+
+  button {
+    font: inherit; border: 0; cursor: pointer; color: var(--ink);
+    border-radius: 999px; padding: 9px 16px; font-weight: 590;
+    transition: transform .15s ease, background .2s ease, opacity .2s;
+  }
+  button:active { transform: scale(.96); }
+  button:disabled { opacity: .45; cursor: default; transform: none; }
+  .btn-glass { background: var(--glass-strong); border: 1px solid var(--stroke); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; box-shadow: 0 8px 22px rgba(255,59,48,.35); }
+
+  /* setup card */
+  .setup { padding: 22px; margin-bottom: 18px; }
+  .setup h2 { margin: 0 0 6px; font-size: 17px; letter-spacing: -.01em; }
+  .setup p { margin: 0 0 14px; color: var(--ink-2); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  input[type="text"], input[type="search"] {
+    font: inherit; color: var(--ink);
+    background: var(--glass-strong); border: 1px solid var(--stroke-soft);
+    border-radius: 12px; padding: 10px 14px; outline: none; min-width: 0; flex: 1;
+  }
+  input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(10,132,255,.18); }
+  details { margin-top: 14px; }
+  summary { cursor: pointer; color: var(--accent); font-weight: 590; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  ol { padding-left: 20px; margin: 10px 0 0; color: var(--ink-2); }
+  ol li { margin-bottom: 6px; }
+  code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(--stroke-soft); padding: 2px 6px; border-radius: 6px; color: var(--ink); }
+
+  /* toolbar */
+  .toolbar {
+    position: sticky; top: 12px; z-index: 5;
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    padding: 10px; margin-bottom: 16px;
+  }
+  .toolbar input { flex: 1 1 180px; }
+  .seg { display: flex; gap: 6px; }
+  .count { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 13px; padding: 0 6px; white-space: nowrap; }
+
+  /* grid of channels */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+  .card {
+    position: relative; padding: 16px 12px 14px; text-align: center; cursor: pointer;
+    border-radius: 20px; user-select: none;
+    transition: transform .18s cubic-bezier(.2,.9,.3,1.2), background .2s, border-color .2s, opacity .3s;
+  }
+  .card:hover { transform: translateY(-2px); }
+  .card:active { transform: scale(.97); }
+  .card img {
+    width: 64px; height: 64px; border-radius: 50%; display: block; margin: 0 auto 10px;
+    object-fit: cover; background: var(--stroke-soft);
+    transition: filter .2s;
+  }
+  .card .name {
+    font-size: 13.5px; font-weight: 590; line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .card .tick {
+    position: absolute; top: 10px; right: 10px; width: 22px; height: 22px; border-radius: 50%;
+    border: 1.5px solid var(--ink-2); opacity: .45; display: grid; place-items: center;
+    transition: all .2s;
+  }
+  .card .tick svg { opacity: 0; transform: scale(.5); transition: all .2s; }
+  .card.sel { background: var(--danger-tint); border-color: rgba(255,59,48,.45); }
+  .card.sel img { filter: grayscale(.85) opacity(.7); }
+  .card.sel .tick { background: var(--danger); border-color: var(--danger); opacity: 1; }
+  .card.sel .tick svg { opacity: 1; transform: scale(1); }
+  .card.gone { opacity: 0; transform: scale(.85); pointer-events: none; }
+  .card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+  .empty { text-align: center; color: var(--ink-2); padding: 60px 20px; }
+
+  /* bottom action pill */
+  .dock {
+    position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom));
+    transform: translate(-50%, 140%); transition: transform .35s cubic-bezier(.2,.9,.3,1.1);
+    display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 18px; border-radius: 999px;
+    z-index: 10; max-width: calc(100% - 32px);
+  }
+  .dock.show { transform: translate(-50%, 0); }
+  .dock span { font-weight: 590; white-space: nowrap; }
+
+  /* modal sheet */
+  .scrim {
+    position: fixed; inset: 0; background: rgba(0,0,0,.28); z-index: 20;
+    display: grid; place-items: center; padding: 16px;
+    opacity: 0; pointer-events: none; transition: opacity .25s;
+  }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+  .sheet { width: 100%; max-width: 400px; padding: 24px; text-align: center; background: var(--glass-strong);
+    transform: scale(.94); transition: transform .3s cubic-bezier(.2,.9,.3,1.2); }
+  .scrim.show .sheet { transform: scale(1); }
+  .sheet h3 { margin: 0 0 6px; font-size: 18px; letter-spacing: -.01em; }
+  .sheet p { margin: 0 0 18px; color: var(--ink-2); }
+  .sheet .row { justify-content: center; }
+  .bar { height: 8px; border-radius: 99px; background: var(--stroke-soft); overflow: hidden; margin: 6px 0 12px; }
+  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ff5f6d, #ff2d55); border-radius: inherit; transition: width .25s; }
+
+  .toast {
+    position: fixed; top: 16px; left: 50%; transform: translate(-50%, -150%);
+    padding: 12px 18px; border-radius: 16px; z-index: 30; font-weight: 590; max-width: calc(100% - 32px);
+    transition: transform .35s cubic-bezier(.2,.9,.3,1.1);
+  }
+  .toast.show { transform: translate(-50%, 0); }
+
+  .hidden { display: none !important; }
+
+  @media (max-width: 520px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+    .card img { width: 54px; height: 54px; }
+    h1 { font-size: 20px; }
+  }
+</style>
+</head>
+<body>
+<div class="ambient"><i></i><i></i><i></i></div>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+      </div>
+      <div>
+        <h1>Abo Detox</h1>
+        <p class="sub">YouTube-Abos aufräumen. Ohne 200× klicken.</p>
+      </div>
+    </div>
+    <button id="signout" class="btn-glass hidden">Abmelden</button>
+  </header>
+
+  <!-- Step 1: setup + login -->
+  <section id="setup" class="setup glass">
+    <h2>Mit YouTube verbinden</h2>
+    <p>Füg einmalig deine Google OAuth Client-ID ein. Sie bleibt nur in diesem Browser gespeichert.</p>
+    <div class="row">
+      <input id="clientId" type="text" placeholder="123456-abc.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
+      <button id="login" class="btn-primary">Anmelden &amp; laden</button>
+    </div>
+    <details>
+      <summary>Woher krieg ich die Client-ID? (5 Min.)</summary>
+      <ol>
+        <li><a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud Console</a> → neues Projekt anlegen.</li>
+        <li><a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">YouTube Data API v3</a> aktivieren.</li>
+        <li><b>OAuth-Zustimmungsbildschirm</b>: Typ „Extern“, Status „Testen“, und deine eigene Google-Adresse als <b>Testnutzer</b> eintragen.</li>
+        <li><b>Anmeldedaten → OAuth-Client-ID</b> → Typ „Webanwendung“. Bei „Autorisierte JavaScript-Quellen“ diese Adresse eintragen: <code id="originHint"></code></li>
+        <li>Client-ID kopieren, hier einfügen, fertig. Beim Login warnt Google „App nicht verifiziert“ → „Weiter“ (ist ja deine eigene).</li>
+      </ol>
+    </details>
+  </section>
+
+  <!-- Step 2: the list -->
+  <section id="app" class="hidden">
+    <div class="toolbar glass">
+      <input id="search" type="search" placeholder="Kanal suchen …">
+      <div class="seg">
+        <button class="btn-glass" data-act="all">Alle</button>
+        <button class="btn-glass" data-act="none">Keine</button>
+        <button class="btn-glass" data-act="invert">Umkehren</button>
+      </div>
+      <span id="count" class="count"></span>
+    </div>
+    <div id="grid" class="grid"></div>
+    <div id="empty" class="empty hidden">Nix gefunden.</div>
+  </section>
+
+  <div id="loading" class="empty hidden">Lade deine Abos …</div>
+</div>
+
+<div id="dock" class="dock glass">
+  <span id="dockText"></span>
+  <button id="go" class="btn-danger">Entabonnieren</button>
+</div>
+
+<div id="scrim" class="scrim">
+  <div class="sheet glass" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div id="confirmView">
+      <h3 id="sheetTitle"></h3>
+      <p>Die Abos sind danach weg. Wieder abonnieren geht natürlich, aber halt einzeln.</p>
+      <div class="row">
+        <button id="cancel" class="btn-glass">Abbrechen</button>
+        <button id="confirm" class="btn-danger">Weg damit</button>
+      </div>
+    </div>
+    <div id="progressView" class="hidden">
+      <h3>Wird aufgeräumt …</h3>
+      <div class="bar"><i id="barFill"></i></div>
+      <p id="progressText" style="margin:0 0 14px"></p>
+      <button id="stop" class="btn-glass">Stopp</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast glass"></div>
+
+<script>
+(() => {
+  const SCOPE = 'https://www.googleapis.com/auth/youtube';
+  const API = 'https://www.googleapis.com/youtube/v3/subscriptions';
+  const DEMO = new URLSearchParams(location.search).has('demo');
+
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  let token = null;
+  let tokenClient = null;
+  let subs = [];               // { id, channelId, title, thumb }
+  const selected = new Set();  // subscription ids
+  let stopRequested = false;
+
+  $('originHint').textContent = location.origin;
+  $('clientId').value = store.get('aboDetox.clientId') || '';
+
+  // ---------- toast ----------
+  let toastTimer;
+  function toast(msg, ms = 3200) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+  }
+
+  // ---------- auth ----------
+  function getToken(prompt = '') {
+    return new Promise((resolve, reject) => {
+      if (!window.google?.accounts?.oauth2) return reject(new Error('Google-Login lädt noch, kurz warten.'));
+      const clientId = $('clientId').value.trim();
+      if (!clientId) return reject(new Error('Erst die Client-ID einfügen.'));
+      store.set('aboDetox.clientId', clientId);
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: SCOPE,
+        callback: (resp) => {
+          if (resp.error) return reject(new Error(resp.error_description || resp.error));
+          token = resp.access_token;
+          resolve(token);
+        },
+        error_callback: (err) => reject(new Error(err?.message || 'Login abgebrochen.')),
+      });
+      tokenClient.requestAccessToken({ prompt });
+    });
+  }
+
+  async function api(url, opts = {}, retried = false) {
+    const res = await fetch(url, { ...opts, headers: { Authorization: 'Bearer ' + token, ...(opts.headers || {}) } });
+    if (res.status === 401 && !retried) {
+      await getToken('');
+      return api(url, opts, true);
+    }
+    if (!res.ok) {
+      let reason = '', message = res.statusText;
+      try {
+        const body = await res.json();
+        reason = body.error?.errors?.[0]?.reason || '';
+        message = body.error?.message || message;
+      } catch {}
+      const e = new Error(message);
+      e.reason = reason;
+      e.status = res.status;
+      throw e;
+    }
+    return res.status === 204 ? null : res.json();
+  }
+
+  // ---------- data ----------
+  async function loadSubs() {
+    subs = [];
+    selected.clear();
+    $('setup').classList.add('hidden');
+    $('loading').classList.remove('hidden');
+
+    if (DEMO) {
+      const names = ['Kurzgesagt', 'Alan Becker', 'Jaiden Animations', 'Czech Lessons', 'Random Prank TV', 'Unboxing Daily', 'Lofi Girl', 'Old Minecraft Guy', 'Clickbait Central', 'Animation Mentor', 'Song Exploder', 'Česky snadno', '10 Hour Loops', 'Reaction Reactions', 'Tech Rumors 24/7', 'Apple'];
+      subs = names.map((title, i) => ({ id: 'demo' + i, channelId: 'c' + i, title,
+        thumb: `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="hsl(${i * 47 % 360} 70% 60%)"/><text x="32" y="41" font-size="26" text-anchor="middle" fill="#fff" font-family="sans-serif">${title[0]}</text></svg>`)}` }));
+    } else {
+      let pageToken = '';
+      do {
+        const url = `${API}?part=snippet&mine=true&maxResults=50&order=alphabetical${pageToken ? '&pageToken=' + pageToken : ''}`;
+        const data = await api(url);
+        for (const it of data.items || []) {
+          subs.push({
+            id: it.id,
+            channelId: it.snippet.resourceId.channelId,
+            title: it.snippet.title,
+            thumb: it.snippet.thumbnails?.medium?.url || it.snippet.thumbnails?.default?.url || '',
+          });
+        }
+        pageToken = data.nextPageToken || '';
+        $('loading').textContent = `Lade deine Abos … ${subs.length}`;
+      } while (pageToken);
+    }
+
+    $('loading').classList.add('hidden');
+    $('loading').textContent = 'Lade deine Abos …';
+    $('app').classList.remove('hidden');
+    $('signout').classList.remove('hidden');
+    render();
+    toast(subs.length ? `${subs.length} Abos gefunden. Rot = fliegt raus.` : 'Du hast keine Abos. Detox schon erledigt?');
+  }
+
+  // ---------- render ----------
+  const tickSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>';
+
+  function render() {
+    const grid = $('grid');
+    grid.textContent = '';
+    const q = $('search').value.trim().toLowerCase();
+    const list = subs.filter((s) => !q || s.title.toLowerCase().includes(q));
+    const frag = document.createDocumentFragment();
+    for (const s of list) {
+      const card = document.createElement('div');
+      card.className = 'card glass' + (selected.has(s.id) ? ' sel' : '');
+      card.tabIndex = 0;
+      card.dataset.id = s.id;
+      card.setAttribute('role', 'checkbox');
+      card.setAttribute('aria-checked', selected.has(s.id));
+
+      const tick = document.createElement('div');
+      tick.className = 'tick';
+      tick.innerHTML = tickSvg;
+
+      const img = document.createElement('img');
+      img.loading = 'lazy';
+      img.alt = '';
+      img.referrerPolicy = 'no-referrer';
+      img.src = s.thumb;
+
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = s.title; // textContent = no HTML injection from channel names
+
+      card.append(tick, img, name);
+      frag.append(card);
+    }
+    grid.append(frag);
+    $('empty').classList.toggle('hidden', list.length > 0 || subs.length === 0);
+    updateCounts();
+  }
+
+  function visibleIds() {
+    return [...$('grid').querySelectorAll('.card')].map((c) => c.dataset.id);
+  }
+
+  function updateCounts() {
+    const n = selected.size;
+    $('count').textContent = `${n} / ${subs.length} markiert`;
+    $('dockText').textContent = `${n} ${n === 1 ? 'Kanal' : 'Kanäle'}`;
+    $('dock').classList.toggle('show', n > 0);
+  }
+
+  function toggle(card) {
+    const id = card.dataset.id;
+    selected.has(id) ? selected.delete(id) : selected.add(id);
+    card.classList.toggle('sel', selected.has(id));
+    card.setAttribute('aria-checked', selected.has(id));
+    updateCounts();
+  }
+
+  // ---------- delete ----------
+  async function runDelete() {
+    const ids = [...selected];
+    stopRequested = false;
+    $('confirmView').classList.add('hidden');
+    $('progressView').classList.remove('hidden');
+    let done = 0, failed = 0, quotaHit = false;
+
+    const step = () => {
+      $('barFill').style.width = `${((done + failed) / ids.length) * 100}%`;
+      $('progressText').textContent = `${done} von ${ids.length} entabonniert` + (failed ? ` · ${failed} Fehler` : '');
+    };
+    step();
+
+    for (const id of ids) {
+      if (stopRequested) break;
+      try {
+        if (DEMO) await new Promise((r) => setTimeout(r, 180));
+        else await api(`${API}?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+        done++;
+        selected.delete(id);
+        subs = subs.filter((s) => s.id !== id);
+        const card = $('grid').querySelector(`[data-id="${CSS.escape(id)}"]`);
+        if (card) { card.classList.add('gone'); setTimeout(() => card.remove(), 300); }
+      } catch (e) {
+        if (e.reason === 'quotaExceeded' || e.reason === 'rateLimitExceeded' || e.status === 403 && /quota/i.test(e.message)) {
+          quotaHit = true;
+          break;
+        }
+        if (e.status === 404) { // already gone
+          done++; selected.delete(id); subs = subs.filter((s) => s.id !== id);
+        } else {
+          failed++;
+          console.warn('Delete failed', id, e);
+        }
+      }
+      step();
+    }
+
+    closeSheet();
+    setTimeout(render, 320);
+    if (quotaHit) toast(`Google-Tageslimit erreicht nach ${done}. Morgen weitermachen, die Auswahl bleibt bis zum Neuladen.`, 7000);
+    else if (stopRequested) toast(`Gestoppt. ${done} entabonniert.`);
+    else toast(failed ? `${done} weg, ${failed} hakten. Nochmal probieren?` : `${done} Abos weg. Ahh, frische Luft.`);
+  }
+
+  function openSheet() {
+    const n = selected.size;
+    $('sheetTitle').textContent = `${n} ${n === 1 ? 'Kanal' : 'Kanäle'} entabonnieren?`;
+    $('confirmView').classList.remove('hidden');
+    $('progressView').classList.add('hidden');
+    $('barFill').style.width = '0';
+    $('scrim').classList.add('show');
+    $('confirm').focus();
+  }
+  function closeSheet() { $('scrim').classList.remove('show'); }
+
+  // ---------- events ----------
+  $('login').addEventListener('click', async () => {
+    try {
+      if (!DEMO) await getToken('consent');
+      await loadSubs();
+    } catch (e) {
+      $('loading').classList.add('hidden');
+      $('setup').classList.remove('hidden');
+      toast(e.message || 'Das ging schief.', 6000);
+    }
+  });
+
+  $('signout').addEventListener('click', () => {
+    if (token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(token, () => {});
+    token = null; subs = []; selected.clear();
+    $('app').classList.add('hidden');
+    $('signout').classList.add('hidden');
+    $('setup').classList.remove('hidden');
+    updateCounts();
+  });
+
+  $('grid').addEventListener('click', (e) => {
+    const card = e.target.closest('.card');
+    if (card) toggle(card);
+  });
+  $('grid').addEventListener('keydown', (e) => {
+    if ((e.key === ' ' || e.key === 'Enter') && e.target.classList.contains('card')) {
+      e.preventDefault(); toggle(e.target);
+    }
+  });
+
+  $('search').addEventListener('input', render);
+
+  document.querySelector('.seg').addEventListener('click', (e) => {
+    const act = e.target.dataset.act;
+    if (!act) return;
+    const ids = visibleIds(); // acts on what's currently shown (respects search)
+    if (act === 'all') ids.forEach((id) => selected.add(id));
+    if (act === 'none') ids.forEach((id) => selected.delete(id));
+    if (act === 'invert') ids.forEach((id) => selected.has(id) ? selected.delete(id) : selected.add(id));
+    render();
+  });
+
+  $('go').addEventListener('click', openSheet);
+  $('cancel').addEventListener('click', closeSheet);
+  $('confirm').addEventListener('click', runDelete);
+  $('stop').addEventListener('click', () => { stopRequested = true; });
+  $('scrim').addEventListener('click', (e) => {
+    if (e.target === $('scrim') && !$('confirmView').classList.contains('hidden')) closeSheet();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('confirmView').classList.contains('hidden')) closeSheet();
+  });
+
+  if (DEMO) { $('clientId').value = 'demo'; $('login').textContent = 'Demo starten'; }
+})();
+</script>
+</body>
+</html>
