@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,25..151,100..1000&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&icon_names=arrow_back,check,chevron_right,close,delete,deselect,done_all,flip,logout,playlist_play,search,subscriptions,thumb_up,video_library&display=block">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&icon_names=arrow_back,check,chevron_right,close,delete,deselect,done_all,flip,history,logout,playlist_play,search,subscriptions,thumb_up,undo,video_library&display=block">
 <style>
   /* ============ Material 3 colour roles (baseline, overridden by Android dynamic colour) ============ */
   :root {
@@ -132,6 +132,24 @@
   .bgroup button:last-child { border-radius: 8px 22px 22px 8px; }
   .bgroup button:active { border-radius: 22px; transform: scaleX(1.04); }
   .bgroup .ms { font-size: 20px; }
+  /* filter chips (sort) */
+  .chips { display: flex; gap: 8px; overflow-x: auto; margin: -4px -16px 14px; padding: 0 16px; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips button {
+    flex: none; height: 32px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--outline-variant);
+    display: inline-flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--on-surface-variant);
+    transition: border-radius .4s var(--spring), background .2s, padding .3s var(--spring);
+  }
+  .chips button .ms { font-size: 18px; width: 0; overflow: hidden; transition: width .3s var(--spring); }
+  .chips button[aria-pressed="true"] { background: var(--secondary-container); color: var(--on-secondary-container); border-color: transparent; border-radius: 16px; padding-left: 10px; }
+  .chips button[aria-pressed="true"] .ms { width: 18px; }
+  .tile .since { font-size: 12px; color: var(--on-surface-variant); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .tile.sel .since { color: inherit; opacity: .75; }
+  .restore .row.sel { background: var(--primary-container); color: var(--on-primary-container); }
+  .restore .badge { background: var(--primary); color: var(--on-primary); }
+  .fab.restore { background: var(--primary-container); color: var(--on-primary-container); }
+  .dialog .dicon.restore { color: var(--primary); }
+  .btn-err.restore { background: var(--primary); color: var(--on-primary); }
   .count-line { color: var(--on-surface-variant); font-size: 14px; margin: -6px 4px 14px; font-variant-numeric: tabular-nums; }
 
   /* ============ channel grid ============ */
@@ -341,6 +359,8 @@
     transition: transform .45s var(--spring), opacity .2s;
   }
   .snack.show { transform: none; opacity: 1; }
+  .fab.show ~ .snack { bottom: calc(var(--nav-h) + var(--inset-bottom) + 96px); }
+  @media (min-width: 840px) { .fab.show ~ .snack { bottom: 104px; } }
   @media (min-width: 840px) { .snack { bottom: 24px; } }
 
   @media (max-width: 420px) {
@@ -362,6 +382,7 @@
   <button data-view="subs" class="sl"><span class="ind"><span class="ms">subscriptions</span></span>Abos</button>
   <button data-view="playlists" class="sl"><span class="ind"><span class="ms">video_library</span></span>Playlists</button>
   <button data-view="likes" class="sl"><span class="ind"><span class="ms">thumb_up</span></span>Likes</button>
+  <button data-view="history" class="sl"><span class="ind"><span class="ms">history</span></span>Verlauf</button>
 </nav>
 
 <div class="main">
@@ -415,6 +436,12 @@
       <button class="sl" data-act="none"><span class="ms">deselect</span>Keine</button>
       <button class="sl" data-act="invert"><span class="ms">flip</span>Umkehren</button>
     </div>
+    <div class="chips" id="chips" role="group" aria-label="Sortieren">
+      <button data-sort="std"><span class="ms">check</span>Standard</button>
+      <button data-sort="az"><span class="ms">check</span>A–Z</button>
+      <button data-sort="old"><span class="ms">check</span>Älteste zuerst</button>
+      <button data-sort="new"><span class="ms">check</span>Neueste zuerst</button>
+    </div>
     <div class="count-line" id="countLine"></div>
     <div id="content"></div>
   </section>
@@ -425,7 +452,7 @@
 <div class="scrim" id="scrim">
   <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dTitle">
     <div id="confirmView">
-      <span class="ms dicon">delete</span>
+      <span class="ms dicon" id="dIcon">delete</span>
       <h3 id="dTitle"></h3>
       <p id="dText"></p>
       <div class="actions">
@@ -434,7 +461,7 @@
       </div>
     </div>
     <div id="progressView" class="hidden">
-      <h3>Wird aufgeräumt …</h3>
+      <h3 id="progTitle">Wird aufgeräumt …</h3>
       <svg class="wavy" id="wavy"><path class="track" id="wTrack"/><path class="done" id="wDone"/><circle class="stop" id="wStop" r="2.5"/></svg>
       <p class="prog-text" id="progText"></p>
       <div class="actions"><button class="btn-text sl" id="stop">Stopp</button></div>
@@ -532,7 +559,7 @@
     loadSel(v) { try { return new Set(JSON.parse(store.get('aboDetox.sel.' + v.key) || '[]')); } catch { return new Set(); } },
     saveSel(v) { store.set('aboDetox.sel.' + v.key, JSON.stringify([...v.sel])); },
     loadItems(v) { try { return JSON.parse(store.get('aboDetox.items.' + v.key) || 'null'); } catch { return null; } },
-    saveItems(v) { if (v.items) store.set('aboDetox.items.' + v.key, JSON.stringify(v.items)); },
+    saveItems(v) { if (v.items && !v.restore) store.set('aboDetox.items.' + v.key, JSON.stringify(v.items)); },
   };
 
   /* ================= auth ================= */
@@ -608,11 +635,12 @@
       text: 'Die Abos sind danach weg. Wieder abonnieren geht, aber halt einzeln.',
       empty: ['subscriptions', 'Keine Abos. Detox schon erledigt?'],
       async load(p) {
-        if (DEMO) { await sleep(500); return DEMO_DATA.subs.map((t, i) => ({ id: 's' + i, title: t, thumb: demoThumb(i, t[0]) })); }
+        if (DEMO) { await sleep(500); return DEMO_DATA.subs.map((t, i) => ({ id: 's' + i, cid: 'c' + i, title: t, thumb: demoThumb(i, t[0]), date: new Date(2016 + (i * 7) % 10, (i * 5) % 12, 3).toISOString() })); }
         return pages('/subscriptions?part=snippet&mine=true&maxResults=50&order=alphabetical',
-          (it) => ({ id: it.id, title: it.snippet.title, thumb: bestThumb(it.snippet.thumbnails) }), p);
+          (it) => ({ id: it.id, cid: it.snippet.resourceId.channelId, title: it.snippet.title, thumb: bestThumb(it.snippet.thumbnails), date: it.snippet.publishedAt }), p);
       },
       del: (it) => api('/subscriptions?id=' + encodeURIComponent(it.id), { method: 'DELETE' }, 50),
+      log: (it) => it.cid && { kind: 'sub', title: it.title, thumb: it.thumb, cid: it.cid },
     },
     playlists: {
       title: 'Playlists', kind: 'list', openable: true, noun: ['Playlist', 'Playlists'], verb: 'löschen', btn: 'Löschen',
@@ -621,7 +649,7 @@
       async load(p) {
         if (DEMO) { await sleep(500); return DEMO_DATA.playlists.map(([t, n], i) => ({ id: 'p' + i, title: t, count: n, sub: `${n} Videos`, thumb: demoThumb(i + 3, t[0]) })); }
         return pages('/playlists?part=snippet,contentDetails&mine=true&maxResults=50',
-          (it) => ({ id: it.id, title: it.snippet.title, count: it.contentDetails.itemCount, sub: `${fmt(it.contentDetails.itemCount)} Videos`, thumb: bestThumb(it.snippet.thumbnails) }), p);
+          (it) => ({ id: it.id, title: it.snippet.title, count: it.contentDetails.itemCount, sub: `${fmt(it.contentDetails.itemCount)} Videos`, thumb: bestThumb(it.snippet.thumbnails), date: it.snippet.publishedAt }), p);
       },
       del: (it) => api('/playlists?id=' + encodeURIComponent(it.id), { method: 'DELETE' }, 50),
     },
@@ -630,19 +658,58 @@
       text: 'Die Videos verschwinden aus „Videos mit „Mag ich““. Die Videos selbst bleiben unangetastet.',
       empty: ['thumb_up', 'Keine gelikten Videos gefunden.'],
       async load(p) {
-        if (DEMO) { await sleep(500); return DEMO_DATA.videos.map((t, i) => ({ id: 'v' + i, title: t, sub: 'Irgendein Kanal', thumb: demoThumb(i + 7, '▶') })); }
+        if (DEMO) { await sleep(500); return DEMO_DATA.videos.map((t, i) => ({ id: 'v' + i, vid: 'v' + i, title: t, sub: 'Irgendein Kanal', thumb: demoThumb(i + 7, '▶'), date: new Date(2026, 10 - i, 1).toISOString() })); }
         const ch = await api('/channels?part=contentDetails&mine=true');
         const likesId = ch.items?.[0]?.contentDetails?.relatedPlaylists?.likes;
         if (!likesId) return [];
         return pages(`/playlistItems?part=snippet&maxResults=50&playlistId=${encodeURIComponent(likesId)}`, videoItem((s) => s.resourceId.videoId), p);
       },
       del: (it) => api(`/videos/rate?id=${encodeURIComponent(it.id)}&rating=none`, { method: 'POST' }, 50),
+      log: (it) => ({ kind: 'like', title: it.title, thumb: it.thumb, vid: it.id, ch: it.sub }),
+    },
+    history: {
+      title: 'Verlauf', kind: 'list', restore: true, noun: ['Eintrag', 'Einträge'], verb: 'zurückholen', btn: 'Zurückholen',
+      text: 'Abos werden neu abonniert, Likes neu gesetzt und Videos zurück in ihre Playlist gelegt. Kostet genauso viel Tageslimit wie Löschen. Gelöschte Playlists kann Google leider nicht wiederherstellen.',
+      empty: ['history', 'Noch nichts gelöscht. Alles, was du entfernst, landet hier, damit du es zurückholen kannst.'],
+      async load() {
+        const label = { sub: () => 'Abo', like: (h) => 'Like' + (h.ch ? ' · ' + h.ch : ''), plitem: (h) => `in „${h.plTitle}“` };
+        return hist.all().map((h) => ({ ...h, sub: label[h.kind]?.(h) || '', date: h.at }));
+      },
+      async del(it) {
+        if (DEMO) return;
+        const json = (body) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        try {
+          if (it.kind === 'sub') await api('/subscriptions?part=snippet', json({ snippet: { resourceId: { kind: 'youtube#channel', channelId: it.cid } } }), 50);
+          else if (it.kind === 'like') await api(`/videos/rate?id=${encodeURIComponent(it.vid)}&rating=like`, { method: 'POST' }, 50);
+          else if (it.kind === 'plitem') await api('/playlistItems?part=snippet', json({ snippet: { playlistId: it.plId, resourceId: { kind: 'youtube#video', videoId: it.vid } } }), 50);
+        } catch (e) {
+          if (e.reason === 'subscriptionDuplicate') return; // already subscribed again → fine
+          throw e;
+        }
+      },
+      afterDelete() {
+        hist.save(this.items);
+        // lists changed on YouTube → reload them next time
+        for (const k of ['subs', 'likes', 'playlists']) views[k].items = null;
+      },
+    },
+  };
+  /* history of removed things, newest first, kept on this device */
+  const hist = {
+    all() { try { return JSON.parse(store.get('aboDetox.history') || '[]'); } catch { return []; } },
+    save(items) { store.set('aboDetox.history', JSON.stringify(items.slice(0, 1500).map(({ sub, date, ...h }) => h))); },
+    add(entries) {
+      if (!entries.length) return;
+      const at = new Date().toISOString();
+      const fresh = entries.map((h, i) => ({ ...h, at, id: 'h' + Date.now().toString(36) + i + Math.random().toString(36).slice(2, 6) }));
+      this.save(fresh.reverse().concat(this.all()));
+      views.history.items = null;
     },
   };
   function videoItem(idOf) {
     return (it) => {
       const s = it.snippet;
-      return { id: idOf(s, it), title: s.title, sub: s.videoOwnerChannelTitle || (s.title === 'Private video' ? 'Privat' : s.title === 'Deleted video' ? 'Gelöscht' : ''), thumb: bestThumb(s.thumbnails) };
+      return { id: idOf(s, it), vid: s.resourceId?.videoId, date: s.publishedAt, title: s.title, sub: s.videoOwnerChannelTitle || (s.title === 'Private video' ? 'Privat' : s.title === 'Deleted video' ? 'Gelöscht' : ''), thumb: bestThumb(s.thumbnails) };
     };
   }
   function playlistView(pl) {
@@ -651,10 +718,11 @@
       text: `Die Videos fliegen nur aus „${pl.title}“ raus, nicht von YouTube.`,
       empty: ['playlist_play', 'Diese Playlist ist leer.'],
       async load(p) {
-        if (DEMO) { await sleep(400); return DEMO_DATA.videos.map((t, i) => ({ id: pl.id + 'i' + i, title: t, sub: 'Irgendein Kanal', thumb: demoThumb(i + 11, '▶') })); }
+        if (DEMO) { await sleep(400); return DEMO_DATA.videos.map((t, i) => ({ id: pl.id + 'i' + i, vid: 'v' + i, title: t, sub: 'Irgendein Kanal', thumb: demoThumb(i + 11, '▶'), date: new Date(2025, i, 9).toISOString() })); }
         return pages(`/playlistItems?part=snippet&maxResults=50&playlistId=${encodeURIComponent(pl.id)}`, videoItem((s, it) => it.id), p);
       },
       del: (it) => api('/playlistItems?id=' + encodeURIComponent(it.id), { method: 'DELETE' }, 50),
+      log: (it) => it.vid && { kind: 'plitem', title: it.title, thumb: it.thumb, vid: it.vid, plId: pl.id, plTitle: pl.title },
       afterDelete(n) { pl.count = Math.max(0, (pl.count || 0) - n); pl.sub = `${fmt(pl.count)} Videos`; },
     };
   }
@@ -668,6 +736,7 @@
   async function show(key) {
     if (key !== current || detail) { detail = null; $('search').value = ''; }
     current = key;
+    if (key === 'history') views.history.items = null;
     document.querySelectorAll('#nav button').forEach((b) => b.setAttribute('aria-current', b.dataset.view === key ? 'page' : 'false'));
     await ensureLoaded(cur());
   }
@@ -718,9 +787,19 @@
     $('search').placeholder = detail ? 'In Playlist suchen …' : `${v.title} durchsuchen …`;
     updateCounts();
   }
+  const coll = new Intl.Collator('de', { sensitivity: 'base', numeric: true });
+  const sortOf = (v) => v.sort || store.get('aboDetox.sort.' + (v.parent ? 'playlist' : v.key)) || 'std';
   function filtered(v) {
     const q = $('search').value.trim().toLowerCase();
-    return (v.items || []).filter((it) => !q || it.title.toLowerCase().includes(q) || (it.sub || '').toLowerCase().includes(q));
+    const list = (v.items || []).filter((it) => !q || it.title.toLowerCase().includes(q) || (it.sub || '').toLowerCase().includes(q));
+    const t = (it) => (it.date ? Date.parse(it.date) : NaN);
+    const mode = sortOf(v);
+    if (mode === 'az') list.sort((a, b) => coll.compare(a.title, b.title));
+    if (mode === 'old' || mode === 'new') {
+      const dir = mode === 'old' ? 1 : -1;
+      list.sort((a, b) => { const x = t(a), y = t(b); if (isNaN(x)) return 1; if (isNaN(y)) return -1; return (x - y) * dir; });
+    }
+    return list;
   }
   function render() {
     const v = cur(); const content = $('content');
@@ -732,13 +811,14 @@
       box.append(icon(v.items.length ? 'search' : v.empty[0]), el('div', '', v.items.length ? 'Nix gefunden.' : v.empty[1]));
       content.append(box);
     } else {
-      const wrap = el('div', v.kind);
+      const wrap = el('div', v.kind + (v.restore ? ' restore' : ''));
       const frag = document.createDocumentFragment();
       for (const it of list) frag.append(v.kind === 'grid' ? tile(it, v) : row(it, v));
       wrap.append(frag); content.append(wrap);
     }
     updateCounts();
   }
+  const monthYear = (d) => new Date(d).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' });
   function img(src) {
     const i = el('img'); i.alt = ''; i.loading = 'lazy'; i.decoding = 'async'; i.referrerPolicy = 'no-referrer';
     if (src) i.src = src; else i.style.visibility = 'hidden';
@@ -750,6 +830,7 @@
     t.dataset.id = it.id; t.tabIndex = 0; t.setAttribute('role', 'checkbox'); t.setAttribute('aria-checked', v.sel.has(it.id));
     const av = el('div', 'av'); av.append(img(it.thumb));
     t.append(badge(), av, el('div', 'name', it.title)); // textContent → safe against HTML in names
+    if (it.date) t.append(el('div', 'since', 'seit ' + monthYear(it.date)));
     return t;
   }
   function row(it, v) {
@@ -757,7 +838,8 @@
     r.dataset.id = it.id; r.tabIndex = 0;
     const th = el('div', 'thumb'); th.append(img(it.thumb));
     const txt = el('div', 'txt'); txt.append(el('div', 't', it.title));
-    if (it.sub) txt.append(el('div', 's', it.sub));
+    const sub = [it.sub, it.date && new Date(it.date).toLocaleDateString('de-DE')].filter(Boolean).join(' · ');
+    if (sub) txt.append(el('div', 's', sub));
     if (v.openable) {
       r.setAttribute('role', 'button');
       const cb = el('button', 'cbox sl'); cb.dataset.check = '1';
@@ -776,6 +858,10 @@
     $('countLine').textContent = v.items ? `${fmt(n)} von ${fmt(total)} markiert` : '';
     $('fabText').textContent = `${v.btn} (${fmt(n)})`;
     $('fab').classList.toggle('show', n > 0);
+    $('fab').classList.toggle('restore', !!v.restore);
+    $('fab').querySelector('.ms').textContent = v.restore ? 'undo' : 'delete';
+    const mode = sortOf(v);
+    document.querySelectorAll('#chips button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.sort === mode));
   }
   function toggle(node) {
     const v = cur(); const id = node.dataset.id;
@@ -803,7 +889,12 @@
   function openDialog() {
     const v = cur(); const n = v.sel.size;
     $('dTitle').textContent = `${fmt(n)} ${n === 1 ? v.noun[0] : v.noun[1]} ${v.verb}?`;
-    $('dText').textContent = v.text + (n > 190 ? ` Achtung: Google erlaubt nur ca. 190 Löschungen pro Tag. Der Rest geht morgen.` : '');
+    $('dText').textContent = v.text + (n > 190 ? ` Achtung: Google erlaubt nur ca. 190 Aktionen pro Tag. Der Rest geht morgen.` : '');
+    $('dIcon').textContent = v.restore ? 'undo' : 'delete';
+    $('dIcon').classList.toggle('restore', !!v.restore);
+    $('confirm').textContent = v.restore ? 'Zurückholen' : 'Weg damit';
+    $('confirm').classList.toggle('restore', !!v.restore);
+    $('progTitle').textContent = v.restore ? 'Wird zurückgeholt …' : 'Wird aufgeräumt …';
     $('confirmView').classList.remove('hidden');
     $('progressView').classList.add('hidden');
     $('scrim').classList.add('show');
@@ -816,6 +907,8 @@
     $('confirmView').classList.add('hidden'); $('progressView').classList.remove('hidden');
     cancelAnimationFrame(waveRaf); waveRaf = requestAnimationFrame(drawWave);
     let done = 0, failed = 0, quotaHit = false;
+    const logged = [];
+    const ok = (it) => { done++; const h = v.log?.(it); if (h) logged.push(h); removeItem(v, it); };
     const step = () => {
       progress = (done + failed) / queue.length;
       $('progText').textContent = `${fmt(done)} von ${fmt(queue.length)} erledigt` + (failed ? ` · ${failed} Fehler` : '');
@@ -825,15 +918,16 @@
       if (stopRequested) break;
       try {
         if (DEMO) await sleep(160); else await v.del(it);
-        done++; removeItem(v, it);
+        ok(it);
       } catch (e) {
         if (isQuota(e)) { quotaHit = true; break; }
-        if (e.status === 404) { done++; removeItem(v, it); }
+        if (e.status === 404 && !v.restore) ok(it);
         else { failed++; console.warn('Fehler bei', it, e); }
       }
       step();
     }
     v.afterDelete?.(done);
+    hist.add(logged);
     memo.saveSel(v); memo.saveItems(v);
     if (v.afterDelete && views.playlists.items) memo.saveItems(views.playlists);
     if (quotaHit) markQuotaFull();
@@ -841,7 +935,8 @@
     setTimeout(() => { closeDialog(); render(); }, 350);
     if (quotaHit) snack(`Tageslimit erreicht nach ${fmt(done)}. Deine Auswahl ist gespeichert, ab ${resetTime()} Uhr einfach weitermachen.`, 9000);
     else if (stopRequested) snack(`Gestoppt. ${fmt(done)} erledigt.`);
-    else snack(failed ? `${fmt(done)} erledigt, ${failed} hakten. Nochmal versuchen?` : `${fmt(done)} weg. Ahh, frische Luft. ✨`);
+    else if (failed) snack(`${fmt(done)} erledigt, ${failed} hakten. Nochmal versuchen?`);
+    else snack(v.restore ? `${fmt(done)} zurückgeholt. Welcome back! 👋` : `${fmt(done)} weg. Ahh, frische Luft. ✨ (Rückgängig unter „Verlauf“)`);
   }
   function removeItem(v, it) {
     v.sel.delete(it.id);
@@ -901,6 +996,11 @@
     if (act === 'none') ids.forEach((id) => v.sel.delete(id));
     if (act === 'invert') ids.forEach((id) => v.sel.has(id) ? v.sel.delete(id) : v.sel.add(id));
     memo.saveSel(v);
+    render();
+  });
+  $('chips').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); const v = cur(); if (!b || !v) return;
+    store.set('aboDetox.sort.' + (v.parent ? 'playlist' : v.key), b.dataset.sort);
     render();
   });
   $('fab').addEventListener('click', openDialog);
