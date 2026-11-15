@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,25..151,100..1000&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&icon_names=arrow_back,auto_awesome,check,chevron_right,close,dark_mode,delete,deselect,done_all,flip,history,light_mode,logout,palette,playlist_play,search,settings,share,subscriptions,thumb_up,undo,video_library&display=block">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&icon_names=arrow_back,auto_awesome,bar_chart,chat_bubble,check,chevron_right,close,dark_mode,delete,deselect,done_all,favorite,flip,history,insights,light_mode,lightbulb,logout,palette,playlist_play,refresh,schedule,search,settings,share,subscriptions,thumb_up,trending_up,undo,video_library&display=block">
 <style>
   /* ============ Material 3 colour roles (baseline, overridden by Android dynamic colour) ============ */
   :root {
@@ -188,6 +188,45 @@
   .stat small { font-size: 11.5px; font-weight: 600; opacity: .85; }
   .seg3.slim button { height: 44px; font-size: 13.5px; }
   .sheet .lbl-sm { font-size: 13px; color: var(--on-surface-variant); margin: 14px 4px 8px; }
+
+  /* channel analytics */
+  .ch-hero { display: flex; align-items: center; gap: 14px; margin: 4px 0 0; }
+  .ch-hero > div:nth-child(2) { flex: 1; min-width: 0; }
+  .ch-av { width: 56px; height: 56px; font-size: 24px; margin: 0; }
+  .ch-seg { margin: 16px 0 14px; }
+  .ch-chips { margin-top: 0; }
+  .tips { display: flex; flex-direction: column; gap: 2px; }
+  .tip { display: flex; gap: 14px; align-items: flex-start; padding: 16px; background: var(--sc-low); border-radius: 6px; }
+  .tip:first-child { border-radius: 24px 24px 6px 6px; } .tip:last-child { border-radius: 6px 6px 24px 24px; } .tip:only-child { border-radius: 24px; }
+  .tip-ic { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 14px; background: var(--tertiary-container); color: var(--on-tertiary-container); }
+  .tip:nth-child(3n+2) .tip-ic { background: var(--primary-container); color: var(--on-primary-container); border-radius: 50%; }
+  .tip:nth-child(3n) .tip-ic { background: var(--secondary-container); color: var(--on-secondary-container); border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; }
+  .tip-tx b { display: block; font-size: 15.5px; font-weight: 650; margin-bottom: 2px; }
+  .tip-tx span { font-size: 14px; color: var(--on-surface-variant); }
+  .sheet .tip { background: var(--sc-highest); }
+  .stat b.sm { font-size: 18px; line-height: 1.33; white-space: nowrap; }
+  h4.sec { margin: 24px 4px 10px; font-size: 14px; font-weight: 700; color: var(--primary); }
+  .thumb .dur, .vid-big .dur { position: absolute; right: 4px; bottom: 4px; background: rgba(0,0,0,.75); color: #fff; font-size: 11px; font-weight: 600; padding: 1px 5px; border-radius: 6px; }
+  .vid-big { position: relative; aspect-ratio: 16/9; border-radius: 22px; overflow: hidden; background: var(--sc-highest); margin-bottom: 14px; }
+  .vid-big img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .vid-big .dur { font-size: 13px; right: 10px; bottom: 10px; padding: 2px 8px; }
+  .vid-title { font-size: 20px; margin-bottom: 4px; }
+  .cmts { display: flex; flex-direction: column; gap: 2px; }
+  .cmt { background: var(--sc-low); border-radius: 6px; padding: 14px 16px; cursor: pointer; }
+  .cmt:first-child { border-radius: 24px 24px 6px 6px; } .cmt:last-child { border-radius: 6px 6px 24px 24px; } .cmt:only-child { border-radius: 24px; }
+  .cmt-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .cmt-av { width: 32px; height: 32px; border-radius: 50%; overflow: hidden; flex: none; display: grid; place-items: center; background: var(--secondary-container); color: var(--on-secondary-container); font-weight: 700; font-size: 14px; }
+  .cmt-av img { width: 100%; height: 100%; object-fit: cover; }
+  .cmt-who b { display: block; font-size: 14px; font-weight: 650; line-height: 1.2; }
+  .cmt-who small { font-size: 12px; color: var(--on-surface-variant); }
+  .cmt-text { font-size: 14.5px; white-space: pre-wrap; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+  .cmt.open .cmt-text { -webkit-line-clamp: unset; display: block; }
+  .cmt-meta { font-size: 12.5px; color: var(--on-surface-variant); margin-top: 6px; }
+  .cmt-reply { margin: 8px 0 0 14px; padding: 8px 12px; border-left: 3px solid var(--outline-variant); font-size: 14px; border-radius: 0 12px 12px 0; background: var(--sc); }
+  .cmt-reply b { margin-right: 6px; font-weight: 650; }
+  .cmt-reply.mine { border-left-color: var(--primary); }
+  .cmt-reply.mine b { color: var(--primary); }
+  .tools-hidden #searchBar, .tools-hidden #bgroup, .tools-hidden #chips, .tools-hidden #countLine { display: none !important; }
 
   /* ============ channel grid ============ */
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; }
@@ -504,6 +543,7 @@
   <button data-view="playlists" class="sl"><span class="ind"><span class="ms">video_library</span></span>Playlists</button>
   <button data-view="likes" class="sl"><span class="ind"><span class="ms">thumb_up</span></span>Likes</button>
   <button data-view="history" class="sl"><span class="ind"><span class="ms">history</span></span>Verlauf</button>
+  <button data-view="channel" class="sl"><span class="ind"><span class="ms">bar_chart</span></span>Kanal</button>
 </nav>
 
 <div class="main">
@@ -548,7 +588,7 @@
 
   <!-- ===== main content ===== -->
   <section id="app" class="hidden">
-    <label class="search">
+    <label class="search" id="searchBar">
       <span class="ms">search</span>
       <input id="search" type="search" placeholder="Suchen …" aria-label="Suchen">
     </label>
@@ -594,6 +634,13 @@
   </div>
 </div>
 
+<div class="sheet-scrim" id="vidScrim">
+  <section class="sheet" role="dialog" aria-modal="true" aria-label="Video-Analyse">
+    <div class="handle"></div>
+    <div id="vidSheetBody"></div>
+  </section>
+</div>
+
 <div class="sheet-scrim" id="sheetScrim">
   <section class="sheet" role="dialog" aria-modal="true" aria-label="Einstellungen">
     <div class="handle"></div>
@@ -620,7 +667,7 @@
     </div>
     <div class="lbl-sm">Beim Öffnen starten in</div>
     <div class="seg3 slim" data-seg="startTab">
-      <button data-val="subs">Abos</button><button data-val="playlists">Playlists</button><button data-val="likes">Likes</button><button data-val="history">Verlauf</button>
+      <button data-val="subs">Abos</button><button data-val="playlists">Playlists</button><button data-val="likes">Likes</button><button data-val="history">Verlauf</button><button data-val="channel">Kanal</button>
     </div>
     <div class="lbl-sm">Kanal-Raster</div>
     <div class="seg3 slim" data-seg="grid">
@@ -784,7 +831,7 @@
     loadSel(v) { try { return new Set(JSON.parse(store.get('aboDetox.sel.' + v.key) || '[]')); } catch { return new Set(); } },
     saveSel(v) { store.set('aboDetox.sel.' + v.key, JSON.stringify([...v.sel])); },
     loadItems(v) { try { return JSON.parse(store.get('aboDetox.items.' + v.key) || 'null'); } catch { return null; } },
-    saveItems(v) { if (v.items && !v.restore) store.set('aboDetox.items.' + v.key, JSON.stringify(v.items)); },
+    saveItems(v) { if (v.items && !v.restore && !v.custom) store.set('aboDetox.items.' + v.key, JSON.stringify(v.items)); },
   };
 
   /* ================= auth ================= */
@@ -952,11 +999,265 @@
       afterDelete(n) { pl.count = Math.max(0, (pl.count || 0) - n); pl.sub = `${fmt(pl.count)} Videos`; },
     };
   }
+  views.channel = {
+    title: 'Kanal', custom: true, noun: ['', ''], verb: '', btn: '', empty: ['bar_chart', ''],
+    async load(p, force) {
+      if (!force) { try { const c = JSON.parse(store.get('aboDetox.channel') || 'null'); if (c && Date.now() - c.at < 6 * 36e5) { this.data = c; return []; } } catch {} }
+      this.data = await loadChannelData();
+      store.set('aboDetox.channel', JSON.stringify(this.data));
+      return [];
+    },
+  };
   for (const [k, v] of Object.entries(views)) { v.key = k; v.items = null; v.sel = new Set(); }
 
   let current = 'subs';   // key into views
   let detail = null;      // playlist sub-view (not in views map)
   const cur = () => detail || views[current];
+
+  /* ================= Kanal: own channel analytics + comments ================= */
+  const WD = ['Sonntag', 'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag'];
+  const median = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+  const avg = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
+  const pct = (x) => (x * 100).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' %';
+  const short = (n) => n >= 1e6 ? (n / 1e6).toLocaleString('de-DE', { maximumFractionDigits: 1 }) + ' Mio.' : n >= 1e4 ? Math.round(n / 1e3).toLocaleString('de-DE') + ' Tsd.' : fmt(Math.round(n));
+  const isoDur = (d) => { const m = /P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/.exec(d || '') || []; return (+m[1] || 0) * 86400 + (+m[2] || 0) * 3600 + (+m[3] || 0) * 60 + (+m[4] || 0); };
+  const durTxt = (s) => s >= 3600 ? `${Math.floor(s / 3600)}:${String(Math.floor(s % 3600 / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const ratio = (x) => x.toLocaleString('de-DE', { maximumFractionDigits: 1 }) + '×';
+
+  async function loadChannelData() {
+    if (DEMO) return demoChannel();
+    const ch = (await api('/channels?part=snippet,statistics,contentDetails&mine=true')).items?.[0];
+    if (!ch) throw new Error('Kein YouTube-Kanal zu diesem Konto gefunden.');
+    const uploads = ch.contentDetails?.relatedPlaylists?.uploads;
+    let ids = [], pt = '';
+    while (uploads && ids.length < 300) {   // newest 300 uploads are plenty for trends
+      const d = await api(`/playlistItems?part=contentDetails&maxResults=50&playlistId=${encodeURIComponent(uploads)}${pt ? '&pageToken=' + pt : ''}`);
+      ids.push(...(d.items || []).map((x) => x.contentDetails.videoId));
+      pt = d.nextPageToken; if (!pt) break;
+    }
+    const videos = [];
+    for (let i = 0; i < ids.length; i += 50) {
+      const d = await api(`/videos?part=snippet,statistics,contentDetails,status&id=${ids.slice(i, i + 50).join(',')}`);
+      for (const v of d.items || []) videos.push({
+        id: v.id, title: v.snippet.title, date: v.snippet.publishedAt, thumb: bestThumb(v.snippet.thumbnails),
+        desc: (v.snippet.description || '').length, tags: (v.snippet.tags || []).length,
+        views: +v.statistics.viewCount || 0, likes: +v.statistics.likeCount || 0, comments: +v.statistics.commentCount || 0,
+        dur: isoDur(v.contentDetails.duration), privacy: v.status?.privacyStatus || 'public',
+      });
+    }
+    let comments = [];
+    try {
+      let cpt = '';
+      for (let page = 0; page < 2; page++) {
+        const d = await api(`/commentThreads?part=snippet,replies&allThreadsRelatedToChannelId=${encodeURIComponent(ch.id)}&maxResults=100&order=time&textFormat=plainText${cpt ? '&pageToken=' + cpt : ''}`);
+        for (const t of d.items || []) {
+          const c = t.snippet.topLevelComment.snippet;
+          comments.push({
+            id: t.id, vid: t.snippet.videoId, author: c.authorDisplayName, avatar: c.authorProfileImageUrl, text: c.textDisplay,
+            date: c.publishedAt, likes: c.likeCount || 0, replyCount: t.snippet.totalReplyCount || 0,
+            replies: (t.replies?.comments || []).map((r) => ({ author: r.snippet.authorDisplayName, avatar: r.snippet.authorProfileImageUrl, text: r.snippet.textDisplay, date: r.snippet.publishedAt, mine: r.snippet.authorChannelId?.value === ch.id })).reverse(),
+          });
+        }
+        cpt = d.nextPageToken; if (!cpt) break;
+      }
+    } catch (e) { if (isQuota(e)) throw e; /* comments disabled → just skip */ }
+    return {
+      at: Date.now(),
+      channel: { id: ch.id, name: ch.snippet.title, thumb: bestThumb(ch.snippet.thumbnails), since: ch.snippet.publishedAt,
+        subs: +ch.statistics.subscriberCount || 0, views: +ch.statistics.viewCount || 0, videos: +ch.statistics.videoCount || 0, hiddenSubs: !!ch.statistics.hiddenSubscriberCount },
+      videos, comments,
+    };
+  }
+  function demoChannel() {
+    const titles = ['Mein erster Animations-Test', 'Walk Cycle in 60 Sekunden', 'Ich lerne Tschechisch #1', 'Song über Montage (Original)', 'SPEEDPAINT Sonnenuntergang', 'Wie ich animiere – mein Workflow erklärt für Anfänger und Fortgeschrittene, alle Tipps', 'Czech vlog: Prag 🇨🇿', 'Short: Blinzel-Animation', 'Cover: Mein Lieblingssong', 'Animatic zu meinem Song'];
+    const now = Date.now();
+    const videos = titles.map((t, i) => {
+      const views = Math.round((i % 3 === 0 ? 2400 : 600) * (1 + Math.sin(i * 1.7)) + 80);
+      return { id: 'dv' + i, title: t, date: new Date(now - (i * 19 + 3) * 864e5 - (i % 4) * 5 * 36e5).toISOString(), thumb: demoThumb(i + 2, '▶'),
+        desc: i % 4 === 1 ? 20 : 340, tags: i % 3 ? 5 : 0, views, likes: Math.round(views * (0.03 + (i % 5) * 0.012)), comments: Math.round(views * 0.004 * (i % 3)),
+        dur: i === 7 ? 34 : 120 + i * 47, privacy: 'public' };
+    });
+    const comments = [['Lena', 'Wie lange hast du an der Animation gesessen?? 😍', 1], ['Tomáš', 'Dobrá práce! Tvoje čeština je super', 0], ['Kai', 'Kannst du ein Tutorial zum Walk Cycle machen?', 2], ['Mo', 'Der Song ist so ein Ohrwurm', 0]]
+      .map(([a, t, r], i) => ({ id: 'dc' + i, vid: 'dv' + i, author: a, avatar: '', text: t, date: new Date(now - i * 2 * 864e5).toISOString(), likes: 3 - i % 3, replyCount: r,
+        replies: r ? [{ author: 'Demo', avatar: '', text: 'Danke dir!! 💜', date: new Date(now - i * 864e5).toISOString(), mine: true }] : [] }));
+    return { at: now, channel: { id: 'demo', name: 'Demo', thumb: '', since: '2021-03-01T00:00:00Z', subs: 1234, views: 98765, videos: videos.length }, videos, comments };
+  }
+
+  // Channel-wide insights from the Data API numbers (no Analytics scope needed)
+  function channelTips(d) {
+    const vids = d.videos.filter((v) => v.privacy === 'public');
+    const tips = [];
+    if (vids.length < 3) return [{ icon: 'lightbulb', t: 'Noch zu wenig Videos', s: 'Ab 3 öffentlichen Videos kann ich dir Muster und Tipps zeigen. Also: hochladen! 🎬' }];
+    const med = median(vids.map((v) => v.views)) || 1;
+    const byDate = [...vids].sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+
+    // trend: last 5 vs the 5 before
+    if (byDate.length >= 8) {
+      const a = avg(byDate.slice(0, 5).map((v) => v.views)), b = avg(byDate.slice(5, 10).map((v) => v.views));
+      if (b > 0) {
+        const ch = a / b - 1;
+        tips.push(ch >= 0
+          ? { icon: 'trending_up', t: `Trend: +${Math.round(ch * 100)} %`, s: 'Deine letzten 5 Videos laufen besser als die 5 davor. Was auch immer du gerade machst: weiter so!' }
+          : { icon: 'trending_up', t: `Trend: ${Math.round(ch * 100)} %`, s: 'Die letzten 5 Videos laufen schwächer als die 5 davor. Schau dir dein Top-Video an und versuch, das Thema oder den Stil wieder aufzugreifen.' });
+      }
+    }
+    // best weekday
+    const wd = {};
+    for (const v of vids) (wd[new Date(v.date).getDay()] ||= []).push(v.views);
+    const days = Object.entries(wd).filter(([, a]) => a.length >= 2).map(([k, a]) => [+k, median(a)]).sort((x, y) => y[1] - x[1]);
+    if (days.length >= 2 && days[0][1] > med * 1.2) tips.push({ icon: 'schedule', t: `Bester Upload-Tag: ${WD[days[0][0]]}`, s: `Videos vom ${WD[days[0][0]]} haben bei dir im Schnitt ${ratio(days[0][1] / med)} so viele Aufrufe wie üblich.` });
+    // time of day
+    const slot = (h) => (h < 6 ? 'nachts' : h < 12 ? 'morgens' : h < 17 ? 'nachmittags' : 'abends');
+    const ts = {};
+    for (const v of vids) (ts[slot(new Date(v.date).getHours())] ||= []).push(v.views);
+    const slots = Object.entries(ts).filter(([, a]) => a.length >= 2).map(([k, a]) => [k, median(a)]).sort((x, y) => y[1] - x[1]);
+    if (slots.length >= 2 && slots[0][1] > med * 1.2) tips.push({ icon: 'schedule', t: `Lieber ${slots[0][0]} hochladen`, s: `Deine Videos, die ${slots[0][0]} rauskamen, laufen ${ratio(slots[0][1] / med)} besser.` });
+    // shorts vs long
+    const sh = vids.filter((v) => v.dur && v.dur <= 180), lg = vids.filter((v) => v.dur > 180);
+    if (sh.length >= 2 && lg.length >= 2) {
+      const s = median(sh.map((v) => v.views)), l = median(lg.map((v) => v.views));
+      if (s > l * 1.3) tips.push({ icon: 'insights', t: 'Kurze Videos laufen besser', s: `Videos bis 3 Min. haben bei dir ${ratio(s / Math.max(l, 1))} so viele Aufrufe wie lange. Shorts als Teaser für längere Videos ausprobieren!` });
+      else if (l > s * 1.3) tips.push({ icon: 'insights', t: 'Lange Videos laufen besser', s: `Deine längeren Videos holen ${ratio(l / Math.max(s, 1))} so viele Aufrufe wie Shorts. Dein Publikum mag Tiefe.` });
+    }
+    // titles
+    const long = vids.filter((v) => v.title.length > 70).length;
+    if (long) tips.push({ icon: 'lightbulb', t: `${long} ${long === 1 ? 'Titel ist' : 'Titel sind'} zu lang`, s: 'Auf dem Handy wird nach ca. 70 Zeichen abgeschnitten. Das Wichtigste gehört nach vorne.' });
+    // descriptions
+    const noDesc = vids.filter((v) => v.desc < 100).length;
+    if (noDesc) tips.push({ icon: 'lightbulb', t: `${noDesc} ${noDesc === 1 ? 'Video hat' : 'Videos haben'} kaum Beschreibung`, s: '2 bis 3 Sätze mit Suchbegriffen helfen YouTube, dein Video den richtigen Leuten zu zeigen.' });
+    // engagement
+    const lr = vids.filter((v) => v.views >= 50).map((v) => v.likes / v.views);
+    if (lr.length >= 3) {
+      const m = median(lr);
+      tips.push(m >= 0.04
+        ? { icon: 'favorite', t: `Starke Like-Rate: ${pct(m)}`, s: 'Über 4 % ist richtig gut. Die Leute, die dich finden, mögen was sie sehen.' }
+        : { icon: 'favorite', t: `Like-Rate: ${pct(m)}`, s: 'Ein kurzes „Wenn’s dir gefällt, lass ein Like da“ in der Mitte (nicht am Ende) kann die Rate spürbar erhöhen.' });
+    }
+    const cr = median(vids.filter((v) => v.views >= 50).map((v) => v.comments / v.views));
+    if (vids.length >= 3 && cr < 0.002) tips.push({ icon: 'chat_bubble', t: 'Wenig Kommentare', s: 'Stell am Ende eine konkrete Frage („Welchen Song soll ich als Nächstes animieren?“) und antworte auf die ersten Kommentare.' });
+    // consistency
+    const last = Date.parse(byDate[0].date), gapDays = Math.round((Date.now() - last) / 864e5);
+    if (byDate.length >= 4) {
+      const gaps = byDate.slice(0, 6).map((v, i, a) => i ? (Date.parse(a[i - 1].date) - Date.parse(v.date)) / 864e5 : null).filter((x) => x != null);
+      const g = Math.round(median(gaps));
+      if (gapDays > g * 2 && gapDays > 14) tips.push({ icon: 'schedule', t: `Letztes Video vor ${gapDays} Tagen`, s: `Normalerweise lädst du etwa alle ${g} Tage hoch. Regelmäßigkeit hilft dem Algorithmus, dich wieder vorzuschlagen.` });
+    }
+    return tips;
+  }
+  function videoTips(v, d) {
+    const vids = d.videos.filter((x) => x.privacy === 'public');
+    const med = median(vids.map((x) => x.views)) || 1, lrMed = median(vids.filter((x) => x.views >= 50).map((x) => x.likes / x.views));
+    const out = [], r = v.views / med, lr = v.views ? v.likes / v.views : 0;
+    if (vids.length >= 3) out.push(r >= 1.5 ? { icon: 'trending_up', t: `${ratio(r)} dein Durchschnitt`, s: 'Eins deiner stärksten Videos. Thema, Titel oder Thumbnail hier haben funktioniert, mach mehr davon!' }
+      : r <= 0.6 ? { icon: 'trending_up', t: `Nur ${ratio(r)} dein Durchschnitt`, s: 'Probier einen neuen Titel oder ein auffälligeres Thumbnail. Das kann alte Videos nochmal pushen.' }
+      : { icon: 'trending_up', t: 'Im Durchschnitt', s: 'Läuft solide, ganz normal für deinen Kanal.' });
+    if (v.title.length > 70) out.push({ icon: 'lightbulb', t: `Titel: ${v.title.length} Zeichen`, s: 'Wird auf dem Handy abgeschnitten. Versuch unter 60 Zeichen zu bleiben.' });
+    else if (v.title.length < 20) out.push({ icon: 'lightbulb', t: 'Sehr kurzer Titel', s: 'Ein paar Suchbegriffe mehr helfen, gefunden zu werden.' });
+    if (v.desc < 100) out.push({ icon: 'lightbulb', t: 'Beschreibung fast leer', s: 'Schreib 2 bis 3 Sätze, worum es geht, plus passende Suchbegriffe.' });
+    if (v.views >= 50 && lrMed && lr < lrMed * 0.7) out.push({ icon: 'favorite', t: `Like-Rate unter deinem Schnitt (${pct(lr)})`, s: `Normal sind bei dir ${pct(lrMed)}.` });
+    if (v.views >= 50 && lrMed && lr > lrMed * 1.3) out.push({ icon: 'favorite', t: `Überdurchschnittlich geliked (${pct(lr)})`, s: 'Die Leute lieben das Video. Gute Vorlage für ein Sequel oder einen Short dazu!' });
+    if (v.views >= 100 && !v.comments) out.push({ icon: 'chat_bubble', t: 'Noch keine Kommentare', s: 'Pinne selbst einen Kommentar mit einer Frage an. Das bricht das Eis.' });
+    return out;
+  }
+
+  function tipCard(tp) {
+    const c = el('div', 'tip'); const ic = el('div', 'tip-ic'); ic.append(icon(tp.icon, 'fill'));
+    const tx = el('div', 'tip-tx'); tx.append(el('b', '', tp.t), el('span', '', tp.s));
+    c.append(ic, tx); return c;
+  }
+  function statTiles(list) {
+    const s = el('div', 'stats');
+    for (const [n, l] of list) { const c = el('div', 'stat'); c.append(el('b', String(n).length > 5 ? 'sm' : '', n), el('small', '', l)); s.append(c); }
+    return s;
+  }
+  function videoRow(x) {
+    const r = el('div', 'row sl'); r.dataset.vid = x.id; r.tabIndex = 0; r.setAttribute('role', 'button');
+    const th = el('div', 'thumb'); th.append(img(x.thumb));
+    if (x.dur) th.append(el('span', 'dur', durTxt(x.dur)));
+    const t = el('div', 'txt'); t.append(el('div', 't', x.title));
+    t.append(el('div', 's', `${short(x.views)} Aufrufe · ${short(x.likes)} Likes · ${new Date(x.date).toLocaleDateString('de-DE')}` + (x.privacy !== 'public' ? ` · ${x.privacy === 'private' ? 'privat' : 'nicht gelistet'}` : '')));
+    r.append(th, t, icon('chevron_right', 'chev'));
+    return r;
+  }
+  function commentCard(c, d) {
+    const box = el('div', 'cmt'); box.dataset.cmt = c.id;
+    const head = el('div', 'cmt-head'); const av = el('div', 'cmt-av'); av.append(c.avatar ? img(c.avatar) : document.createTextNode((c.author || '?').replace('@', '').charAt(0).toUpperCase()));
+    const who = el('div', 'cmt-who'); who.append(el('b', '', c.author), el('small', '', new Date(c.date).toLocaleDateString('de-DE')));
+    head.append(av, who);
+    const vt = d.videos.find((v) => v.id === c.vid);
+    box.append(head, el('div', 'cmt-text', c.text));
+    const meta = el('div', 'cmt-meta', [c.likes ? `👍 ${fmt(c.likes)}` : '', c.replyCount ? `${c.replyCount} ${c.replyCount === 1 ? 'Antwort' : 'Antworten'}` : 'noch keine Antwort', vt ? `bei „${vt.title}“` : ''].filter(Boolean).join(' · '));
+    box.append(meta);
+    for (const rp of c.replies) {
+      const rr = el('div', 'cmt-reply' + (rp.mine ? ' mine' : ''));
+      rr.append(el('b', '', rp.mine ? 'Du' : rp.author), el('span', '', rp.text));
+      box.append(rr);
+    }
+    return box;
+  }
+
+  function renderChannel(v) {
+    const content = $('content'); const d = v.data;
+    content.textContent = '';
+    if (!d) return;
+    const hero = el('div', 'ch-hero');
+    const av = el('div', 'avatar-btn ch-av'); av.append(d.channel.thumb ? img(d.channel.thumb) : document.createTextNode(d.channel.name.charAt(0)));
+    const nm = el('div'); nm.append(el('div', 'pname', d.channel.name), el('div', 'pmeta', `Kanal seit ${monthYear(d.channel.since)} · Stand ${new Date(d.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`));
+    const rf = el('button', 'icon-btn sl'); rf.id = 'chRefresh'; rf.setAttribute('aria-label', 'Aktualisieren'); rf.append(icon('refresh'));
+    hero.append(av, nm, rf);
+    const pubs = d.videos.filter((x) => x.privacy === 'public');
+    content.append(hero, statTiles([
+      [d.channel.hiddenSubs ? '–' : short(d.channel.subs), 'Abonnenten'], [short(d.channel.views), 'Aufrufe'],
+      [fmt(d.channel.videos), 'Videos'], [short(median(pubs.map((x) => x.views))), 'Ø Aufrufe'],
+    ]));
+
+    const seg = el('div', 'seg3 slim ch-seg'); seg.id = 'chSeg';
+    for (const [k, l] of [['tips', 'Tipps'], ['videos', 'Videos'], ['comments', 'Kommentare']]) {
+      const b = el('button', '', l); b.dataset.tab = k; b.setAttribute('aria-pressed', (v.tab || 'tips') === k); seg.append(b);
+    }
+    content.append(seg);
+    const tab = v.tab || 'tips';
+    if (tab === 'tips') {
+      const tips = channelTips(d);
+      const wrap = el('div', 'tips'); tips.forEach((t) => wrap.append(tipCard(t))); content.append(wrap);
+      const top = [...pubs].sort((a, b) => b.views - a.views).slice(0, 3);
+      if (top.length) { content.append(el('h4', 'sec', 'Deine Top-Videos')); const l = el('div', 'list'); top.forEach((x) => l.append(videoRow(x))); content.append(l); }
+    } else if (tab === 'videos') {
+      const sort = v.vsort || 'new';
+      const chips = el('div', 'chips ch-chips');
+      for (const [k, l] of [['new', 'Neueste'], ['views', 'Meiste Aufrufe'], ['likes', 'Beste Like-Rate'], ['low', 'Schwächste']]) {
+        const b = el('button'); b.dataset.vsort = k; b.setAttribute('aria-pressed', sort === k); b.append(icon('check'), document.createTextNode(l)); chips.append(b);
+      }
+      content.append(chips);
+      const list = [...d.videos];
+      const lrate = (x) => (x.views >= 20 ? x.likes / x.views : -1);
+      if (sort === 'new') list.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+      if (sort === 'views') list.sort((a, b) => b.views - a.views);
+      if (sort === 'low') list.sort((a, b) => a.views - b.views);
+      if (sort === 'likes') list.sort((a, b) => lrate(b) - lrate(a));
+      if (!list.length) { const e = el('div', 'empty'); e.append(icon('video_library'), el('div', '', 'Noch keine Videos hochgeladen.')); content.append(e); }
+      else { const l = el('div', 'list'); list.forEach((x) => l.append(videoRow(x))); content.append(l); }
+    } else {
+      const open = d.comments.filter((c) => !c.replies.some((r) => r.mine)).length;
+      content.append(el('div', 'count-line ch-note', d.comments.length ? `Die neuesten ${fmt(d.comments.length)} Kommentare auf deinen Videos · ${fmt(open)} ohne Antwort von dir` : ''));
+      if (!d.comments.length) { const e = el('div', 'empty'); e.append(icon('chat_bubble'), el('div', '', 'Noch keine Kommentare auf deinen Videos.')); content.append(e); }
+      else { const l = el('div', 'cmts'); d.comments.forEach((c) => l.append(commentCard(c, d))); content.append(l); }
+    }
+  }
+
+  function openVideoSheet(x, d) {
+    const s = $('vidSheetBody'); s.textContent = '';
+    const big = el('div', 'vid-big'); big.append(img(x.thumb)); if (x.dur) big.append(el('span', 'dur', durTxt(x.dur)));
+    s.append(big, el('div', 'pname vid-title', x.title),
+      el('div', 'pmeta', `${new Date(x.date).toLocaleDateString('de-DE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} · ${durTxt(x.dur || 0)}`));
+    s.append(statTiles([[short(x.views), 'Aufrufe'], [short(x.likes), 'Likes'], [short(x.comments), 'Kommentare'], [x.views ? pct(x.likes / x.views) : '–', 'Like-Rate']]));
+    s.append(el('h4', '', 'Analyse'));
+    const w = el('div', 'tips'); videoTips(x, d).forEach((t) => w.append(tipCard(t))); s.append(w);
+    const b = el('button', 'btn-filled'); b.style.marginTop = '20px'; b.textContent = 'Auf YouTube öffnen';
+    b.addEventListener('click', () => openExternal('https://www.youtube.com/watch?v=' + encodeURIComponent(x.id)));
+    s.append(b);
+    $('vidScrim').classList.add('show'); haptic();
+  }
 
   /* ================= rendering ================= */
   async function show(key) {
@@ -984,7 +1285,8 @@
       v.items = await v.load((n) => { txt.textContent = `${fmt(n)} geladen …`; });
       memo.saveItems(v);
     } catch (e) {
-      const cached = memo.loadItems(v);
+      let cached = memo.loadItems(v);
+      if (v.custom) { try { const c = JSON.parse(store.get('aboDetox.channel') || 'null'); if (c) { v.data = c; cached = []; } } catch {} }
       if (isQuota(e)) markQuotaFull();
       if (cached) {
         // Quota full / offline: keep working with the last known list so the selection can still be edited
@@ -1010,6 +1312,7 @@
     $('back').classList.toggle('hidden', !detail);
     $('subline').classList.toggle('hidden', !detail);
     if (detail) $('subline').textContent = 'Playlist · tippe Videos zum Entfernen an';
+    document.body.classList.toggle('tools-hidden', !!v.custom);
     $('search').placeholder = detail ? 'In Playlist suchen …' : `${v.title} durchsuchen …`;
     updateCounts();
   }
@@ -1046,6 +1349,7 @@
   }
   function render() {
     const v = cur(); const content = $('content');
+    if (v.custom) return renderChannel(v);
     content.textContent = '';
     if (!v.items) return;
     const list = filtered(v);
@@ -1102,7 +1406,7 @@
     const v = cur(); const n = v.sel.size; const total = v.items?.length ?? 0;
     $('countLine').textContent = v.items ? `${fmt(n)} von ${fmt(total)} markiert` : '';
     $('fabText').textContent = `${v.btn} (${fmt(n)})`;
-    $('fab').classList.toggle('show', n > 0);
+    $('fab').classList.toggle('show', n > 0 && !v.custom);
     $('fab').classList.toggle('restore', !!v.restore);
     $('fab').querySelector('.ms').textContent = v.restore ? 'undo' : 'delete';
     const mode = sortOf(v);
@@ -1268,6 +1572,7 @@
   const openSheet = () => { renderSettings(); $('sheetScrim').classList.add('show'); haptic(); };
   const closeSheet = () => $('sheetScrim').classList.remove('show');
   $('profileBtn').addEventListener('click', openSheet);
+  $('vidScrim').addEventListener('click', (e) => { if (e.target === $('vidScrim')) $('vidScrim').classList.remove('show'); });
   $('sheetScrim').addEventListener('click', (e) => { if (e.target === $('sheetScrim')) closeSheet(); });
   $('themeSeg').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
@@ -1294,7 +1599,7 @@
     snack('Verlauf geleert.');
   });
   $('clearCache').addEventListener('click', () => {
-    try { Object.keys(localStorage).filter((k) => k.startsWith('aboDetox.items.') || k.startsWith('aboDetox.sel.') || k === 'aboDetox.activity').forEach((k) => localStorage.removeItem(k)); } catch {}
+    try { Object.keys(localStorage).filter((k) => k.startsWith('aboDetox.items.') || k.startsWith('aboDetox.sel.') || k === 'aboDetox.activity' || k === 'aboDetox.channel').forEach((k) => localStorage.removeItem(k)); } catch {}
     actCache = {};
     for (const v of Object.values(views)) v.sel.clear();
     if (detail) detail.sel.clear();
@@ -1435,6 +1740,17 @@
   /* ---------- long press → open on YouTube ---------- */
   let pressTimer = 0, suppressClick = false;
   $('content').addEventListener('pointerdown', (e) => {
+    if (cur().custom && settings.longPress) {
+      const d = cur().data; const r = e.target.closest('[data-vid], [data-cmt]'); if (!r || !d) return;
+      clearTimeout(pressTimer);
+      pressTimer = setTimeout(() => {
+        let url = '';
+        if (r.dataset.vid) url = 'https://www.youtube.com/watch?v=' + encodeURIComponent(r.dataset.vid);
+        else { const c = d.comments.find((x) => x.id === r.dataset.cmt); if (c?.vid) url = `https://www.youtube.com/watch?v=${encodeURIComponent(c.vid)}&lc=${encodeURIComponent(c.id)}`; }
+        if (url) { suppressClick = true; haptic(); openExternal(url); }
+      }, 550);
+      return;
+    }
     const node = e.target.closest('[data-id]'); if (!node || !settings.longPress) return;
     clearTimeout(pressTimer);
     pressTimer = setTimeout(() => {
@@ -1452,6 +1768,20 @@
   $('back').addEventListener('click', () => { detail = null; $('search').value = ''; ensureLoaded(views.playlists); });
 
   $('content').addEventListener('click', (e) => {
+    const v0 = cur();
+    if (v0.custom) {
+      if (suppressClick) { suppressClick = false; return; }
+      const d = v0.data; if (!d) return;
+      if (e.target.closest('#chRefresh')) {
+        try { const c = JSON.parse(store.get('aboDetox.channel') || 'null'); if (c) { c.at = 0; store.set('aboDetox.channel', JSON.stringify(c)); } } catch {}
+        v0.items = null; ensureLoaded(v0); return;
+      }
+      const tab = e.target.closest('[data-tab]'); if (tab) { v0.tab = tab.dataset.tab; render(); haptic(); return; }
+      const vs = e.target.closest('[data-vsort]'); if (vs) { v0.vsort = vs.dataset.vsort; render(); return; }
+      const row = e.target.closest('[data-vid]'); if (row) { const x = d.videos.find((y) => y.id === row.dataset.vid); if (x) openVideoSheet(x, d); return; }
+      const c = e.target.closest('.cmt'); if (c) c.classList.toggle('open');
+      return;
+    }
     const node = e.target.closest('[data-id]'); if (!node) return;
     if (suppressClick) { suppressClick = false; return; }
     const v = cur();
@@ -1506,6 +1836,7 @@
   // Android back button → returns true if handled in-app
   window.__onBack = () => {
     if ($('menu').classList.contains('show')) { closeMenu(); return true; }
+    if ($('vidScrim').classList.contains('show')) { $('vidScrim').classList.remove('show'); return true; }
     if ($('sheetScrim').classList.contains('show')) { closeSheet(); return true; }
     if ($('scrim').classList.contains('show')) { if (!running) closeDialog(); return true; }
     if (detail) { $('back').click(); return true; }
