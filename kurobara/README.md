@@ -36,6 +36,19 @@ rojo build -o Kurobara.rbxl   # neue .rbxl bauen
 | Tab | Handy (Notizen: Mireis Tagesablauf, Regeln) |
 | 1–9 | Hotbar |
 
+## Neu in v4
+
+- **Kamera:** Taste **V** (oder Handy → Kamera) wechselt zwischen **Ego** und **3rd Person**. In Ego siehst du Nyx' Körper und Arme, wenn du nach unten schaust.
+- **iPad/Handy:** eigene Glass-Buttons. Rechts ein Bogen aus Angriff, Rennen und Schleichen, oben links Kamera und Handy. Darüber erscheinen Kontext-Buttons für das, was du gerade tun kannst, zum Beispiel „Drag · Aoi“ oder „Shower“.
+- **Neues Handy:** Homescreen mit Uhr und Apps: Nachrichten (Mama, Klassen-Chat, eine unbekannte Nummer, später Haru), Notizen, eine **Live-Karte**, Profil und Einstellungen. Schließen geht mit ✕, Tippen daneben, Tab oder Esc.
+- **Gespräche mit Antworten:** Smalltalk, Komplimente, nach Haru oder Mirei fragen (die NPCs verraten, wo sie gerade sind), nach Vermissten fragen und **„Komm mal mit“**. Dann folgt dir die Person, bis du „Warte hier“ sagst.
+- **Mehr Leben:** 24 zusätzliche Mitschüler, 3 neue Lehrer. Alle machen kleine Spaziergänge über den Campus, und der Hall-Monitor patrouilliert durch alle Stockwerke.
+- **Erwischt = alles neu:** Nach dem Game-Over-Screen startet das Spiel automatisch neu, und Blut, Leichen, Nachrichten und Verdacht sind weg.
+- **Neue Map in echtem Maßstab** (1 Stud ≈ 30 cm, Nyx 1,60 m, Autos 4,5 m):
+  - **Schule:** 3 Stockwerke mit Treppenhäusern und Dach, 6 Klassen, Bibliothek, Musik, Kunst, Labor, Club-Räume, Atrium
+  - **Campus:** Mensa-Gebäude, Sporthalle mit Umkleiden und Duschen, Freibad, Sportplatz, Garten mit Gewächshaus, Verbrennungsofen, großer Innenhof mit Brunnen
+  - **Stadt:** Hauptstraße mit Strommasten und Ampeln, Konbini, Café, Ramen-Laden, Buchladen, Häuser, Wohnblock, Park mit Teich und Schrein, Bahnhof mit Zug, Nyx' Haus
+
 ## So läuft ein Tag
 
 07:00 Zuhause → Schule → Unterricht (am eigenen Platz in 2-A **Attend class** = Zeit überspringen) → Mittag → Unterricht → Clubs → 18:00 nach Hause.
