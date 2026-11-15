@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.view.HapticFeedbackConstants
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -16,6 +17,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.webkit.WebViewAssetLoader
 import com.google.android.gms.auth.api.identity.AuthorizationRequest
@@ -110,7 +112,7 @@ class MainActivity : ComponentActivity() {
         web.evaluateJavascript("window.__setInsets && window.__setInsets($insetTop, $insetBottom)", null)
     }
 
-    private fun authorize() {
+    private fun authorize(interactive: Boolean) {
         val request = AuthorizationRequest.builder()
             .setRequestedScopes(listOf(Scope(YT_SCOPE)))
             .build()
@@ -118,6 +120,8 @@ class MainActivity : ComponentActivity() {
             .addOnSuccessListener { result ->
                 val pending = result.pendingIntent
                 if (result.hasResolution() && pending != null) {
+                    // Silent auto sign-in at app start must never pop up a consent screen
+                    if (!interactive) { sendToken(null, "NEEDS_UI"); return@addOnSuccessListener }
                     authLauncher.launch(IntentSenderRequest.Builder(pending.intentSender).build())
                 } else {
                     sendToken(result.accessToken, null)
@@ -166,7 +170,14 @@ class MainActivity : ComponentActivity() {
     }
 
     inner class Bridge {
-        @JavascriptInterface fun requestToken() = runOnUiThread { authorize() }
+        @JavascriptInterface fun requestToken(interactive: Boolean) = runOnUiThread { authorize(interactive) }
+        @JavascriptInterface fun haptic() = runOnUiThread { web.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
+        @JavascriptInterface fun setDark(dark: Boolean) = runOnUiThread {
+            val c = WindowCompat.getInsetsController(window, window.decorView)
+            c.isAppearanceLightStatusBars = !dark
+            c.isAppearanceLightNavigationBars = !dark
+            window.decorView.setBackgroundColor(if (dark) Color.parseColor("#141218") else Color.parseColor("#FEF7FF"))
+        }
         @JavascriptInterface fun palette(): String? = this@MainActivity.palette()
         @JavascriptInterface fun insets(): String = """{"top":$insetTop,"bottom":$insetBottom}"""
         @JavascriptInterface fun signOut() { /* token lives only in the page; nothing stored natively */ }

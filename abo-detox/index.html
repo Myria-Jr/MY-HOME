@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,25..151,100..1000&display=swap">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&icon_names=arrow_back,check,chevron_right,close,delete,deselect,done_all,flip,history,logout,playlist_play,search,subscriptions,thumb_up,undo,video_library&display=block">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&icon_names=arrow_back,check,chevron_right,close,dark_mode,delete,deselect,done_all,flip,history,light_mode,logout,palette,playlist_play,search,settings,subscriptions,thumb_up,undo,video_library&display=block">
 <style>
   /* ============ Material 3 colour roles (baseline, overridden by Android dynamic colour) ============ */
   :root {
@@ -359,6 +359,90 @@
     transition: transform .45s var(--spring), opacity .2s;
   }
   .snack.show { transform: none; opacity: 1; }
+  .calm *, .calm *::before, .calm *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+
+  /* profile button */
+  .avatar-btn {
+    width: 40px; height: 40px; margin: 0 4px; border-radius: 50%; overflow: hidden; flex: none;
+    display: grid; place-items: center; background: var(--primary-container); color: var(--on-primary-container);
+    font-weight: 700; font-size: 17px; transition: border-radius .4s var(--spring), transform .4s var(--spring);
+  }
+  .avatar-btn:active { border-radius: 30%; transform: scale(.92); }
+  .avatar-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  /* settings bottom sheet */
+  .sheet-scrim {
+    position: fixed; inset: 0; z-index: 55; background: rgba(0,0,0,.32);
+    opacity: 0; pointer-events: none; transition: opacity .3s var(--emph);
+  }
+  .sheet-scrim.show { opacity: 1; pointer-events: auto; }
+  .sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; margin: 0 auto; max-width: 640px;
+    max-height: calc(100% - var(--inset-top) - 24px); overflow-y: auto; overscroll-behavior: contain;
+    background: var(--sc-low); border-radius: 28px 28px 0 0;
+    padding: 8px 16px calc(var(--inset-bottom) + 24px);
+    transform: translateY(100%); transition: transform .5s var(--spring-soft);
+  }
+  .sheet-scrim.show .sheet { transform: none; }
+  .handle { width: 32px; height: 4px; border-radius: 2px; background: var(--on-surface-variant); opacity: .4; margin: 6px auto 18px; }
+  .profile { display: flex; align-items: center; gap: 14px; padding: 4px 4px 8px; }
+  .profile .avatar-btn { width: 56px; height: 56px; font-size: 24px; margin: 0; }
+  .pname { font-size: 22px; font-weight: 700; font-variation-settings: "wdth" 112; line-height: 1.2; }
+  .pmeta { font-size: 13.5px; color: var(--on-surface-variant); }
+  .sheet h4 { margin: 22px 4px 10px; font-size: 14px; font-weight: 700; color: var(--primary); letter-spacing: .02em; }
+  .seg3 { display: flex; gap: 2px; }
+  .seg3 button {
+    flex: 1; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    background: var(--sc-highest); color: var(--on-surface-variant); font-size: 13px; font-weight: 650; border-radius: 8px;
+    transition: border-radius .45s var(--spring), background .25s;
+  }
+  .seg3 button:first-child { border-radius: 20px 8px 8px 20px; }
+  .seg3 button:last-child { border-radius: 8px 20px 20px 8px; }
+  .seg3 button[aria-pressed="true"] { background: var(--primary); color: var(--on-primary); border-radius: 20px; }
+  .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+  .swatch {
+    width: 56px; height: 56px; border-radius: 50%; position: relative; display: grid; place-items: center;
+    background: var(--sw); color: #fff; transition: border-radius .45s var(--spring), transform .45s var(--spring);
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+  }
+  .swatch .ms { opacity: 0; transform: scale(.4); transition: all .35s var(--spring); font-variation-settings: "wght" 700; }
+  .swatch[aria-pressed="true"] { border-radius: 18px; transform: rotate(-8deg); }
+  .swatch[aria-pressed="true"] .ms { opacity: 1; transform: scale(1) rotate(8deg); }
+  .swatch.dyn { background: conic-gradient(from 200deg, #f28b82, #fbbc04, #81c995, #8ab4f8, #c58af9, #f28b82); }
+  .swatch-label { font-size: 12px; color: var(--on-surface-variant); text-align: center; margin-top: 4px; }
+  .swatch-wrap { display: flex; flex-direction: column; align-items: center; }
+  .group { display: flex; flex-direction: column; gap: 2px; }
+  .srow {
+    display: flex; align-items: center; gap: 16px; padding: 14px 16px; min-height: 64px; text-align: left; width: 100%;
+    background: var(--sc-highest); border-radius: 6px; cursor: pointer; color: var(--on-surface);
+  }
+  .srow:first-child { border-radius: 20px 20px 6px 6px; }
+  .srow:last-child { border-radius: 6px 6px 20px 20px; }
+  .srow:only-child { border-radius: 20px; }
+  .srow > span:not(.ms) { flex: 1; min-width: 0; }
+  .srow b { display: block; font-weight: 600; font-size: 15.5px; }
+  .srow small { display: block; font-size: 13px; color: var(--on-surface-variant); margin-top: 1px; }
+  .switch {
+    appearance: none; -webkit-appearance: none; flex: none; margin: 0; cursor: pointer;
+    width: 52px; height: 32px; border-radius: 16px; position: relative;
+    background: var(--sc-highest); border: 2px solid var(--outline); transition: background .25s, border-color .25s;
+  }
+  .switch::before {
+    content: ""; position: absolute; top: 50%; left: 6px; width: 16px; height: 16px; border-radius: 50%;
+    background: var(--outline); transform: translateY(-50%);
+    transition: left .4s var(--spring), width .4s var(--spring), height .4s var(--spring), background .25s;
+  }
+  .switch:checked { background: var(--primary); border-color: var(--primary); }
+  .switch:checked::before { left: 22px; width: 24px; height: 24px; background: var(--on-primary); }
+  .switch:active::before { width: 28px; height: 28px; }
+  .btn-signout {
+    width: 100%; height: 56px; margin-top: 22px; border-radius: 28px; display: flex; align-items: center; justify-content: center; gap: 10px;
+    background: var(--error-container); color: var(--on-error-container); font-weight: 700; font-size: 15.5px;
+    transition: border-radius .4s var(--spring);
+  }
+  .btn-signout:active { border-radius: 14px; }
+  .ver { text-align: center; font-size: 12.5px; color: var(--on-surface-variant); margin: 16px 0 0; }
+
   .fab.show ~ .snack { bottom: calc(var(--nav-h) + var(--inset-bottom) + 96px); }
   @media (min-width: 840px) { .fab.show ~ .snack { bottom: 104px; } }
   @media (min-width: 840px) { .snack { bottom: 24px; } }
@@ -391,7 +475,7 @@
       <button class="icon-btn sl hidden" id="back" aria-label="Zurück"><span class="ms">arrow_back</span></button>
       <h1 id="title">Abo Detox</h1>
       <span class="quota hidden" id="quota" title="Geschätzt: Google erlaubt ca. 10.000 API-Einheiten pro Tag, eine Löschung kostet 50."></span>
-      <button class="icon-btn sl hidden" id="signout" aria-label="Abmelden"><span class="ms">logout</span></button>
+      <button class="avatar-btn hidden" id="profileBtn" aria-label="Profil und Einstellungen"></button>
     </div>
     <p class="sub-line hidden" id="subline"></p>
   </header>
@@ -469,6 +553,42 @@
   </div>
 </div>
 
+<div class="sheet-scrim" id="sheetScrim">
+  <section class="sheet" role="dialog" aria-modal="true" aria-label="Einstellungen">
+    <div class="handle"></div>
+    <div class="profile">
+      <div class="avatar-btn" id="pAvatar"></div>
+      <div><div class="pname" id="pName">Dein Konto</div><div class="pmeta">Angemeldet bei YouTube</div></div>
+    </div>
+
+    <h4>Darstellung</h4>
+    <div class="seg3" id="themeSeg">
+      <button data-theme="system"><span class="ms">settings</span>System</button>
+      <button data-theme="light"><span class="ms">light_mode</span>Hell</button>
+      <button data-theme="dark"><span class="ms">dark_mode</span>Dunkel</button>
+    </div>
+
+    <h4>Farbe</h4>
+    <div class="swatches" id="swatches"></div>
+
+    <h4>Verhalten</h4>
+    <div class="group">
+      <label class="srow"><span><b>Vibration</b><small>Kurzes Feedback beim Antippen</small></span><input type="checkbox" class="switch" data-set="haptics"></label>
+      <label class="srow"><span><b>Vor dem Löschen nachfragen</b><small>Aus = direkt los, ohne Dialog</small></span><input type="checkbox" class="switch" data-set="confirm"></label>
+      <label class="srow"><span><b>Weniger Animationen</b><small>Ruhiger fürs Auge</small></span><input type="checkbox" class="switch" data-set="calm"></label>
+    </div>
+
+    <h4>Daten auf diesem Gerät</h4>
+    <div class="group">
+      <button class="srow sl" id="clearHistory"><span><b>Verlauf leeren</b><small id="histInfo"></small></span><span class="ms">delete</span></button>
+      <button class="srow sl" id="clearCache"><span><b>Gespeicherte Listen &amp; Auswahl löschen</b><small>Lädt beim nächsten Mal alles frisch von YouTube</small></span><span class="ms">delete</span></button>
+    </div>
+
+    <button class="btn-signout" id="signout"><span class="ms">logout</span>Abmelden</button>
+    <p class="ver" id="verInfo"></p>
+  </section>
+</div>
+
 <div class="snack" id="snack" role="status"></div>
 
 <script>
@@ -484,14 +604,57 @@
     set(k, v) { try { localStorage.setItem(k, v); } catch {} },
   };
 
-  /* ================= Android: dynamic colour + insets ================= */
+  /* ================= settings ================= */
+  let systemPalette = null;
+  if (NATIVE && NATIVE.palette) { try { systemPalette = JSON.parse(NATIVE.palette() || 'null'); } catch {} }
+  const settings = Object.assign(
+    { theme: 'system', color: systemPalette ? 'dynamic' : 'lila', haptics: true, confirm: true, calm: false },
+    (() => { try { return JSON.parse(store.get('aboDetox.settings') || '{}'); } catch { return {}; } })(),
+  );
+  if (settings.color === 'dynamic' && !systemPalette) settings.color = 'lila';
+  const saveSettings = () => store.set('aboDetox.settings', JSON.stringify(settings));
+
+  /* ================= theming: baseline, hue presets (OKLCH) and Android Material You ================= */
+  const BASE = {
+    light: { 'primary':'#6750A4','on-primary':'#fff','primary-container':'#EADDFF','on-primary-container':'#4F378B','secondary-container':'#E8DEF8','on-secondary-container':'#4A4458','tertiary':'#7D5260','tertiary-container':'#FFD8E4','on-tertiary-container':'#633B48','error':'#B3261E','on-error':'#fff','error-container':'#F9DEDC','on-error-container':'#8C1D18','surface':'#FEF7FF','on-surface':'#1D1B20','on-surface-variant':'#49454F','outline':'#79747E','outline-variant':'#CAC4D0','sc-lowest':'#fff','sc-low':'#F7F2FA','sc':'#F3EDF7','sc-high':'#ECE6F0','sc-highest':'#E6E0E9','inverse-surface':'#322F35','inverse-on-surface':'#F5EFF7','inverse-primary':'#D0BCFF' },
+    dark: { 'primary':'#D0BCFF','on-primary':'#381E72','primary-container':'#4F378B','on-primary-container':'#EADDFF','secondary-container':'#4A4458','on-secondary-container':'#E8DEF8','tertiary':'#EFB8C8','tertiary-container':'#633B48','on-tertiary-container':'#FFD8E4','error':'#F2B8B5','on-error':'#601410','error-container':'#8C1D18','on-error-container':'#F9DEDC','surface':'#141218','on-surface':'#E6E0E9','on-surface-variant':'#CAC4D0','outline':'#938F99','outline-variant':'#49454F','sc-lowest':'#0F0D13','sc-low':'#1D1B20','sc':'#211F26','sc-high':'#2B2930','sc-highest':'#36343B','inverse-surface':'#E6E0E9','inverse-on-surface':'#322F35','inverse-primary':'#6750A4' },
+  };
+  const PRESETS = { lila: null, pink: 350, blau: 255, gruen: 150, orange: 55 };
+  const PRESET_NAMES = { dynamic: 'Wallpaper', lila: 'Lila', pink: 'Pink', blau: 'Blau', gruen: 'Grün', orange: 'Orange' };
+  function hueRoles(h, dark) {
+    const o = (l, c, hh = h) => `oklch(${l} ${c} ${hh})`, t = h + 60;
+    return dark ? {
+      'primary': o(.82, .10), 'on-primary': o(.30, .12), 'primary-container': o(.40, .13), 'on-primary-container': o(.92, .06),
+      'secondary-container': o(.38, .04), 'on-secondary-container': o(.91, .035),
+      'tertiary': o(.84, .08, t), 'tertiary-container': o(.40, .09, t), 'on-tertiary-container': o(.92, .06, t),
+      'surface': o(.17, .01), 'on-surface': o(.92, .01), 'on-surface-variant': o(.82, .02), 'outline': o(.64, .02), 'outline-variant': o(.38, .02),
+      'sc-lowest': o(.13, .008), 'sc-low': o(.20, .01), 'sc': o(.22, .012), 'sc-high': o(.26, .014), 'sc-highest': o(.30, .016),
+      'inverse-surface': o(.92, .01), 'inverse-on-surface': o(.30, .01), 'inverse-primary': o(.50, .16),
+    } : {
+      'primary': o(.50, .16), 'on-primary': '#fff', 'primary-container': o(.92, .06), 'on-primary-container': o(.32, .12),
+      'secondary-container': o(.91, .035), 'on-secondary-container': o(.33, .04),
+      'tertiary': o(.52, .12, t), 'tertiary-container': o(.91, .06, t), 'on-tertiary-container': o(.33, .09, t),
+      'surface': o(.985, .008), 'on-surface': o(.21, .01), 'on-surface-variant': o(.40, .02), 'outline': o(.58, .02), 'outline-variant': o(.83, .015),
+      'sc-lowest': '#fff', 'sc-low': o(.97, .01), 'sc': o(.955, .012), 'sc-high': o(.935, .014), 'sc-highest': o(.915, .016),
+      'inverse-surface': o(.30, .01), 'inverse-on-surface': o(.96, .01), 'inverse-primary': o(.82, .10),
+    };
+  }
+  const mq = matchMedia('(prefers-color-scheme: dark)');
+  const isDark = () => settings.theme === 'dark' || (settings.theme === 'system' && mq.matches);
+  function applyTheme() {
+    const dark = isDark(), root = document.documentElement;
+    root.dataset.theme = dark ? 'dark' : 'light';
+    root.style.colorScheme = dark ? 'dark' : 'light';
+    root.classList.toggle('calm', !!settings.calm);
+    let roles = { ...BASE[dark ? 'dark' : 'light'] };
+    if (settings.color === 'dynamic' && systemPalette) Object.assign(roles, dynamicRoles(systemPalette, dark));
+    else if (PRESETS[settings.color] != null) Object.assign(roles, hueRoles(PRESETS[settings.color], dark));
+    for (const [k, v] of Object.entries(roles)) if (v) root.style.setProperty('--' + k, v);
+    try { NATIVE?.setDark?.(dark); } catch {}
+  }
   const TONES = (p) => (t) => p[t];
-  function applyDynamicColor() {
-    if (!NATIVE || !NATIVE.palette) return;
-    let p; try { p = JSON.parse(NATIVE.palette() || 'null'); } catch { p = null; }
-    if (!p) return;
+  function dynamicRoles(p, dark) {
     const a1 = TONES(p.a1), a2 = TONES(p.a2), a3 = TONES(p.a3), n1 = TONES(p.n1), n2 = TONES(p.n2);
-    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
     const mix = (x, y, pct) => `color-mix(in srgb, ${x}, ${y} ${pct}%)`;
     const roles = dark ? {
       'primary': a1(200), 'on-primary': a1(800), 'primary-container': a1(700), 'on-primary-container': a1(100),
@@ -512,14 +675,18 @@
       'sc-high': mix(n1(50), n1(100), 50), 'sc-highest': n1(100),
       'inverse-surface': n1(800), 'inverse-on-surface': n1(50), 'inverse-primary': a1(200),
     };
-    for (const [k, v] of Object.entries(roles)) if (v) document.documentElement.style.setProperty('--' + k, v);
+    return roles;
   }
   window.__setInsets = (top, bottom) => {
     document.documentElement.style.setProperty('--inset-top', top + 'px');
     document.documentElement.style.setProperty('--inset-bottom', bottom + 'px');
   };
-  applyDynamicColor();
-  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyDynamicColor);
+  applyTheme();
+  mq.addEventListener('change', applyTheme);
+  function haptic() {
+    if (!settings.haptics) return;
+    try { if (NATIVE?.haptic) NATIVE.haptic(); else navigator.vibrate?.(8); } catch {}
+  }
   if (NATIVE && NATIVE.insets) { try { const i = JSON.parse(NATIVE.insets()); window.__setInsets(i.top, i.bottom); } catch {} }
 
   /* ================= UI helpers ================= */
@@ -581,11 +748,12 @@
   }
   async function getToken(prompt = '') {
     if (NATIVE) {
-      return new Promise((resolve, reject) => { pendingToken = { resolve, reject }; NATIVE.requestToken(); });
+      return new Promise((resolve, reject) => { pendingToken = { resolve, reject }; NATIVE.requestToken(prompt !== 'silent'); });
     }
     const clientId = $('clientId').value.trim();
     if (!clientId) throw new Error('Erst die Client-ID einfügen.');
     store.set('aboDetox.clientId', clientId);
+    if (prompt === 'silent') prompt = '';
     await loadGis();
     return new Promise((resolve, reject) => {
       google.accounts.oauth2.initTokenClient({
@@ -869,7 +1037,7 @@
     memo.saveSel(v);
     node.classList.toggle('sel', v.sel.has(id));
     if (node.getAttribute('role') === 'checkbox') node.setAttribute('aria-checked', v.sel.has(id));
-    if (navigator.vibrate) try { navigator.vibrate(8); } catch {}
+    haptic();
     updateCounts();
   }
 
@@ -902,6 +1070,7 @@
   const closeDialog = () => { $('scrim').classList.remove('show'); };
   async function runDelete() {
     const v = cur();
+    $('scrim').classList.add('show');
     const queue = v.items.filter((it) => v.sel.has(it.id));
     stopRequested = false; running = true; progress = 0;
     $('confirmView').classList.add('hidden'); $('progressView').classList.remove('hidden');
@@ -952,23 +1121,102 @@
   $(NATIVE ? 'stepWeb' : 'stepAndroid').classList.add('hidden');
   if (DEMO) $('login').textContent = 'Demo starten';
 
-  async function start() {
+  async function start(silent = false) {
     try {
-      if (!DEMO) await getToken('consent');
+      if (!DEMO) await getToken(silent ? 'silent' : (NATIVE ? 'consent' : ''));
+      store.set('aboDetox.signedIn', '1');
       $('setup').classList.add('hidden');
-      ['app', 'nav', 'quota', 'signout'].forEach((id) => $(id).classList.remove('hidden'));
+      ['app', 'nav', 'quota', 'profileBtn'].forEach((id) => $(id).classList.remove('hidden'));
       renderQuota();
+      loadProfile();
       await show('subs');
-    } catch (e) { snack(e.message || 'Das ging schief.', 7000); }
+    } catch (e) {
+      $('setup').classList.remove('hidden'); $('content').textContent = ''; $('app').classList.add('hidden');
+      if (!(silent && e.message === 'NEEDS_UI')) snack(e.message || 'Das ging schief.', 7000);
+    }
   }
-  $('login').addEventListener('click', start);
+  $('login').addEventListener('click', () => start(false));
+
+  /* profile (1 quota unit, cached) */
+  let profile = null;
+  try { profile = JSON.parse(store.get('aboDetox.profile') || 'null'); } catch {}
+  function paintAvatar(node) {
+    node.textContent = '';
+    if (profile?.thumb) node.append(img(profile.thumb));
+    else node.textContent = (profile?.name || '?').trim().charAt(0).toUpperCase();
+  }
+  function renderProfile() {
+    paintAvatar($('profileBtn')); paintAvatar($('pAvatar'));
+    $('pName').textContent = profile?.name || 'Dein Konto';
+  }
+  async function loadProfile() {
+    renderProfile();
+    if (profile || DEMO) { if (DEMO && !profile) { profile = { name: 'Demo' }; renderProfile(); } return; }
+    try {
+      const d = await api('/channels?part=snippet&mine=true');
+      const sn = d.items?.[0]?.snippet;
+      if (sn) { profile = { name: sn.title, thumb: bestThumb(sn.thumbnails) }; store.set('aboDetox.profile', JSON.stringify(profile)); renderProfile(); }
+    } catch {}
+  }
+
+  /* settings sheet */
+  function renderSettings() {
+    document.querySelectorAll('#themeSeg button').forEach((b) => b.setAttribute('aria-pressed', b.dataset.theme === settings.theme));
+    document.querySelectorAll('.sheet [data-set]').forEach((i) => { i.checked = !!settings[i.dataset.set]; });
+    const sw = $('swatches'); sw.textContent = '';
+    for (const key of Object.keys(PRESET_NAMES)) {
+      if (key === 'dynamic' && !systemPalette) continue;
+      const wrap = el('div', 'swatch-wrap');
+      const b = el('button', 'swatch' + (key === 'dynamic' ? ' dyn' : ''));
+      b.dataset.color = key; b.setAttribute('aria-pressed', settings.color === key); b.setAttribute('aria-label', PRESET_NAMES[key]);
+      if (key !== 'dynamic') b.style.setProperty('--sw', key === 'lila' ? '#6750A4' : `oklch(.55 .17 ${PRESETS[key]})`);
+      b.append(icon(key === 'dynamic' ? 'palette' : 'check'));
+      wrap.append(b, el('div', 'swatch-label', PRESET_NAMES[key]));
+      sw.append(wrap);
+    }
+    const n = hist.all().length;
+    $('histInfo').textContent = n ? `${fmt(n)} ${n === 1 ? 'Eintrag' : 'Einträge'}, danach kein Rückgängig mehr` : 'Leer';
+    const left = Math.max(0, Math.floor((10000 - quotaState().u) / 50));
+    $('verInfo').textContent = `Abo Detox · heute noch ≈ ${left} Aktionen · Reset um ${resetTime()} Uhr`;
+  }
+  const openSheet = () => { renderSettings(); $('sheetScrim').classList.add('show'); haptic(); };
+  const closeSheet = () => $('sheetScrim').classList.remove('show');
+  $('profileBtn').addEventListener('click', openSheet);
+  $('sheetScrim').addEventListener('click', (e) => { if (e.target === $('sheetScrim')) closeSheet(); });
+  $('themeSeg').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    settings.theme = b.dataset.theme; saveSettings(); applyTheme(); renderSettings(); haptic();
+  });
+  $('swatches').addEventListener('click', (e) => {
+    const b = e.target.closest('.swatch'); if (!b) return;
+    settings.color = b.dataset.color; saveSettings(); applyTheme(); renderSettings(); haptic();
+  });
+  document.querySelectorAll('.sheet [data-set]').forEach((i) => i.addEventListener('change', () => {
+    settings[i.dataset.set] = i.checked; saveSettings(); applyTheme(); haptic();
+  }));
+  $('clearHistory').addEventListener('click', () => {
+    if (!hist.all().length) return;
+    hist.save([]); views.history.items = null; renderSettings();
+    if (current === 'history' && !detail) ensureLoaded(views.history);
+    snack('Verlauf geleert.');
+  });
+  $('clearCache').addEventListener('click', () => {
+    try { Object.keys(localStorage).filter((k) => k.startsWith('aboDetox.items.') || k.startsWith('aboDetox.sel.')).forEach((k) => localStorage.removeItem(k)); } catch {}
+    for (const v of Object.values(views)) v.sel.clear();
+    if (detail) detail.sel.clear();
+    render(); snack('Gespeicherte Listen und Auswahl gelöscht.');
+  });
 
   $('signout').addEventListener('click', () => {
+    closeSheet();
+    store.set('aboDetox.signedIn', '0');
+    try { localStorage.removeItem('aboDetox.profile'); } catch {}
+    profile = null;
     if (!NATIVE && token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(token, () => {});
     if (NATIVE?.signOut) NATIVE.signOut();
     token = null; detail = null;
     for (const v of Object.values(views)) { v.items = null; v.sel.clear(); }
-    ['app', 'nav', 'quota', 'signout', 'back', 'subline'].forEach((id) => $(id).classList.add('hidden'));
+    ['app', 'nav', 'quota', 'profileBtn', 'back', 'subline'].forEach((id) => $(id).classList.add('hidden'));
     $('setup').classList.remove('hidden'); $('title').textContent = 'Abo Detox';
     $('fab').classList.remove('show');
   });
@@ -1003,7 +1251,10 @@
     store.set('aboDetox.sort.' + (v.parent ? 'playlist' : v.key), b.dataset.sort);
     render();
   });
-  $('fab').addEventListener('click', openDialog);
+  $('fab').addEventListener('click', () => {
+    if (settings.confirm) return openDialog();
+    openDialog(); runDelete();   // fills texts/icons, then goes straight to progress
+  });
   $('cancel').addEventListener('click', closeDialog);
   $('confirm').addEventListener('click', runDelete);
   $('stop').addEventListener('click', () => { stopRequested = true; });
@@ -1011,8 +1262,21 @@
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.__onBack(); });
   addEventListener('scroll', () => $('appbar').classList.toggle('scrolled', scrollY > 8), { passive: true });
 
+  // stay signed in: on Android the token comes back silently from Play Services
+  if (!DEMO && store.get('aboDetox.signedIn') === '1') {
+    if (NATIVE) {
+      $('setup').classList.add('hidden');
+      $('content').innerHTML = '<div class="loader"><i></i></div>';
+      $('app').classList.remove('hidden');
+      start(true);
+    } else if (profile?.name) {
+      $('login').textContent = `Weiter als ${profile.name}`;
+    }
+  }
+
   // Android back button → returns true if handled in-app
   window.__onBack = () => {
+    if ($('sheetScrim').classList.contains('show')) { closeSheet(); return true; }
     if ($('scrim').classList.contains('show')) { if (!running) closeDialog(); return true; }
     if (detail) { $('back').click(); return true; }
     if (!$('app').classList.contains('hidden') && current !== 'subs') { show('subs'); return true; }
