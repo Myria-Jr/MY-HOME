@@ -123,17 +123,16 @@
   /* connected button group (M3 Expressive) */
   .bgroup { display: flex; gap: 2px; margin-bottom: 16px; }
   .bgroup button {
-    flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    flex: 1; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     background: var(--secondary-container); color: var(--on-secondary-container);
     font-weight: 600; font-size: 14px; border-radius: 8px;
-    transition: border-radius .45s var(--spring), flex-grow .5s var(--spring), flex-basis .5s var(--spring), transform .4s var(--spring);
+    transition: border-radius .4s var(--spring), transform .4s var(--spring);
   }
   .bgroup button:first-child { border-radius: 22px 8px 8px 22px; }
   .bgroup button:last-child { border-radius: 8px 22px 22px 8px; }
   /* M3 Expressive connected button group: the pressed button grows and turns into a full pill,
      its neighbours make room and keep their small inner corners */
-  .bgroup button.pressed { flex-grow: 1.28; border-radius: 22px; }
-  .bgroup .smart.pressed { flex-basis: 70px; border-radius: 22px; }
+  .bgroup button:active { border-radius: 22px; transform: scaleX(1.04); }
   .seg3 button.pressed { flex-grow: 1.3; border-radius: 20px; }
   .bgroup .ms { font-size: 20px; }
   /* filter chips (sort) */
@@ -1960,7 +1959,7 @@
   }
 
   // M3 Expressive press morph for connected button groups
-  const GROUP_BTN = '.bgroup button, .seg3 button';
+  const GROUP_BTN = '.seg3 button';
   let pressedBtn = null, pressedAt = 0;
   document.addEventListener('pointerdown', (e) => {
     const b = e.target.closest(GROUP_BTN); if (!b) return;
