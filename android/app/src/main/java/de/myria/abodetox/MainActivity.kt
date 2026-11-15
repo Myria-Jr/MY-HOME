@@ -3,6 +3,7 @@ package de.myria.abodetox
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.view.HapticFeedbackConstants
@@ -16,6 +17,7 @@ import androidx.activity.addCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.FileProvider
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -25,6 +27,7 @@ import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.common.api.ApiException
 import com.google.android.gms.common.api.Scope
 import org.json.JSONObject
+import java.io.File
 
 /**
  * Thin native shell around the Abo Detox web app (bundled in assets):
@@ -171,6 +174,27 @@ class MainActivity : ComponentActivity() {
 
     inner class Bridge {
         @JavascriptInterface fun requestToken(interactive: Boolean) = runOnUiThread { authorize(interactive) }
+        @JavascriptInterface fun openUrl(url: String) = runOnUiThread {
+            val uri = Uri.parse(url)
+            if (uri.scheme == "https" && uri.host?.endsWith("youtube.com") == true) {
+                runCatching { startActivity(Intent(Intent.ACTION_VIEW, uri)) } // YouTube app picks these up
+            }
+        }
+        @JavascriptInterface fun share(text: String, fileName: String) = runOnUiThread {
+            runCatching {
+                val dir = File(cacheDir, "exports").apply { mkdirs() }
+                val safe = fileName.replace(Regex("[^A-Za-z0-9äöüÄÖÜß._-]"), "-")
+                val file = File(dir, safe).apply { writeText(text) }
+                val uri = FileProvider.getUriForFile(this@MainActivity, "$packageName.files", file)
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "text/csv"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, safe)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                startActivity(Intent.createChooser(send, "Liste exportieren"))
+            }
+        }
         @JavascriptInterface fun haptic() = runOnUiThread { web.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
         @JavascriptInterface fun setDark(dark: Boolean) = runOnUiThread {
             val c = WindowCompat.getInsetsController(window, window.decorView)
