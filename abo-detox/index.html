@@ -123,14 +123,18 @@
   /* connected button group (M3 Expressive) */
   .bgroup { display: flex; gap: 2px; margin-bottom: 16px; }
   .bgroup button {
-    flex: 1; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     background: var(--secondary-container); color: var(--on-secondary-container);
     font-weight: 600; font-size: 14px; border-radius: 8px;
-    transition: border-radius .4s var(--spring), transform .4s var(--spring);
+    transition: border-radius .45s var(--spring), flex-grow .5s var(--spring), flex-basis .5s var(--spring), transform .4s var(--spring);
   }
   .bgroup button:first-child { border-radius: 22px 8px 8px 22px; }
   .bgroup button:last-child { border-radius: 8px 22px 22px 8px; }
-  .bgroup button:active { border-radius: 22px; transform: scaleX(1.04); }
+  /* M3 Expressive connected button group: the pressed button grows and turns into a full pill,
+     its neighbours make room and keep their small inner corners */
+  .bgroup button.pressed { flex-grow: 1.28; border-radius: 22px; }
+  .bgroup .smart.pressed { flex-basis: 70px; border-radius: 22px; }
+  .seg3 button.pressed { flex-grow: 1.3; border-radius: 20px; }
   .bgroup .ms { font-size: 20px; }
   /* filter chips (sort) */
   .chips { display: flex; gap: 8px; overflow-x: auto; margin: -4px -16px 14px; padding: 0 16px; scrollbar-width: none; }
@@ -445,6 +449,9 @@
   .bar:active { border-radius: 4px; transform: scaleY(.96); }
   .medline { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--outline); pointer-events: none; }
   .chart-foot { display: flex; justify-content: space-between; margin-top: 8px; }
+  /* staggered entrance when a list/section appears */
+  @keyframes rise { from { opacity: 0; transform: translateY(16px) scale(.95); } }
+  .enter > * { animation: rise .55s var(--spring-soft) backwards; animation-delay: calc(var(--i, 0) * 22ms); }
   .calm *, .calm *::before, .calm *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 
   /* profile button */
@@ -478,9 +485,9 @@
   .sheet h4 { margin: 22px 4px 10px; font-size: 14px; font-weight: 700; color: var(--primary); letter-spacing: .02em; }
   .seg3 { display: flex; gap: 2px; }
   .seg3 button {
-    flex: 1; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
     background: var(--sc-highest); color: var(--on-surface-variant); font-size: 13px; font-weight: 650; border-radius: 8px;
-    transition: border-radius .45s var(--spring), background .25s;
+    transition: border-radius .45s var(--spring), background .25s, color .25s, flex-grow .5s var(--spring);
   }
   .seg3 button:first-child { border-radius: 20px 8px 8px 20px; }
   .seg3 button:last-child { border-radius: 8px 20px 20px 8px; }
@@ -690,6 +697,7 @@
       <label class="srow"><span><b>Vor dem Löschen nachfragen</b><small>Aus = direkt los, ohne Dialog</small></span><input type="checkbox" class="switch" data-set="confirm"></label>
       <label class="srow"><span><b>Weniger Animationen</b><small>Ruhiger fürs Auge</small></span><input type="checkbox" class="switch" data-set="calm"></label>
       <label class="srow"><span><b>Lange drücken öffnet YouTube</b><small>Kanal, Video oder Playlist kurz anschauen</small></span><input type="checkbox" class="switch" data-set="longPress"></label>
+      <label class="srow"><span><b>Reserve für Analyse behalten</b><small>Hält ca. 6 Löschungen vom Tageslimit zurück, damit Kanal-Analyse und Listen immer laden</small></span><input type="checkbox" class="switch" data-set="reserve"></label>
     </div>
 
     <h4>Daten auf diesem Gerät</h4>
@@ -722,7 +730,7 @@
   let systemPalette = null;
   if (NATIVE && NATIVE.palette) { try { systemPalette = JSON.parse(NATIVE.palette() || 'null'); } catch {} }
   const settings = Object.assign(
-    { theme: 'system', color: systemPalette ? 'dynamic' : 'lila', haptics: true, confirm: true, calm: false, idleMonths: 12, startTab: 'subs', grid: 'M', longPress: true },
+    { theme: 'system', color: systemPalette ? 'dynamic' : 'lila', haptics: true, confirm: true, calm: false, idleMonths: 12, startTab: 'subs', grid: 'M', longPress: true, reserve: true },
     (() => { try { return JSON.parse(store.get('aboDetox.settings') || '{}'); } catch { return {}; } })(),
   );
   if (settings.color === 'dynamic' && !systemPalette) settings.color = 'lila';
@@ -824,6 +832,9 @@
 
   /* ================= quota estimate (per Pacific day) ================= */
   const ptDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
+  const RESERVE = 300; // units kept back for loading lists + channel analytics
+  const unitsLeft = () => 10000 - quotaState().u;
+  const deletesLeft = () => Math.max(0, Math.floor((unitsLeft() - (settings.reserve ? RESERVE : 0)) / 50));
   function quotaState() {
     let q; try { q = JSON.parse(store.get('aboDetox.quota') || '{}'); } catch { q = {}; }
     if (q.d !== ptDay()) q = { d: ptDay(), u: 0 };
@@ -831,7 +842,7 @@
   }
   function spend(units) { const q = quotaState(); q.u += units; store.set('aboDetox.quota', JSON.stringify(q)); renderQuota(); }
   function renderQuota() {
-    const left = Math.max(0, Math.floor((10000 - quotaState().u) / 50));
+    const left = deletesLeft();
     $('quota').textContent = left ? `≈ ${left} frei` : `0 frei · ab ${resetTime()}`;
   }
   // Google resets the quota at midnight Pacific time → show that in local time
@@ -1263,7 +1274,7 @@
     if (tab === 'tips') {
       const tips = channelTips(d);
       const chart = viewsChart(d); if (chart) content.append(chart);
-      const wrap = el('div', 'tips'); tips.forEach((t) => wrap.append(tipCard(t))); content.append(wrap);
+      const wrap = el('div', 'tips'); tips.forEach((t) => wrap.append(tipCard(t))); content.append(wrap); stagger(wrap);
       const top = [...pubs].sort((a, b) => b.views - a.views).slice(0, 3);
       if (top.length) { content.append(el('h4', 'sec', 'Deine Top-Videos')); const l = el('div', 'list'); top.forEach((x) => l.append(videoRow(x))); content.append(l); }
     } else if (tab === 'videos') {
@@ -1280,12 +1291,12 @@
       if (sort === 'low') list.sort((a, b) => a.views - b.views);
       if (sort === 'likes') list.sort((a, b) => lrate(b) - lrate(a));
       if (!list.length) { const e = el('div', 'empty'); e.append(icon('video_library'), el('div', '', 'Noch keine Videos hochgeladen.')); content.append(e); }
-      else { const l = el('div', 'list'); list.forEach((x) => l.append(videoRow(x))); content.append(l); }
+      else { const l = el('div', 'list'); list.forEach((x) => l.append(videoRow(x))); content.append(l); stagger(l); }
     } else {
       const open = d.comments.filter((c) => !c.replies.some((r) => r.mine)).length;
       content.append(el('div', 'count-line ch-note', d.comments.length ? `Die neuesten ${fmt(d.comments.length)} Kommentare auf deinen Videos · ${fmt(open)} ohne Antwort von dir` : ''));
       if (!d.comments.length) { const e = el('div', 'empty'); e.append(icon('chat_bubble'), el('div', '', 'Noch keine Kommentare auf deinen Videos.')); content.append(e); }
-      else { const l = el('div', 'cmts'); d.comments.forEach((c) => l.append(commentCard(c, d))); content.append(l); }
+      else { const l = el('div', 'cmts'); d.comments.forEach((c) => l.append(commentCard(c, d))); content.append(l); stagger(l); }
     }
   }
 
@@ -1319,6 +1330,7 @@
   }
   async function ensureLoaded(v) {
     renderChrome();
+    animateNext = true;
     if (v.items) return render();
     const content = $('content');
     content.textContent = '';
@@ -1340,7 +1352,9 @@
         v.items = null;
         content.textContent = '';
         const box = el('div', 'empty');
-        box.append(icon('close'), el('div', '', isQuota(e) ? `Google-Tageslimit ist voll. Ab ${resetTime()} Uhr geht's weiter.` : 'Laden fehlgeschlagen: ' + e.message));
+        box.append(icon(isQuota(e) ? 'schedule' : 'close'), el('div', '', isQuota(e)
+          ? `Das Google-Tageslimit ist für heute aufgebraucht. Löschen und Laden teilen sich ein Kontingent, darum geht gerade auch ${v.custom ? 'die Analyse' : 'das Laden'} nicht. Ab ${resetTime()} Uhr geht's weiter.` + (v.custom ? ' Ab dann lädt Tidy die Analyse beim Start vor und hält eine Reserve zurück, damit du sie immer sehen kannst.' : '')
+          : 'Laden fehlgeschlagen: ' + e.message));
         content.append(box);
         return;
       }
@@ -1348,6 +1362,7 @@
     // restore what was marked last time (only ids that still exist)
     const ids = new Set(v.items.map((x) => x.id));
     for (const id of memo.loadSel(v)) if (ids.has(id)) v.sel.add(id);
+    animateNext = true;
     if (cur() === v) render();
   }
   function renderChrome() {
@@ -1391,9 +1406,14 @@
     }
     return list;
   }
+  let animateNext = false;
+  function stagger(wrap) {
+    [...wrap.children].forEach((c, i) => c.style.setProperty('--i', Math.min(i, 24)));
+    wrap.classList.add('enter');
+  }
   function render() {
     const v = cur(); const content = $('content');
-    if (v.custom) return renderChannel(v);
+    if (v.custom) { renderChannel(v); animateNext = false; return; }
     content.textContent = '';
     if (!v.items) return;
     const list = filtered(v);
@@ -1406,7 +1426,9 @@
       const frag = document.createDocumentFragment();
       for (const it of list) frag.append(v.kind === 'grid' ? tile(it, v) : row(it, v));
       wrap.append(frag); content.append(wrap);
+      if (animateNext) stagger(wrap);
     }
+    animateNext = false;
     updateCounts();
   }
   const monthYear = (d) => new Date(d).toLocaleDateString('de-DE', { month: '2-digit', year: 'numeric' });
@@ -1483,7 +1505,7 @@
   function openDialog() {
     const v = cur(); const n = v.sel.size;
     $('dTitle').textContent = `${fmt(n)} ${n === 1 ? v.noun[0] : v.noun[1]} ${v.verb}?`;
-    $('dText').textContent = v.text + (n > 190 ? ` Achtung: Google erlaubt nur ca. 190 Aktionen pro Tag. Der Rest geht morgen.` : '');
+    $('dText').textContent = v.text + (!DEMO && n > deletesLeft() ? ` Heute gehen noch ca. ${deletesLeft()}, der Rest ab ${resetTime()} Uhr (Auswahl bleibt gespeichert).` : '');
     $('dIcon').textContent = v.restore ? 'undo' : 'delete';
     $('dIcon').classList.toggle('restore', !!v.restore);
     $('confirm').textContent = v.restore ? 'Zurückholen' : 'Weg damit';
@@ -1501,7 +1523,7 @@
     stopRequested = false; running = true; progress = 0;
     $('confirmView').classList.add('hidden'); $('progressView').classList.remove('hidden');
     cancelAnimationFrame(waveRaf); waveRaf = requestAnimationFrame(drawWave);
-    let done = 0, failed = 0, quotaHit = false;
+    let done = 0, failed = 0, quotaHit = false, reserveHit = false;
     const logged = [];
     const ok = (it) => { done++; const h = v.log?.(it); if (h) logged.push(h); removeItem(v, it); };
     const step = () => {
@@ -1511,6 +1533,7 @@
     step();
     for (const it of queue) {
       if (stopRequested) break;
+      if (!DEMO && deletesLeft() <= 0 && unitsLeft() > 0 && settings.reserve) { reserveHit = true; break; }
       try {
         if (DEMO) await sleep(160); else await v.del(it);
         ok(it);
@@ -1530,6 +1553,7 @@
     running = false; progress = 1; drawWave();
     setTimeout(() => { closeDialog(); render(); }, 350);
     if (quotaHit) snack(`Tageslimit erreicht nach ${fmt(done)}. Deine Auswahl ist gespeichert, ab ${resetTime()} Uhr einfach weitermachen.`, 9000);
+    else if (reserveHit) snack(`${fmt(done)} erledigt. Den Rest vom Tageslimit hebt Tidy für Analyse & Listen auf. Ab ${resetTime()} Uhr geht's weiter, deine Auswahl ist gespeichert.`, 10000);
     else if (stopRequested) snack(`Gestoppt. ${fmt(done)} erledigt.`);
     else if (failed) snack(`${fmt(done)} erledigt, ${failed} hakten. Nochmal versuchen?`);
     else if (v.restore) snack(`${fmt(done)} zurückgeholt. Welcome back! 👋`);
@@ -1576,6 +1600,7 @@
       renderQuota();
       loadProfile();
       setTimeout(showWhatsNew, 600);
+      setTimeout(prefetchChannel, 2500);
       await show(views[settings.startTab] ? settings.startTab : 'subs');
     } catch (e) {
       $('setup').classList.remove('hidden'); $('content').textContent = ''; $('app').classList.add('hidden');
@@ -1583,6 +1608,14 @@
     }
   }
   $('login').addEventListener('click', () => start(false));
+
+  /* load channel analytics in the background so it is there even when the quota runs out later */
+  async function prefetchChannel() {
+    if (DEMO || views.channel.data) return;
+    try { const c = JSON.parse(store.get('aboDetox.channel') || 'null'); if (c && Date.now() - c.at < 6 * 36e5) return; } catch {}
+    if (unitsLeft() < 100) return;
+    try { const d = await loadChannelData(); store.set('aboDetox.channel', JSON.stringify(d)); } catch {}
+  }
 
   /* "Neu in Tidy" sheet, once per version */
   const APP_VERSION = '3.0';
@@ -1656,7 +1689,7 @@
     }
     const n = hist.all().length;
     $('histInfo').textContent = n ? `${fmt(n)} ${n === 1 ? 'Eintrag' : 'Einträge'}, danach kein Rückgängig mehr` : 'Leer';
-    const left = Math.max(0, Math.floor((10000 - quotaState().u) / 50));
+    const left = deletesLeft();
     $('verInfo').textContent = `Tidy · heute noch ≈ ${left} Aktionen · Reset um ${resetTime()} Uhr`;
   }
   const openSheet = () => { renderSettings(); $('sheetScrim').classList.add('show'); haptic(); };
@@ -1925,6 +1958,19 @@
       $('login').textContent = `Weiter als ${profile.name}`;
     }
   }
+
+  // M3 Expressive press morph for connected button groups
+  const GROUP_BTN = '.bgroup button, .seg3 button';
+  let pressedBtn = null, pressedAt = 0;
+  document.addEventListener('pointerdown', (e) => {
+    const b = e.target.closest(GROUP_BTN); if (!b) return;
+    pressedBtn = b; pressedAt = performance.now(); b.classList.add('pressed');
+  });
+  const release = () => {
+    const b = pressedBtn; if (!b) return; pressedBtn = null;
+    setTimeout(() => b.classList.remove('pressed'), Math.max(0, 220 - (performance.now() - pressedAt)));
+  };
+  ['pointerup', 'pointercancel'].forEach((t) => document.addEventListener(t, release));
 
   // Android back button → returns true if handled in-app
   window.__onBack = () => {
