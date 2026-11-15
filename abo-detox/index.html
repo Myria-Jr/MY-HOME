@@ -4,563 +4,886 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Abo Detox</title>
-<meta name="description" content="YouTube-Abos in einem Rutsch aufräumen.">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<meta name="description" content="Räum dein YouTube auf: Abos, Playlists und Likes in einem Rutsch.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,25..151,100..1000&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400..600,0..1,0&icon_names=arrow_back,check,chevron_right,close,delete,deselect,done_all,flip,logout,playlist_play,search,subscriptions,thumb_up,video_library&display=block">
 <style>
+  /* ============ Material 3 colour roles (baseline, overridden by Android dynamic colour) ============ */
   :root {
-    --bg: #f2f2f7;
-    --ink: #1c1c1e;
-    --ink-2: #6e6e73;
-    --glass: rgba(255,255,255,.55);
-    --glass-strong: rgba(255,255,255,.78);
-    --stroke: rgba(255,255,255,.7);
-    --stroke-soft: rgba(0,0,0,.06);
-    --shadow: 0 8px 32px rgba(30,30,60,.10), 0 1px 0 rgba(255,255,255,.6) inset;
-    --accent: #0a84ff;
-    --danger: #ff3b30;
-    --danger-tint: rgba(255,59,48,.12);
-    --blob-1: #ff9ec7;
-    --blob-2: #8ec5ff;
-    --blob-3: #c6a8ff;
-    --radius: 22px;
+    --primary:#6750A4; --on-primary:#fff; --primary-container:#EADDFF; --on-primary-container:#4F378B;
+    --secondary-container:#E8DEF8; --on-secondary-container:#4A4458;
+    --tertiary:#7D5260; --tertiary-container:#FFD8E4; --on-tertiary-container:#633B48;
+    --error:#B3261E; --on-error:#fff; --error-container:#F9DEDC; --on-error-container:#8C1D18;
+    --surface:#FEF7FF; --on-surface:#1D1B20; --on-surface-variant:#49454F;
+    --outline:#79747E; --outline-variant:#CAC4D0;
+    --sc-lowest:#fff; --sc-low:#F7F2FA; --sc:#F3EDF7; --sc-high:#ECE6F0; --sc-highest:#E6E0E9;
+    --inverse-surface:#322F35; --inverse-on-surface:#F5EFF7; --inverse-primary:#D0BCFF;
+    color-scheme: light;
+
+    --inset-top: env(safe-area-inset-top, 0px);
+    --inset-bottom: env(safe-area-inset-bottom, 0px);
+    --spring: cubic-bezier(.34, 1.56, .64, 1);     /* expressive overshoot */
+    --spring-soft: cubic-bezier(.2, 1.25, .4, 1);
+    --emph: cubic-bezier(.2, 0, 0, 1);
+    --nav-h: 80px;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme="light"]) {
-      --bg: #000;
-      --ink: #f5f5f7;
-      --ink-2: #98989f;
-      --glass: rgba(40,40,46,.50);
-      --glass-strong: rgba(44,44,50,.80);
-      --stroke: rgba(255,255,255,.12);
-      --stroke-soft: rgba(255,255,255,.06);
-      --shadow: 0 8px 32px rgba(0,0,0,.45), 0 1px 0 rgba(255,255,255,.08) inset;
-      --danger-tint: rgba(255,69,58,.18);
-      --blob-1: #7a2350;
-      --blob-2: #163e75;
-      --blob-3: #3d2577;
+      --primary:#D0BCFF; --on-primary:#381E72; --primary-container:#4F378B; --on-primary-container:#EADDFF;
+      --secondary-container:#4A4458; --on-secondary-container:#E8DEF8;
+      --tertiary:#EFB8C8; --tertiary-container:#633B48; --on-tertiary-container:#FFD8E4;
+      --error:#F2B8B5; --on-error:#601410; --error-container:#8C1D18; --on-error-container:#F9DEDC;
+      --surface:#141218; --on-surface:#E6E0E9; --on-surface-variant:#CAC4D0;
+      --outline:#938F99; --outline-variant:#49454F;
+      --sc-lowest:#0F0D13; --sc-low:#1D1B20; --sc:#211F26; --sc-high:#2B2930; --sc-highest:#36343B;
+      --inverse-surface:#E6E0E9; --inverse-on-surface:#322F35; --inverse-primary:#6750A4;
+      color-scheme: dark;
     }
   }
+  :root[data-theme="dark"] { color-scheme: dark; }
 
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; }
   body {
-    background: var(--bg);
-    color: var(--ink);
-    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+    background: var(--surface); color: var(--on-surface);
+    font-family: "Roboto Flex", Roboto, system-ui, sans-serif;
+    font-size: 16px; line-height: 1.45; letter-spacing: .01em;
     -webkit-font-smoothing: antialiased;
-    min-height: 100vh;
-    overflow-x: hidden;
+    min-height: 100vh; overflow-x: hidden;
+    transition: background .4s var(--emph);
   }
-
-  /* drifting colour blobs behind the glass */
-  .ambient { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
-  .ambient i {
-    position: absolute; width: 55vmax; height: 55vmax; border-radius: 50%;
-    filter: blur(80px); opacity: .55;
-    animation: drift 26s ease-in-out infinite alternate;
+  .ms {
+    font-family: "Material Symbols Rounded"; font-weight: 500; font-style: normal;
+    font-size: 24px; line-height: 1; display: inline-block; white-space: nowrap;
+    font-variation-settings: "FILL" 0, "wght" 500, "opsz" 24;
+    -webkit-font-feature-settings: "liga"; font-feature-settings: "liga";
+    user-select: none; flex: none;
   }
-  .ambient i:nth-child(1) { background: var(--blob-1); top: -20vmax; left: -15vmax; }
-  .ambient i:nth-child(2) { background: var(--blob-2); bottom: -25vmax; right: -15vmax; animation-delay: -9s; }
-  .ambient i:nth-child(3) { background: var(--blob-3); top: 30%; left: 40%; width: 35vmax; height: 35vmax; animation-delay: -17s; }
-  @keyframes drift { to { transform: translate(6vmax, -4vmax) scale(1.1); } }
-  @media (prefers-reduced-motion: reduce) { .ambient i { animation: none; } }
-
-  .glass {
-    background: var(--glass);
-    backdrop-filter: blur(28px) saturate(180%);
-    -webkit-backdrop-filter: blur(28px) saturate(180%);
-    border: 1px solid var(--stroke);
-    box-shadow: var(--shadow);
-    border-radius: var(--radius);
-  }
-
-  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 16px 120px; }
-
-  header.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .logo {
-    width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
-    background: linear-gradient(145deg, #ff5f6d, #ff2d55); color: #fff;
-    box-shadow: 0 6px 18px rgba(255,45,85,.35), inset 0 1px 0 rgba(255,255,255,.35);
-  }
-  h1 { font-size: 22px; letter-spacing: -.02em; margin: 0; font-weight: 700; }
-  .sub { color: var(--ink-2); font-size: 13px; margin: 0; }
-
-  button {
-    font: inherit; border: 0; cursor: pointer; color: var(--ink);
-    border-radius: 999px; padding: 9px 16px; font-weight: 590;
-    transition: transform .15s ease, background .2s ease, opacity .2s;
-  }
-  button:active { transform: scale(.96); }
-  button:disabled { opacity: .45; cursor: default; transform: none; }
-  .btn-glass { background: var(--glass-strong); border: 1px solid var(--stroke); }
-  .btn-primary { background: var(--accent); color: #fff; }
-  .btn-danger { background: var(--danger); color: #fff; box-shadow: 0 8px 22px rgba(255,59,48,.35); }
-
-  /* setup card */
-  .setup { padding: 22px; margin-bottom: 18px; }
-  .setup h2 { margin: 0 0 6px; font-size: 17px; letter-spacing: -.01em; }
-  .setup p { margin: 0 0 14px; color: var(--ink-2); }
-  .row { display: flex; gap: 10px; flex-wrap: wrap; }
-  input[type="text"], input[type="search"] {
-    font: inherit; color: var(--ink);
-    background: var(--glass-strong); border: 1px solid var(--stroke-soft);
-    border-radius: 12px; padding: 10px 14px; outline: none; min-width: 0; flex: 1;
-  }
-  input:focus { border-color: var(--accent); box-shadow: 0 0 0 4px rgba(10,132,255,.18); }
-  details { margin-top: 14px; }
-  summary { cursor: pointer; color: var(--accent); font-weight: 590; list-style: none; }
-  summary::-webkit-details-marker { display: none; }
-  ol { padding-left: 20px; margin: 10px 0 0; color: var(--ink-2); }
-  ol li { margin-bottom: 6px; }
-  code { font: 12.5px ui-monospace, "SF Mono", Menlo, monospace; background: var(--stroke-soft); padding: 2px 6px; border-radius: 6px; color: var(--ink); }
-
-  /* toolbar */
-  .toolbar {
-    position: sticky; top: 12px; z-index: 5;
-    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-    padding: 10px; margin-bottom: 16px;
-  }
-  .toolbar input { flex: 1 1 180px; }
-  .seg { display: flex; gap: 6px; }
-  .count { font-variant-numeric: tabular-nums; color: var(--ink-2); font-size: 13px; padding: 0 6px; white-space: nowrap; }
-
-  /* grid of channels */
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
-  .card {
-    position: relative; padding: 16px 12px 14px; text-align: center; cursor: pointer;
-    border-radius: 20px; user-select: none;
-    transition: transform .18s cubic-bezier(.2,.9,.3,1.2), background .2s, border-color .2s, opacity .3s;
-  }
-  .card:hover { transform: translateY(-2px); }
-  .card:active { transform: scale(.97); }
-  .card img {
-    width: 64px; height: 64px; border-radius: 50%; display: block; margin: 0 auto 10px;
-    object-fit: cover; background: var(--stroke-soft);
-    transition: filter .2s;
-  }
-  .card .name {
-    font-size: 13.5px; font-weight: 590; line-height: 1.25;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  }
-  .card .tick {
-    position: absolute; top: 10px; right: 10px; width: 22px; height: 22px; border-radius: 50%;
-    border: 1.5px solid var(--ink-2); opacity: .45; display: grid; place-items: center;
-    transition: all .2s;
-  }
-  .card .tick svg { opacity: 0; transform: scale(.5); transition: all .2s; }
-  .card.sel { background: var(--danger-tint); border-color: rgba(255,59,48,.45); }
-  .card.sel img { filter: grayscale(.85) opacity(.7); }
-  .card.sel .tick { background: var(--danger); border-color: var(--danger); opacity: 1; }
-  .card.sel .tick svg { opacity: 1; transform: scale(1); }
-  .card.gone { opacity: 0; transform: scale(.85); pointer-events: none; }
-  .card:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-
-  .empty { text-align: center; color: var(--ink-2); padding: 60px 20px; }
-
-  /* bottom action pill */
-  .dock {
-    position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom));
-    transform: translate(-50%, 140%); transition: transform .35s cubic-bezier(.2,.9,.3,1.1);
-    display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 18px; border-radius: 999px;
-    z-index: 10; max-width: calc(100% - 32px);
-  }
-  .dock.show { transform: translate(-50%, 0); }
-  .dock span { font-weight: 590; white-space: nowrap; }
-
-  /* modal sheet */
-  .scrim {
-    position: fixed; inset: 0; background: rgba(0,0,0,.28); z-index: 20;
-    display: grid; place-items: center; padding: 16px;
-    opacity: 0; pointer-events: none; transition: opacity .25s;
-  }
-  .scrim.show { opacity: 1; pointer-events: auto; }
-  .sheet { width: 100%; max-width: 400px; padding: 24px; text-align: center; background: var(--glass-strong);
-    transform: scale(.94); transition: transform .3s cubic-bezier(.2,.9,.3,1.2); }
-  .scrim.show .sheet { transform: scale(1); }
-  .sheet h3 { margin: 0 0 6px; font-size: 18px; letter-spacing: -.01em; }
-  .sheet p { margin: 0 0 18px; color: var(--ink-2); }
-  .sheet .row { justify-content: center; }
-  .bar { height: 8px; border-radius: 99px; background: var(--stroke-soft); overflow: hidden; margin: 6px 0 12px; }
-  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ff5f6d, #ff2d55); border-radius: inherit; transition: width .25s; }
-
-  .toast {
-    position: fixed; top: 16px; left: 50%; transform: translate(-50%, -150%);
-    padding: 12px 18px; border-radius: 16px; z-index: 30; font-weight: 590; max-width: calc(100% - 32px);
-    transition: transform .35s cubic-bezier(.2,.9,.3,1.1);
-  }
-  .toast.show { transform: translate(-50%, 0); }
-
+  .ms.fill { font-variation-settings: "FILL" 1, "wght" 500, "opsz" 24; }
+  button { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
+  button:disabled { opacity: .38; cursor: default; }
+  a { color: var(--primary); font-weight: 600; }
   .hidden { display: none !important; }
 
-  @media (max-width: 520px) {
-    .grid { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
-    .card img { width: 54px; height: 54px; }
-    h1 { font-size: 20px; }
+  /* state layer: hover / press overlay, M3 style */
+  .sl { position: relative; overflow: hidden; isolation: isolate; }
+  .sl::after {
+    content: ""; position: absolute; inset: 0; background: currentColor; opacity: 0;
+    transition: opacity .2s; pointer-events: none; z-index: -1; border-radius: inherit;
+  }
+  @media (hover: hover) { .sl:hover::after { opacity: .08; } }
+  .sl:active::after { opacity: .12; }
+  :focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+
+  /* ============ layout ============ */
+  .main { max-width: 1040px; margin: 0 auto; padding: 0 16px calc(var(--nav-h) + var(--inset-bottom) + 110px); }
+  @media (min-width: 840px) { .main { padding-left: 112px; padding-bottom: 120px; } }
+
+  /* top app bar (large, collapses on scroll) */
+  .appbar {
+    position: sticky; top: 0; z-index: 20;
+    margin: 0 -16px; padding: calc(var(--inset-top) + 12px) 16px 12px;
+    background: var(--surface); transition: background .3s var(--emph);
+  }
+  .appbar.scrolled { background: var(--sc); }
+  .appbar-row { display: flex; align-items: center; gap: 8px; min-height: 48px; }
+  .appbar h1 {
+    margin: 0; flex: 1; min-width: 0; font-weight: 720; font-size: 34px; line-height: 1.1;
+    font-variation-settings: "wdth" 118, "opsz" 48; letter-spacing: -.01em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    transition: font-size .3s var(--emph);
+  }
+  .appbar.scrolled h1 { font-size: 24px; }
+  .icon-btn {
+    width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
+    color: var(--on-surface-variant); transition: border-radius .35s var(--spring);
+  }
+  .icon-btn:active { border-radius: 14px; }
+
+  .quota {
+    display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px;
+    border-radius: 10px; background: var(--tertiary-container); color: var(--on-tertiary-container);
+    font-size: 13px; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums;
+  }
+  .sub-line { color: var(--on-surface-variant); font-size: 14px; margin: 2px 0 0; }
+
+  /* search bar */
+  .search {
+    display: flex; align-items: center; gap: 12px; height: 56px; padding: 0 16px; margin: 8px 0 12px;
+    border-radius: 28px; background: var(--sc-high); color: var(--on-surface-variant);
+  }
+  .search input {
+    flex: 1; min-width: 0; height: 100%; border: 0; outline: none; background: transparent;
+    font: inherit; color: var(--on-surface);
+  }
+  .search input::placeholder { color: var(--on-surface-variant); }
+
+  /* connected button group (M3 Expressive) */
+  .bgroup { display: flex; gap: 2px; margin-bottom: 16px; }
+  .bgroup button {
+    flex: 1; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--secondary-container); color: var(--on-secondary-container);
+    font-weight: 600; font-size: 14px; border-radius: 8px;
+    transition: border-radius .4s var(--spring), transform .4s var(--spring);
+  }
+  .bgroup button:first-child { border-radius: 22px 8px 8px 22px; }
+  .bgroup button:last-child { border-radius: 8px 22px 22px 8px; }
+  .bgroup button:active { border-radius: 22px; transform: scaleX(1.04); }
+  .bgroup .ms { font-size: 20px; }
+  .count-line { color: var(--on-surface-variant); font-size: 14px; margin: -6px 4px 14px; font-variant-numeric: tabular-nums; }
+
+  /* ============ channel grid ============ */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; }
+  .tile {
+    position: relative; padding: 20px 12px 16px; text-align: center; cursor: pointer;
+    background: var(--sc-low); border-radius: 28px; user-select: none;
+    transition: border-radius .5s var(--spring), background .25s var(--emph), transform .4s var(--spring), opacity .3s;
+  }
+  .tile:active { transform: scale(.95); }
+  .tile .av {
+    position: relative; width: 76px; height: 76px; margin: 0 auto 12px;
+    border-radius: 50%; overflow: hidden; background: var(--sc-highest);
+    transition: border-radius .5s var(--spring), transform .5s var(--spring);
+  }
+  .tile .av img { width: 100%; height: 100%; object-fit: cover; display: block; transition: filter .25s; }
+  .tile .name {
+    font-size: 14px; font-weight: 600; line-height: 1.25;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .badge {
+    position: absolute; width: 28px; height: 28px; border-radius: 50%;
+    display: grid; place-items: center; background: var(--error); color: var(--on-error);
+    transform: scale(0) rotate(-90deg); transition: transform .45s var(--spring);
+  }
+  .badge .ms { font-size: 18px; font-variation-settings: "wght" 700; }
+  .tile .badge { top: 12px; right: 12px; }
+  .tile.sel { background: var(--error-container); color: var(--on-error-container); border-radius: 18px; }
+  .tile.sel .av { border-radius: 30%; transform: scale(.9) rotate(-6deg); }
+  .tile.sel .av img { filter: grayscale(.9); opacity: .75; }
+  .tile.sel .badge, .row.sel .badge { transform: scale(1) rotate(0); }
+
+  /* ============ segmented list ============ */
+  .list { display: flex; flex-direction: column; gap: 2px; }
+  .row {
+    display: flex; align-items: center; gap: 14px; padding: 10px 8px 10px 10px; min-height: 84px;
+    background: var(--sc-low); border-radius: 6px; cursor: pointer; user-select: none;
+    transition: border-radius .5s var(--spring), background .25s var(--emph), opacity .3s, transform .4s var(--spring);
+  }
+  .row:first-child { border-top-left-radius: 24px; border-top-right-radius: 24px; }
+  .row:last-child { border-bottom-left-radius: 24px; border-bottom-right-radius: 24px; }
+  .row:active { transform: scale(.985); }
+  .row.sel { background: var(--error-container); color: var(--on-error-container); border-radius: 24px; }
+  .thumb {
+    position: relative; flex: none; width: 112px; aspect-ratio: 16/9; border-radius: 12px; overflow: hidden;
+    background: var(--sc-highest); transition: border-radius .5s var(--spring);
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; transition: filter .25s; }
+  .row.sel .thumb { border-radius: 22px; }
+  .row.sel .thumb img { filter: grayscale(.9) brightness(.8); }
+  .thumb .badge { left: 50%; top: 50%; margin: -14px 0 0 -14px; }
+  .row .txt { flex: 1; min-width: 0; }
+  .row .t { font-weight: 600; font-size: 15px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .row .s { font-size: 13px; color: var(--on-surface-variant); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row.sel .s { color: inherit; opacity: .8; }
+  .row .chev { color: var(--on-surface-variant); }
+  .row .count-pill { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 8px; background: var(--secondary-container); color: var(--on-secondary-container); }
+  .gone { opacity: 0 !important; transform: scale(.85) !important; pointer-events: none; }
+
+  /* M3 checkbox (for playlist rows: tap row = open, tap box = select) */
+  .cbox { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; flex: none; }
+  .cbox i {
+    width: 20px; height: 20px; border-radius: 4px; border: 2px solid var(--on-surface-variant);
+    display: grid; place-items: center; transition: all .3s var(--spring);
+  }
+  .cbox i .ms { font-size: 16px; opacity: 0; transform: scale(.4); transition: all .3s var(--spring); color: var(--on-error); font-variation-settings: "wght" 700; }
+  .row.sel .cbox i { background: var(--error); border-color: var(--error); border-radius: 7px; }
+  .row.sel .cbox i .ms { opacity: 1; transform: scale(1); }
+
+  /* ============ setup / hero ============ */
+  .hero { padding: 8px 0 24px; }
+  .hero-shape {
+    width: 140px; height: 140px; margin: 16px auto 24px; display: grid; place-items: center;
+    background: var(--primary-container); color: var(--on-primary-container);
+    border-radius: 42% 58% 63% 37% / 41% 44% 56% 59%;
+    animation: blob 9s ease-in-out infinite;
+  }
+  .hero-shape .ms { font-size: 64px; }
+  @keyframes blob {
+    0%,100% { border-radius: 42% 58% 63% 37% / 41% 44% 56% 59%; transform: rotate(0); }
+    33% { border-radius: 63% 37% 45% 55% / 55% 62% 38% 45%; transform: rotate(8deg); }
+    66% { border-radius: 36% 64% 52% 48% / 62% 38% 62% 38%; transform: rotate(-6deg); }
+  }
+  .hero h2 { text-align: center; margin: 0 0 8px; font-size: 28px; font-weight: 720; font-variation-settings: "wdth" 115; line-height: 1.15; }
+  .hero p.lead { text-align: center; color: var(--on-surface-variant); margin: 0 auto 24px; max-width: 420px; }
+  .card { background: var(--sc-low); border-radius: 28px; padding: 20px; margin-bottom: 12px; }
+  .field {
+    width: 100%; height: 56px; padding: 0 16px; border-radius: 16px; border: 1px solid var(--outline);
+    background: transparent; color: var(--on-surface); font: inherit; outline: none; margin-bottom: 12px;
+  }
+  .field:focus { border: 2px solid var(--primary); padding: 0 15px; }
+  .btn-filled {
+    height: 56px; padding: 0 28px; border-radius: 28px; width: 100%;
+    background: var(--primary); color: var(--on-primary); font-weight: 650; font-size: 16px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    transition: border-radius .4s var(--spring), transform .4s var(--spring);
+  }
+  .btn-filled:active { border-radius: 14px; transform: scale(.98); }
+  details summary { cursor: pointer; font-weight: 650; color: var(--primary); list-style: none; display: flex; align-items: center; gap: 6px; }
+  details summary::-webkit-details-marker { display: none; }
+  details[open] summary .ms { transform: rotate(90deg); }
+  details summary .ms { transition: transform .3s var(--spring); }
+  ol { padding-left: 20px; margin: 14px 0 0; color: var(--on-surface-variant); font-size: 14.5px; }
+  ol li { margin-bottom: 8px; }
+  code {
+    font: 12.5px ui-monospace, "Roboto Mono", monospace; background: var(--sc-highest); color: var(--on-surface);
+    padding: 2px 6px; border-radius: 6px; word-break: break-all;
+  }
+  .note { font-size: 13.5px; color: var(--on-surface-variant); margin-top: 12px; }
+
+  .empty { text-align: center; color: var(--on-surface-variant); padding: 56px 20px; }
+  .empty .ms { font-size: 48px; display: block; margin: 0 auto 10px; color: var(--outline); }
+
+  /* expressive loading indicator: morphing shape */
+  .loader { display: grid; place-items: center; padding: 64px 0 24px; }
+  .loader i {
+    width: 48px; height: 48px; background: var(--primary);
+    animation: morph 1.6s var(--emph) infinite;
+  }
+  @keyframes morph {
+    0% { border-radius: 50%; transform: rotate(0) scale(1); }
+    25% { border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%; transform: rotate(90deg) scale(.85); }
+    50% { border-radius: 22%; transform: rotate(180deg) scale(1); }
+    75% { border-radius: 70% 30% 50% 50% / 50% 60% 40% 50%; transform: rotate(270deg) scale(.85); }
+    100% { border-radius: 50%; transform: rotate(360deg) scale(1); }
+  }
+  .loader-text { text-align: center; color: var(--on-surface-variant); font-variant-numeric: tabular-nums; }
+
+  /* ============ navigation bar / rail ============ */
+  .nav {
+    position: fixed; z-index: 30; left: 0; right: 0; bottom: 0;
+    height: calc(var(--nav-h) + var(--inset-bottom)); padding-bottom: var(--inset-bottom);
+    background: var(--sc); display: flex; justify-content: space-around; align-items: center;
+  }
+  .nav button {
+    flex: 1; height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    color: var(--on-surface-variant); font-size: 12px; font-weight: 600;
+  }
+  .nav .ind {
+    width: 64px; height: 32px; border-radius: 16px; display: grid; place-items: center;
+    transition: background .3s var(--emph), width .45s var(--spring);
+  }
+  .nav button[aria-current="page"] { color: var(--on-surface); }
+  .nav button[aria-current="page"] .ind { background: var(--secondary-container); color: var(--on-secondary-container); }
+  .nav button[aria-current="page"] .ms { font-variation-settings: "FILL" 1, "wght" 600, "opsz" 24; }
+  .nav button:not([aria-current="page"]) .ind { width: 32px; }
+  @media (min-width: 840px) {
+    .nav {
+      top: 0; right: auto; width: 96px; height: auto; padding: 32px 0 0;
+      flex-direction: column; justify-content: flex-start; gap: 12px; background: var(--surface);
+    }
+    .nav button { flex: none; height: 64px; width: 100%; }
+  }
+
+  /* extended FAB */
+  .fab {
+    position: fixed; z-index: 31; right: 16px;
+    bottom: calc(var(--nav-h) + var(--inset-bottom) + 16px);
+    height: 64px; padding: 0 24px 0 20px; border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 12px;
+    background: var(--error-container); color: var(--on-error-container);
+    font-weight: 700; font-size: 16px;
+    box-shadow: 0 3px 6px rgba(0,0,0,.16), 0 6px 18px rgba(0,0,0,.14);
+    transform: scale(0) translateY(40px); transform-origin: bottom right;
+    transition: transform .5s var(--spring), border-radius .4s var(--spring);
+  }
+  .fab.show { transform: scale(1) translateY(0); }
+  .fab:active { border-radius: 32px; }
+  @media (min-width: 840px) { .fab { bottom: 24px; right: 24px; } }
+
+  /* ============ dialog ============ */
+  .scrim {
+    position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.32);
+    display: grid; place-items: center; padding: 24px;
+    opacity: 0; pointer-events: none; transition: opacity .25s var(--emph);
+  }
+  .scrim.show { opacity: 1; pointer-events: auto; }
+  .dialog {
+    width: 100%; max-width: 380px; background: var(--sc-high); border-radius: 28px; padding: 24px;
+    transform: scale(.85) translateY(20px); opacity: 0;
+    transition: transform .5s var(--spring), opacity .2s;
+  }
+  .scrim.show .dialog { transform: none; opacity: 1; }
+  .dialog .dicon { display: block; text-align: center; color: var(--error); margin-bottom: 14px; }
+  .dialog h3 { margin: 0 0 12px; font-size: 24px; font-weight: 650; text-align: center; line-height: 1.2; font-variation-settings: "wdth" 110; }
+  .dialog p { margin: 0 0 24px; color: var(--on-surface-variant); font-size: 14.5px; }
+  .actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .btn-text { height: 44px; padding: 0 16px; border-radius: 22px; color: var(--primary); font-weight: 650; font-size: 14.5px; transition: border-radius .35s var(--spring); }
+  .btn-text:active { border-radius: 10px; }
+  .btn-err { height: 44px; padding: 0 22px; border-radius: 22px; background: var(--error); color: var(--on-error); font-weight: 650; font-size: 14.5px; transition: border-radius .35s var(--spring); }
+  .btn-err:active { border-radius: 10px; }
+
+  /* wavy progress (M3 Expressive) */
+  .wavy { display: block; width: 100%; height: 20px; margin: 4px 0 14px; overflow: visible; }
+  .wavy .done { fill: none; stroke: var(--error); stroke-width: 4; stroke-linecap: round; }
+  .wavy .track { fill: none; stroke: var(--error-container); stroke-width: 4; stroke-linecap: round; }
+  .wavy .stop { fill: var(--error); }
+  .prog-text { text-align: center; margin: 0 0 20px; color: var(--on-surface-variant); font-variant-numeric: tabular-nums; }
+
+  /* snackbar */
+  .snack {
+    position: fixed; z-index: 60; left: 16px; right: 16px; margin: 0 auto; max-width: 560px;
+    bottom: calc(var(--nav-h) + var(--inset-bottom) + 16px);
+    padding: 14px 18px; border-radius: 14px; background: var(--inverse-surface); color: var(--inverse-on-surface);
+    font-size: 14.5px; box-shadow: 0 4px 14px rgba(0,0,0,.2);
+    transform: translateY(30px) scale(.9); opacity: 0; pointer-events: none;
+    transition: transform .45s var(--spring), opacity .2s;
+  }
+  .snack.show { transform: none; opacity: 1; }
+  @media (min-width: 840px) { .snack { bottom: 24px; } }
+
+  @media (max-width: 420px) {
+    .grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+    .tile { padding: 16px 8px 12px; border-radius: 24px; }
+    .tile .av { width: 60px; height: 60px; }
+    .tile .badge { top: 8px; right: 8px; }
+    .thumb { width: 96px; }
+    .appbar h1 { font-size: 30px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
   }
 </style>
 </head>
 <body>
-<div class="ambient"><i></i><i></i><i></i></div>
 
-<div class="wrap">
-  <header class="top">
-    <div class="brand">
-      <div class="logo" aria-hidden="true">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
-      </div>
-      <div>
-        <h1>Abo Detox</h1>
-        <p class="sub">YouTube-Abos aufräumen. Ohne 200× klicken.</p>
-      </div>
+<nav class="nav hidden" id="nav" aria-label="Bereiche">
+  <button data-view="subs" class="sl"><span class="ind"><span class="ms">subscriptions</span></span>Abos</button>
+  <button data-view="playlists" class="sl"><span class="ind"><span class="ms">video_library</span></span>Playlists</button>
+  <button data-view="likes" class="sl"><span class="ind"><span class="ms">thumb_up</span></span>Likes</button>
+</nav>
+
+<div class="main">
+  <header class="appbar" id="appbar">
+    <div class="appbar-row">
+      <button class="icon-btn sl hidden" id="back" aria-label="Zurück"><span class="ms">arrow_back</span></button>
+      <h1 id="title">Abo Detox</h1>
+      <span class="quota hidden" id="quota" title="Geschätzt: Google erlaubt ca. 10.000 API-Einheiten pro Tag, eine Löschung kostet 50."></span>
+      <button class="icon-btn sl hidden" id="signout" aria-label="Abmelden"><span class="ms">logout</span></button>
     </div>
-    <button id="signout" class="btn-glass hidden">Abmelden</button>
+    <p class="sub-line hidden" id="subline"></p>
   </header>
 
-  <!-- Step 1: setup + login -->
-  <section id="setup" class="setup glass">
-    <h2>Mit YouTube verbinden</h2>
-    <p>Füg einmalig deine Google OAuth Client-ID ein. Sie bleibt nur in diesem Browser gespeichert.</p>
-    <div class="row">
-      <input id="clientId" type="text" placeholder="123456-abc.apps.googleusercontent.com" autocomplete="off" spellcheck="false">
-      <button id="login" class="btn-primary">Anmelden &amp; laden</button>
-    </div>
-    <details>
-      <summary>Woher krieg ich die Client-ID? (5 Min.)</summary>
-      <ol>
-        <li><a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud Console</a> → neues Projekt anlegen.</li>
-        <li><a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">YouTube Data API v3</a> aktivieren.</li>
-        <li><b>OAuth-Zustimmungsbildschirm</b>: Typ „Extern“, Status „Testen“, und deine eigene Google-Adresse als <b>Testnutzer</b> eintragen.</li>
-        <li><b>Anmeldedaten → OAuth-Client-ID</b> → Typ „Webanwendung“. Bei „Autorisierte JavaScript-Quellen“ diese Adresse eintragen: <code id="originHint"></code></li>
-        <li>Client-ID kopieren, hier einfügen, fertig. Beim Login warnt Google „App nicht verifiziert“ → „Weiter“ (ist ja deine eigene).</li>
-      </ol>
-    </details>
-  </section>
+  <!-- ===== setup / login ===== -->
+  <section id="setup" class="hero">
+    <div class="hero-shape"><span class="ms fill">delete</span></div>
+    <h2>Dein YouTube,<br>endlich aufgeräumt.</h2>
+    <p class="lead">Abos, Playlists und Likes: alles markieren, die Lieblinge abwählen, weg damit.</p>
 
-  <!-- Step 2: the list -->
-  <section id="app" class="hidden">
-    <div class="toolbar glass">
-      <input id="search" type="search" placeholder="Kanal suchen …">
-      <div class="seg">
-        <button class="btn-glass" data-act="all">Alle</button>
-        <button class="btn-glass" data-act="none">Keine</button>
-        <button class="btn-glass" data-act="invert">Umkehren</button>
+    <div class="card">
+      <div id="webLogin">
+        <input id="clientId" class="field" type="text" placeholder="OAuth Client-ID (…apps.googleusercontent.com)" autocomplete="off" spellcheck="false">
       </div>
-      <span id="count" class="count"></span>
+      <button id="login" class="btn-filled">Mit Google verbinden</button>
     </div>
-    <div id="grid" class="grid"></div>
-    <div id="empty" class="empty hidden">Nix gefunden.</div>
+
+    <div class="card">
+      <details>
+        <summary><span class="ms">chevron_right</span>Einmalige Einrichtung (5 Min.)</summary>
+        <ol>
+          <li><a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">Google Cloud Console</a>: neues Projekt anlegen.</li>
+          <li><a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener">YouTube Data API v3</a> aktivieren.</li>
+          <li><b>OAuth-Zustimmungsbildschirm</b>: „Extern“, Status „Testen“, deine Google-Adresse als <b>Testnutzer</b> eintragen.</li>
+          <li id="stepAndroid"><b>Anmeldedaten → OAuth-Client-ID → Typ „Android“</b><br>Paketname: <code>de.myria.abodetox</code><br>SHA-1: <code>87:6A:43:BC:9B:42:0B:99:43:99:CD:AF:18:E0:85:16:C7:06:66:09</code><br>Fertig. Hier muss nichts eingefügt werden.</li>
+          <li id="stepWeb"><b>Anmeldedaten → OAuth-Client-ID → Typ „Webanwendung“</b>, bei „Autorisierte JavaScript-Quellen“ <code id="originHint"></code> eintragen. Client-ID oben einfügen.</li>
+          <li>Beim Login sagt Google „App nicht verifiziert“ → „Weiter“. Ist ja deine eigene App.</li>
+        </ol>
+      </details>
+      <p class="note">Nicht möglich (sperrt Google für alle Apps): „Später ansehen“, Verlauf und gespeicherte Playlists von anderen.</p>
+    </div>
   </section>
 
-  <div id="loading" class="empty hidden">Lade deine Abos …</div>
+  <!-- ===== main content ===== -->
+  <section id="app" class="hidden">
+    <label class="search">
+      <span class="ms">search</span>
+      <input id="search" type="search" placeholder="Suchen …" aria-label="Suchen">
+    </label>
+    <div class="bgroup" id="bgroup">
+      <button class="sl" data-act="all"><span class="ms">done_all</span>Alle</button>
+      <button class="sl" data-act="none"><span class="ms">deselect</span>Keine</button>
+      <button class="sl" data-act="invert"><span class="ms">flip</span>Umkehren</button>
+    </div>
+    <div class="count-line" id="countLine"></div>
+    <div id="content"></div>
+  </section>
 </div>
 
-<div id="dock" class="dock glass">
-  <span id="dockText"></span>
-  <button id="go" class="btn-danger">Entabonnieren</button>
-</div>
+<button class="fab" id="fab"><span class="ms">delete</span><span id="fabText"></span></button>
 
-<div id="scrim" class="scrim">
-  <div class="sheet glass" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+<div class="scrim" id="scrim">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dTitle">
     <div id="confirmView">
-      <h3 id="sheetTitle"></h3>
-      <p>Die Abos sind danach weg. Wieder abonnieren geht natürlich, aber halt einzeln.</p>
-      <div class="row">
-        <button id="cancel" class="btn-glass">Abbrechen</button>
-        <button id="confirm" class="btn-danger">Weg damit</button>
+      <span class="ms dicon">delete</span>
+      <h3 id="dTitle"></h3>
+      <p id="dText"></p>
+      <div class="actions">
+        <button class="btn-text sl" id="cancel">Abbrechen</button>
+        <button class="btn-err" id="confirm">Weg damit</button>
       </div>
     </div>
     <div id="progressView" class="hidden">
       <h3>Wird aufgeräumt …</h3>
-      <div class="bar"><i id="barFill"></i></div>
-      <p id="progressText" style="margin:0 0 14px"></p>
-      <button id="stop" class="btn-glass">Stopp</button>
+      <svg class="wavy" id="wavy"><path class="track" id="wTrack"/><path class="done" id="wDone"/><circle class="stop" id="wStop" r="2.5"/></svg>
+      <p class="prog-text" id="progText"></p>
+      <div class="actions"><button class="btn-text sl" id="stop">Stopp</button></div>
     </div>
   </div>
 </div>
 
-<div id="toast" class="toast glass"></div>
+<div class="snack" id="snack" role="status"></div>
 
 <script>
 (() => {
+  'use strict';
+  const YT = 'https://www.googleapis.com/youtube/v3';
   const SCOPE = 'https://www.googleapis.com/auth/youtube';
-  const API = 'https://www.googleapis.com/youtube/v3/subscriptions';
+  const NATIVE = window.AndroidBridge || null;
   const DEMO = new URLSearchParams(location.search).has('demo');
-
   const $ = (id) => document.getElementById(id);
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch {} },
   };
 
-  let token = null;
-  let tokenClient = null;
-  let subs = [];               // { id, channelId, title, thumb }
-  const selected = new Set();  // subscription ids
-  let stopRequested = false;
+  /* ================= Android: dynamic colour + insets ================= */
+  const TONES = (p) => (t) => p[t];
+  function applyDynamicColor() {
+    if (!NATIVE || !NATIVE.palette) return;
+    let p; try { p = JSON.parse(NATIVE.palette() || 'null'); } catch { p = null; }
+    if (!p) return;
+    const a1 = TONES(p.a1), a2 = TONES(p.a2), a3 = TONES(p.a3), n1 = TONES(p.n1), n2 = TONES(p.n2);
+    const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+    const mix = (x, y, pct) => `color-mix(in srgb, ${x}, ${y} ${pct}%)`;
+    const roles = dark ? {
+      'primary': a1(200), 'on-primary': a1(800), 'primary-container': a1(700), 'on-primary-container': a1(100),
+      'secondary-container': a2(700), 'on-secondary-container': a2(100),
+      'tertiary': a3(200), 'tertiary-container': a3(700), 'on-tertiary-container': a3(100),
+      'surface': n1(900), 'on-surface': n1(100), 'on-surface-variant': n2(200),
+      'outline': n2(400), 'outline-variant': n2(700),
+      'sc-lowest': n1(1000), 'sc-low': mix(n1(900), n1(800), 25), 'sc': mix(n1(900), n1(800), 40),
+      'sc-high': mix(n1(900), n1(800), 70), 'sc-highest': n1(800),
+      'inverse-surface': n1(100), 'inverse-on-surface': n1(800), 'inverse-primary': a1(600),
+    } : {
+      'primary': a1(600), 'on-primary': a1(0), 'primary-container': a1(100), 'on-primary-container': a1(900),
+      'secondary-container': a2(100), 'on-secondary-container': a2(900),
+      'tertiary': a3(600), 'tertiary-container': a3(100), 'on-tertiary-container': a3(900),
+      'surface': n1(10), 'on-surface': n1(900), 'on-surface-variant': n2(700),
+      'outline': n2(500), 'outline-variant': n2(200),
+      'sc-lowest': n1(0), 'sc-low': mix(n1(10), n1(50), 60), 'sc': n1(50),
+      'sc-high': mix(n1(50), n1(100), 50), 'sc-highest': n1(100),
+      'inverse-surface': n1(800), 'inverse-on-surface': n1(50), 'inverse-primary': a1(200),
+    };
+    for (const [k, v] of Object.entries(roles)) if (v) document.documentElement.style.setProperty('--' + k, v);
+  }
+  window.__setInsets = (top, bottom) => {
+    document.documentElement.style.setProperty('--inset-top', top + 'px');
+    document.documentElement.style.setProperty('--inset-bottom', bottom + 'px');
+  };
+  applyDynamicColor();
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyDynamicColor);
+  if (NATIVE && NATIVE.insets) { try { const i = JSON.parse(NATIVE.insets()); window.__setInsets(i.top, i.bottom); } catch {} }
 
-  $('originHint').textContent = location.origin;
-  $('clientId').value = store.get('aboDetox.clientId') || '';
+  /* ================= UI helpers ================= */
+  let snackTimer;
+  function snack(msg, ms = 3500) {
+    const s = $('snack'); s.textContent = msg; s.classList.add('show');
+    clearTimeout(snackTimer); snackTimer = setTimeout(() => s.classList.remove('show'), ms);
+  }
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const icon = (name, cls = '') => el('span', 'ms ' + cls, name);
+  const fmt = (n) => n.toLocaleString('de-DE');
 
-  // ---------- toast ----------
-  let toastTimer;
-  function toast(msg, ms = 3200) {
-    const t = $('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+  /* ================= quota estimate (per Pacific day) ================= */
+  const ptDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles' }).format(new Date());
+  function quotaState() {
+    let q; try { q = JSON.parse(store.get('aboDetox.quota') || '{}'); } catch { q = {}; }
+    if (q.d !== ptDay()) q = { d: ptDay(), u: 0 };
+    return q;
+  }
+  function spend(units) { const q = quotaState(); q.u += units; store.set('aboDetox.quota', JSON.stringify(q)); renderQuota(); }
+  function renderQuota() {
+    const left = Math.max(0, Math.floor((10000 - quotaState().u) / 50));
+    $('quota').textContent = `≈ ${left} frei`;
   }
 
-  // ---------- auth ----------
-  function getToken(prompt = '') {
+  /* ================= auth ================= */
+  let token = null, pendingToken = null, gisLoaded = null;
+  window.__nativeToken = (tok, err) => {
+    const p = pendingToken; pendingToken = null;
+    if (!p) return;
+    if (tok) { token = tok; p.resolve(tok); } else p.reject(new Error(err || 'Anmeldung abgebrochen.'));
+  };
+  function loadGis() {
+    if (gisLoaded) return gisLoaded;
+    gisLoaded = new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+      s.onload = res; s.onerror = () => rej(new Error('Google-Login konnte nicht laden.'));
+      document.head.append(s);
+    });
+    return gisLoaded;
+  }
+  async function getToken(prompt = '') {
+    if (NATIVE) {
+      return new Promise((resolve, reject) => { pendingToken = { resolve, reject }; NATIVE.requestToken(); });
+    }
+    const clientId = $('clientId').value.trim();
+    if (!clientId) throw new Error('Erst die Client-ID einfügen.');
+    store.set('aboDetox.clientId', clientId);
+    await loadGis();
     return new Promise((resolve, reject) => {
-      if (!window.google?.accounts?.oauth2) return reject(new Error('Google-Login lädt noch, kurz warten.'));
-      const clientId = $('clientId').value.trim();
-      if (!clientId) return reject(new Error('Erst die Client-ID einfügen.'));
-      store.set('aboDetox.clientId', clientId);
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: SCOPE,
-        callback: (resp) => {
-          if (resp.error) return reject(new Error(resp.error_description || resp.error));
-          token = resp.access_token;
-          resolve(token);
-        },
-        error_callback: (err) => reject(new Error(err?.message || 'Login abgebrochen.')),
-      });
-      tokenClient.requestAccessToken({ prompt });
+      google.accounts.oauth2.initTokenClient({
+        client_id: clientId, scope: SCOPE,
+        callback: (r) => r.error ? reject(new Error(r.error_description || r.error)) : resolve(token = r.access_token),
+        error_callback: (e) => reject(new Error(e?.message || 'Anmeldung abgebrochen.')),
+      }).requestAccessToken({ prompt });
     });
   }
 
-  async function api(url, opts = {}, retried = false) {
-    const res = await fetch(url, { ...opts, headers: { Authorization: 'Bearer ' + token, ...(opts.headers || {}) } });
-    if (res.status === 401 && !retried) {
-      await getToken('');
-      return api(url, opts, true);
-    }
+  async function api(path, opts = {}, units = 1, retried = false) {
+    const res = await fetch(YT + path, { ...opts, headers: { Authorization: 'Bearer ' + token, ...(opts.headers || {}) } });
+    spend(units);
+    if (res.status === 401 && !retried) { await getToken(''); return api(path, opts, 0, true); }
     if (!res.ok) {
       let reason = '', message = res.statusText;
-      try {
-        const body = await res.json();
-        reason = body.error?.errors?.[0]?.reason || '';
-        message = body.error?.message || message;
-      } catch {}
-      const e = new Error(message);
-      e.reason = reason;
-      e.status = res.status;
-      throw e;
+      try { const b = await res.json(); reason = b.error?.errors?.[0]?.reason || ''; message = b.error?.message || message; } catch {}
+      const e = new Error(message); e.reason = reason; e.status = res.status; throw e;
     }
     return res.status === 204 ? null : res.json();
   }
-
-  // ---------- data ----------
-  async function loadSubs() {
-    subs = [];
-    selected.clear();
-    $('setup').classList.add('hidden');
-    $('loading').classList.remove('hidden');
-
-    if (DEMO) {
-      const names = ['Kurzgesagt', 'Alan Becker', 'Jaiden Animations', 'Czech Lessons', 'Random Prank TV', 'Unboxing Daily', 'Lofi Girl', 'Old Minecraft Guy', 'Clickbait Central', 'Animation Mentor', 'Song Exploder', 'Česky snadno', '10 Hour Loops', 'Reaction Reactions', 'Tech Rumors 24/7', 'Apple'];
-      subs = names.map((title, i) => ({ id: 'demo' + i, channelId: 'c' + i, title,
-        thumb: `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="hsl(${i * 47 % 360} 70% 60%)"/><text x="32" y="41" font-size="26" text-anchor="middle" fill="#fff" font-family="sans-serif">${title[0]}</text></svg>`)}` }));
-    } else {
-      let pageToken = '';
-      do {
-        const url = `${API}?part=snippet&mine=true&maxResults=50&order=alphabetical${pageToken ? '&pageToken=' + pageToken : ''}`;
-        const data = await api(url);
-        for (const it of data.items || []) {
-          subs.push({
-            id: it.id,
-            channelId: it.snippet.resourceId.channelId,
-            title: it.snippet.title,
-            thumb: it.snippet.thumbnails?.medium?.url || it.snippet.thumbnails?.default?.url || '',
-          });
-        }
-        pageToken = data.nextPageToken || '';
-        $('loading').textContent = `Lade deine Abos … ${subs.length}`;
-      } while (pageToken);
-    }
-
-    $('loading').classList.add('hidden');
-    $('loading').textContent = 'Lade deine Abos …';
-    $('app').classList.remove('hidden');
-    $('signout').classList.remove('hidden');
-    render();
-    toast(subs.length ? `${subs.length} Abos gefunden. Rot = fliegt raus.` : 'Du hast keine Abos. Detox schon erledigt?');
+  async function pages(path, map, onProgress) {
+    const out = []; let pt = '';
+    do {
+      const d = await api(path + (pt ? '&pageToken=' + pt : ''));
+      for (const it of d.items || []) { const m = map(it); if (m) out.push(m); }
+      pt = d.nextPageToken || '';
+      onProgress?.(out.length);
+    } while (pt);
+    return out;
   }
+  const bestThumb = (t) => t?.medium?.url || t?.high?.url || t?.default?.url || '';
 
-  // ---------- render ----------
-  const tickSvg = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>';
+  /* ================= views ================= */
+  // Each view: { title, kind: 'grid'|'list', load(), del(item), verb, noun, items, sel:Set }
+  const demoThumb = (i, ch) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90"><rect width="160" height="90" fill="hsl(${i * 47 % 360} 65% 62%)"/><text x="80" y="58" font-size="38" text-anchor="middle" fill="#fff" font-family="sans-serif">${ch}</text></svg>`)}`;
+  const DEMO_DATA = {
+    subs: ['Kurzgesagt', 'Alan Becker', 'Jaiden Animations', 'Czech Lessons', 'Random Prank TV', 'Unboxing Daily', 'Lofi Girl', 'Old Minecraft Guy', 'Clickbait Central', 'Animation Mentor', 'Song Exploder', 'Česky snadno', '10 Hour Loops', 'Reaction Reactions', 'Tech Rumors 24/7', 'Apple'],
+    playlists: [['Animation Inspo', 24], ['Songwriting', 12], ['Czech Grammar', 31], ['Random 2019', 88], ['Musik zum Zeichnen', 45]],
+    videos: ['How I animate a walk cycle', 'Czech for beginners #1', 'Never gonna …', 'Top 10 fails 2018', 'Blender in 60 seconds', 'Lyrics writing tips', 'Prague street food tour', 'Some meme compilation'],
+  };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-  function render() {
-    const grid = $('grid');
-    grid.textContent = '';
+  const views = {
+    subs: {
+      title: 'Abos', kind: 'grid', noun: ['Kanal', 'Kanäle'], verb: 'entabonnieren', btn: 'Entabonnieren',
+      text: 'Die Abos sind danach weg. Wieder abonnieren geht, aber halt einzeln.',
+      empty: ['subscriptions', 'Keine Abos. Detox schon erledigt?'],
+      async load(p) {
+        if (DEMO) { await sleep(500); return DEMO_DATA.subs.map((t, i) => ({ id: 's' + i, title: t, thumb: demoThumb(i, t[0]) })); }
+        return pages('/subscriptions?part=snippet&mine=true&maxResults=50&order=alphabetical',
+          (it) => ({ id: it.id, title: it.snippet.title, thumb: bestThumb(it.snippet.thumbnails) }), p);
+      },
+      del: (it) => api('/subscriptions?id=' + encodeURIComponent(it.id), { method: 'DELETE' }, 50),
+    },
+    playlists: {
+      title: 'Playlists', kind: 'list', openable: true, noun: ['Playlist', 'Playlists'], verb: 'löschen', btn: 'Löschen',
+      text: 'Die ganzen Playlists werden gelöscht, mitsamt Reihenfolge. Die Videos selbst bleiben natürlich auf YouTube.',
+      empty: ['video_library', 'Du hast keine eigenen Playlists.'],
+      async load(p) {
+        if (DEMO) { await sleep(500); return DEMO_DATA.playlists.map(([t, n], i) => ({ id: 'p' + i, title: t, count: n, sub: `${n} Videos`, thumb: demoThumb(i + 3, t[0]) })); }
+        return pages('/playlists?part=snippet,contentDetails&mine=true&maxResults=50',
+          (it) => ({ id: it.id, title: it.snippet.title, count: it.contentDetails.itemCount, sub: `${fmt(it.contentDetails.itemCount)} Videos`, thumb: bestThumb(it.snippet.thumbnails) }), p);
+      },
+      del: (it) => api('/playlists?id=' + encodeURIComponent(it.id), { method: 'DELETE' }, 50),
+    },
+    likes: {
+      title: 'Likes', kind: 'list', noun: ['Like', 'Likes'], verb: 'entfernen', btn: 'Entliken',
+      text: 'Die Videos verschwinden aus „Videos mit „Mag ich““. Die Videos selbst bleiben unangetastet.',
+      empty: ['thumb_up', 'Keine gelikten Videos gefunden.'],
+      async load(p) {
+        if (DEMO) { await sleep(500); return DEMO_DATA.videos.map((t, i) => ({ id: 'v' + i, title: t, sub: 'Irgendein Kanal', thumb: demoThumb(i + 7, '▶') })); }
+        const ch = await api('/channels?part=contentDetails&mine=true');
+        const likesId = ch.items?.[0]?.contentDetails?.relatedPlaylists?.likes;
+        if (!likesId) return [];
+        return pages(`/playlistItems?part=snippet&maxResults=50&playlistId=${encodeURIComponent(likesId)}`, videoItem((s) => s.resourceId.videoId), p);
+      },
+      del: (it) => api(`/videos/rate?id=${encodeURIComponent(it.id)}&rating=none`, { method: 'POST' }, 50),
+    },
+  };
+  function videoItem(idOf) {
+    return (it) => {
+      const s = it.snippet;
+      return { id: idOf(s, it), title: s.title, sub: s.videoOwnerChannelTitle || (s.title === 'Private video' ? 'Privat' : s.title === 'Deleted video' ? 'Gelöscht' : ''), thumb: bestThumb(s.thumbnails) };
+    };
+  }
+  function playlistView(pl) {
+    return {
+      title: pl.title, kind: 'list', noun: ['Video', 'Videos'], verb: 'aus der Playlist entfernen', btn: 'Entfernen', parent: 'playlists', pl,
+      text: `Die Videos fliegen nur aus „${pl.title}“ raus, nicht von YouTube.`,
+      empty: ['playlist_play', 'Diese Playlist ist leer.'],
+      async load(p) {
+        if (DEMO) { await sleep(400); return DEMO_DATA.videos.map((t, i) => ({ id: pl.id + 'i' + i, title: t, sub: 'Irgendein Kanal', thumb: demoThumb(i + 11, '▶') })); }
+        return pages(`/playlistItems?part=snippet&maxResults=50&playlistId=${encodeURIComponent(pl.id)}`, videoItem((s, it) => it.id), p);
+      },
+      del: (it) => api('/playlistItems?id=' + encodeURIComponent(it.id), { method: 'DELETE' }, 50),
+      afterDelete(n) { pl.count = Math.max(0, (pl.count || 0) - n); pl.sub = `${fmt(pl.count)} Videos`; },
+    };
+  }
+  for (const v of Object.values(views)) { v.items = null; v.sel = new Set(); }
+
+  let current = 'subs';   // key into views
+  let detail = null;      // playlist sub-view (not in views map)
+  const cur = () => detail || views[current];
+
+  /* ================= rendering ================= */
+  async function show(key) {
+    if (key !== current || detail) { detail = null; $('search').value = ''; }
+    current = key;
+    document.querySelectorAll('#nav button').forEach((b) => b.setAttribute('aria-current', b.dataset.view === key ? 'page' : 'false'));
+    await ensureLoaded(cur());
+  }
+  async function openPlaylist(pl) {
+    detail = playlistView(pl); detail.items = null; detail.sel = new Set();
+    $('search').value = '';
+    window.scrollTo({ top: 0 });
+    await ensureLoaded(detail);
+  }
+  async function ensureLoaded(v) {
+    renderChrome();
+    if (v.items) return render();
+    const content = $('content');
+    content.textContent = '';
+    const loader = el('div', 'loader'); loader.append(el('i'));
+    const txt = el('div', 'loader-text', 'Wird geladen …');
+    content.append(loader, txt);
+    try {
+      v.items = await v.load((n) => { txt.textContent = `${fmt(n)} geladen …`; });
+    } catch (e) {
+      v.items = null;
+      content.textContent = '';
+      const box = el('div', 'empty'); box.append(icon('close'), el('div', '', 'Laden fehlgeschlagen: ' + e.message));
+      content.append(box);
+      return;
+    }
+    if (cur() === v) render();
+  }
+  function renderChrome() {
+    const v = cur();
+    $('title').textContent = v.title;
+    $('back').classList.toggle('hidden', !detail);
+    $('subline').classList.toggle('hidden', !detail);
+    if (detail) $('subline').textContent = 'Playlist · tippe Videos zum Entfernen an';
+    $('search').placeholder = detail ? 'In Playlist suchen …' : `${v.title} durchsuchen …`;
+    updateCounts();
+  }
+  function filtered(v) {
     const q = $('search').value.trim().toLowerCase();
-    const list = subs.filter((s) => !q || s.title.toLowerCase().includes(q));
-    const frag = document.createDocumentFragment();
-    for (const s of list) {
-      const card = document.createElement('div');
-      card.className = 'card glass' + (selected.has(s.id) ? ' sel' : '');
-      card.tabIndex = 0;
-      card.dataset.id = s.id;
-      card.setAttribute('role', 'checkbox');
-      card.setAttribute('aria-checked', selected.has(s.id));
-
-      const tick = document.createElement('div');
-      tick.className = 'tick';
-      tick.innerHTML = tickSvg;
-
-      const img = document.createElement('img');
-      img.loading = 'lazy';
-      img.alt = '';
-      img.referrerPolicy = 'no-referrer';
-      img.src = s.thumb;
-
-      const name = document.createElement('div');
-      name.className = 'name';
-      name.textContent = s.title; // textContent = no HTML injection from channel names
-
-      card.append(tick, img, name);
-      frag.append(card);
+    return (v.items || []).filter((it) => !q || it.title.toLowerCase().includes(q) || (it.sub || '').toLowerCase().includes(q));
+  }
+  function render() {
+    const v = cur(); const content = $('content');
+    content.textContent = '';
+    if (!v.items) return;
+    const list = filtered(v);
+    if (!list.length) {
+      const box = el('div', 'empty');
+      box.append(icon(v.items.length ? 'search' : v.empty[0]), el('div', '', v.items.length ? 'Nix gefunden.' : v.empty[1]));
+      content.append(box);
+    } else {
+      const wrap = el('div', v.kind);
+      const frag = document.createDocumentFragment();
+      for (const it of list) frag.append(v.kind === 'grid' ? tile(it, v) : row(it, v));
+      wrap.append(frag); content.append(wrap);
     }
-    grid.append(frag);
-    $('empty').classList.toggle('hidden', list.length > 0 || subs.length === 0);
     updateCounts();
   }
-
-  function visibleIds() {
-    return [...$('grid').querySelectorAll('.card')].map((c) => c.dataset.id);
+  function img(src) {
+    const i = el('img'); i.alt = ''; i.loading = 'lazy'; i.decoding = 'async'; i.referrerPolicy = 'no-referrer';
+    if (src) i.src = src; else i.style.visibility = 'hidden';
+    return i;
   }
-
+  function badge() { const b = el('span', 'badge'); b.append(icon('check')); return b; }
+  function tile(it, v) {
+    const t = el('div', 'tile sl' + (v.sel.has(it.id) ? ' sel' : ''));
+    t.dataset.id = it.id; t.tabIndex = 0; t.setAttribute('role', 'checkbox'); t.setAttribute('aria-checked', v.sel.has(it.id));
+    const av = el('div', 'av'); av.append(img(it.thumb));
+    t.append(badge(), av, el('div', 'name', it.title)); // textContent → safe against HTML in names
+    return t;
+  }
+  function row(it, v) {
+    const r = el('div', 'row sl' + (v.sel.has(it.id) ? ' sel' : ''));
+    r.dataset.id = it.id; r.tabIndex = 0;
+    const th = el('div', 'thumb'); th.append(img(it.thumb));
+    const txt = el('div', 'txt'); txt.append(el('div', 't', it.title));
+    if (it.sub) txt.append(el('div', 's', it.sub));
+    if (v.openable) {
+      r.setAttribute('role', 'button');
+      const cb = el('button', 'cbox sl'); cb.dataset.check = '1';
+      cb.setAttribute('aria-label', 'Zum Löschen markieren');
+      const box = el('i'); box.append(icon('check')); cb.append(box);
+      r.append(cb, th, txt, icon('chevron_right', 'chev'));
+    } else {
+      r.setAttribute('role', 'checkbox'); r.setAttribute('aria-checked', v.sel.has(it.id));
+      th.append(badge());
+      r.append(th, txt);
+    }
+    return r;
+  }
   function updateCounts() {
-    const n = selected.size;
-    $('count').textContent = `${n} / ${subs.length} markiert`;
-    $('dockText').textContent = `${n} ${n === 1 ? 'Kanal' : 'Kanäle'}`;
-    $('dock').classList.toggle('show', n > 0);
+    const v = cur(); const n = v.sel.size; const total = v.items?.length ?? 0;
+    $('countLine').textContent = v.items ? `${fmt(n)} von ${fmt(total)} markiert` : '';
+    $('fabText').textContent = `${v.btn} (${fmt(n)})`;
+    $('fab').classList.toggle('show', n > 0);
   }
-
-  function toggle(card) {
-    const id = card.dataset.id;
-    selected.has(id) ? selected.delete(id) : selected.add(id);
-    card.classList.toggle('sel', selected.has(id));
-    card.setAttribute('aria-checked', selected.has(id));
+  function toggle(node) {
+    const v = cur(); const id = node.dataset.id;
+    v.sel.has(id) ? v.sel.delete(id) : v.sel.add(id);
+    node.classList.toggle('sel', v.sel.has(id));
+    if (node.getAttribute('role') === 'checkbox') node.setAttribute('aria-checked', v.sel.has(id));
+    if (navigator.vibrate) try { navigator.vibrate(8); } catch {}
     updateCounts();
   }
 
-  // ---------- delete ----------
+  /* ================= deletion ================= */
+  let stopRequested = false, running = false, waveRaf = 0, progress = 0;
+  function drawWave(t = 0) {
+    const svg = $('wavy'); const w = svg.clientWidth || 300; const h = 20, mid = h / 2, amp = 3.2, len = 22;
+    const end = Math.max(0, progress * w);
+    let d = `M 2 ${mid}`;
+    for (let x = 2; x <= end; x += 2) d += ` L ${x} ${(mid + Math.sin((x / len) * Math.PI * 2 - t / 160) * amp).toFixed(2)}`;
+    $('wDone').setAttribute('d', end > 3 ? d : '');
+    const ts = Math.min(w - 4, end + 8);
+    $('wTrack').setAttribute('d', ts < w - 4 ? `M ${ts} ${mid} L ${w - 4} ${mid}` : '');
+    $('wStop').setAttribute('cx', w - 2); $('wStop').setAttribute('cy', mid);
+    if (running) waveRaf = requestAnimationFrame(drawWave);
+  }
+  function openDialog() {
+    const v = cur(); const n = v.sel.size;
+    $('dTitle').textContent = `${fmt(n)} ${n === 1 ? v.noun[0] : v.noun[1]} ${v.verb}?`;
+    $('dText').textContent = v.text + (n > 190 ? ` Achtung: Google erlaubt nur ca. 190 Löschungen pro Tag. Der Rest geht morgen.` : '');
+    $('confirmView').classList.remove('hidden');
+    $('progressView').classList.add('hidden');
+    $('scrim').classList.add('show');
+  }
+  const closeDialog = () => { $('scrim').classList.remove('show'); };
   async function runDelete() {
-    const ids = [...selected];
-    stopRequested = false;
-    $('confirmView').classList.add('hidden');
-    $('progressView').classList.remove('hidden');
+    const v = cur();
+    const queue = v.items.filter((it) => v.sel.has(it.id));
+    stopRequested = false; running = true; progress = 0;
+    $('confirmView').classList.add('hidden'); $('progressView').classList.remove('hidden');
+    cancelAnimationFrame(waveRaf); waveRaf = requestAnimationFrame(drawWave);
     let done = 0, failed = 0, quotaHit = false;
-
     const step = () => {
-      $('barFill').style.width = `${((done + failed) / ids.length) * 100}%`;
-      $('progressText').textContent = `${done} von ${ids.length} entabonniert` + (failed ? ` · ${failed} Fehler` : '');
+      progress = (done + failed) / queue.length;
+      $('progText').textContent = `${fmt(done)} von ${fmt(queue.length)} erledigt` + (failed ? ` · ${failed} Fehler` : '');
     };
     step();
-
-    for (const id of ids) {
+    for (const it of queue) {
       if (stopRequested) break;
       try {
-        if (DEMO) await new Promise((r) => setTimeout(r, 180));
-        else await api(`${API}?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-        done++;
-        selected.delete(id);
-        subs = subs.filter((s) => s.id !== id);
-        const card = $('grid').querySelector(`[data-id="${CSS.escape(id)}"]`);
-        if (card) { card.classList.add('gone'); setTimeout(() => card.remove(), 300); }
+        if (DEMO) await sleep(160); else await v.del(it);
+        done++; removeItem(v, it);
       } catch (e) {
-        if (e.reason === 'quotaExceeded' || e.reason === 'rateLimitExceeded' || e.status === 403 && /quota/i.test(e.message)) {
-          quotaHit = true;
-          break;
-        }
-        if (e.status === 404) { // already gone
-          done++; selected.delete(id); subs = subs.filter((s) => s.id !== id);
-        } else {
-          failed++;
-          console.warn('Delete failed', id, e);
-        }
+        if (e.reason === 'quotaExceeded' || e.reason === 'rateLimitExceeded' || (e.status === 403 && /quota/i.test(e.message))) { quotaHit = true; break; }
+        if (e.status === 404) { done++; removeItem(v, it); }
+        else { failed++; console.warn('Fehler bei', it, e); }
       }
       step();
     }
-
-    closeSheet();
-    setTimeout(render, 320);
-    if (quotaHit) toast(`Google-Tageslimit erreicht nach ${done}. Morgen weitermachen, die Auswahl bleibt bis zum Neuladen.`, 7000);
-    else if (stopRequested) toast(`Gestoppt. ${done} entabonniert.`);
-    else toast(failed ? `${done} weg, ${failed} hakten. Nochmal probieren?` : `${done} Abos weg. Ahh, frische Luft.`);
+    v.afterDelete?.(done);
+    running = false; progress = 1; drawWave();
+    setTimeout(() => { closeDialog(); render(); }, 350);
+    if (quotaHit) snack(`Google-Tageslimit erreicht nach ${done}. Morgen geht's weiter, die Auswahl bleibt.`, 8000);
+    else if (stopRequested) snack(`Gestoppt. ${fmt(done)} erledigt.`);
+    else snack(failed ? `${fmt(done)} erledigt, ${failed} hakten. Nochmal versuchen?` : `${fmt(done)} weg. Ahh, frische Luft. ✨`);
+  }
+  function removeItem(v, it) {
+    v.sel.delete(it.id);
+    v.items = v.items.filter((x) => x !== it);
+    const node = document.querySelector(`#content [data-id="${CSS.escape(it.id)}"]`);
+    if (node) { node.classList.add('gone'); setTimeout(() => node.remove(), 300); }
   }
 
-  function openSheet() {
-    const n = selected.size;
-    $('sheetTitle').textContent = `${n} ${n === 1 ? 'Kanal' : 'Kanäle'} entabonnieren?`;
-    $('confirmView').classList.remove('hidden');
-    $('progressView').classList.add('hidden');
-    $('barFill').style.width = '0';
-    $('scrim').classList.add('show');
-    $('confirm').focus();
-  }
-  function closeSheet() { $('scrim').classList.remove('show'); }
+  /* ================= events ================= */
+  $('originHint').textContent = location.origin;
+  $('clientId').value = store.get('aboDetox.clientId') || '';
+  $('webLogin').classList.toggle('hidden', !!NATIVE || DEMO);
+  $(NATIVE ? 'stepWeb' : 'stepAndroid').classList.add('hidden');
+  if (DEMO) $('login').textContent = 'Demo starten';
 
-  // ---------- events ----------
-  $('login').addEventListener('click', async () => {
+  async function start() {
     try {
       if (!DEMO) await getToken('consent');
-      await loadSubs();
-    } catch (e) {
-      $('loading').classList.add('hidden');
-      $('setup').classList.remove('hidden');
-      toast(e.message || 'Das ging schief.', 6000);
-    }
-  });
+      $('setup').classList.add('hidden');
+      ['app', 'nav', 'quota', 'signout'].forEach((id) => $(id).classList.remove('hidden'));
+      renderQuota();
+      await show('subs');
+    } catch (e) { snack(e.message || 'Das ging schief.', 7000); }
+  }
+  $('login').addEventListener('click', start);
 
   $('signout').addEventListener('click', () => {
-    if (token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(token, () => {});
-    token = null; subs = []; selected.clear();
-    $('app').classList.add('hidden');
-    $('signout').classList.add('hidden');
-    $('setup').classList.remove('hidden');
-    updateCounts();
+    if (!NATIVE && token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(token, () => {});
+    if (NATIVE?.signOut) NATIVE.signOut();
+    token = null; detail = null;
+    for (const v of Object.values(views)) { v.items = null; v.sel.clear(); }
+    ['app', 'nav', 'quota', 'signout', 'back', 'subline'].forEach((id) => $(id).classList.add('hidden'));
+    $('setup').classList.remove('hidden'); $('title').textContent = 'Abo Detox';
+    $('fab').classList.remove('show');
   });
 
-  $('grid').addEventListener('click', (e) => {
-    const card = e.target.closest('.card');
-    if (card) toggle(card);
-  });
-  $('grid').addEventListener('keydown', (e) => {
-    if ((e.key === ' ' || e.key === 'Enter') && e.target.classList.contains('card')) {
-      e.preventDefault(); toggle(e.target);
-    }
-  });
+  $('nav').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { window.scrollTo({ top: 0 }); show(b.dataset.view); } });
+  $('back').addEventListener('click', () => { detail = null; $('search').value = ''; ensureLoaded(views.playlists); });
 
+  $('content').addEventListener('click', (e) => {
+    const node = e.target.closest('[data-id]'); if (!node) return;
+    const v = cur();
+    if (v.openable && !e.target.closest('[data-check]')) {
+      const pl = v.items.find((x) => x.id === node.dataset.id);
+      if (pl) openPlaylist(pl);
+    } else toggle(node);
+  });
+  $('content').addEventListener('keydown', (e) => {
+    if ((e.key === ' ' || e.key === 'Enter') && e.target.dataset?.id) { e.preventDefault(); e.target.click(); }
+  });
   $('search').addEventListener('input', render);
-
-  document.querySelector('.seg').addEventListener('click', (e) => {
-    const act = e.target.dataset.act;
-    if (!act) return;
-    const ids = visibleIds(); // acts on what's currently shown (respects search)
-    if (act === 'all') ids.forEach((id) => selected.add(id));
-    if (act === 'none') ids.forEach((id) => selected.delete(id));
-    if (act === 'invert') ids.forEach((id) => selected.has(id) ? selected.delete(id) : selected.add(id));
+  $('bgroup').addEventListener('click', (e) => {
+    const act = e.target.closest('button')?.dataset.act; const v = cur();
+    if (!act || !v.items) return;
+    const ids = filtered(v).map((x) => x.id);   // respects the current search
+    if (act === 'all') ids.forEach((id) => v.sel.add(id));
+    if (act === 'none') ids.forEach((id) => v.sel.delete(id));
+    if (act === 'invert') ids.forEach((id) => v.sel.has(id) ? v.sel.delete(id) : v.sel.add(id));
     render();
   });
-
-  $('go').addEventListener('click', openSheet);
-  $('cancel').addEventListener('click', closeSheet);
+  $('fab').addEventListener('click', openDialog);
+  $('cancel').addEventListener('click', closeDialog);
   $('confirm').addEventListener('click', runDelete);
   $('stop').addEventListener('click', () => { stopRequested = true; });
-  $('scrim').addEventListener('click', (e) => {
-    if (e.target === $('scrim') && !$('confirmView').classList.contains('hidden')) closeSheet();
-  });
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !$('confirmView').classList.contains('hidden')) closeSheet();
-  });
+  $('scrim').addEventListener('click', (e) => { if (e.target === $('scrim') && !running) closeDialog(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.__onBack(); });
+  addEventListener('scroll', () => $('appbar').classList.toggle('scrolled', scrollY > 8), { passive: true });
 
-  if (DEMO) { $('clientId').value = 'demo'; $('login').textContent = 'Demo starten'; }
+  // Android back button → returns true if handled in-app
+  window.__onBack = () => {
+    if ($('scrim').classList.contains('show')) { if (!running) closeDialog(); return true; }
+    if (detail) { $('back').click(); return true; }
+    if (cur().sel?.size) { cur().sel.clear(); render(); return true; }
+    if (!$('app').classList.contains('hidden') && current !== 'subs') { show('subs'); return true; }
+    return false;
+  };
 })();
 </script>
 </body>
