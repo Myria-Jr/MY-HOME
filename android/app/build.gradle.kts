@@ -13,7 +13,7 @@ android {
         targetSdk = 35
         // CI sets GITHUB_RUN_NUMBER so every build can be installed over the previous one
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInt()
-        versionName = "2.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
+        versionName = "3.0.${System.getenv("GITHUB_RUN_NUMBER") ?: "0"}"
     }
 
     // Personal app: the key lives in the repo so every build has the same SHA-1

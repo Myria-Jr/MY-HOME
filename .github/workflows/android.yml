@@ -31,19 +31,19 @@ jobs:
           ./gradlew --no-daemon assembleRelease
 
       - name: Rename
-        run: cp android/app/build/outputs/apk/release/app-release.apk AboDetox.apk
+        run: cp android/app/build/outputs/apk/release/app-release.apk Tidy.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: AboDetox-apk
-          path: AboDetox.apk
+          name: Tidy-apk
+          path: Tidy.apk
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "v2.${{ github.run_number }}" AboDetox.apk \
+          gh release create "v3.${{ github.run_number }}" Tidy.apk \
             --target "$GITHUB_SHA" \
-            --title "Abo Detox v2.${{ github.run_number }}" \
+            --title "Tidy v3.${{ github.run_number }}" \
             --notes "APK aufs Handy laden, öffnen, installieren. Bei Bedarf „Aus unbekannten Quellen installieren“ erlauben." \
             --latest

@@ -1,9 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Tidy: two sparkles + a dot, scaled into the 66dp adaptive-icon safe zone -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <group android:translateX="30" android:translateY="30">
-        <path android:fillColor="@color/ic_fg"
-            android:pathData="M17,4h14a2,2 0,0 1,2 2v2h9a2,2 0,0 1,0 4H6a2,2 0,0 1,0 -4h9V6a2,2 0,0 1,2 -2zM9,15h30l-2.2,26.4A4,4 0,0 1,32.8 45H15.2a4,4 0,0 1,-4 -3.6zM19,21a2,2 0,0 0,-2 2v14a2,2 0,0 0,4 0V23a2,2 0,0 0,-2 -2zM29,21a2,2 0,0 0,-2 2v14a2,2 0,0 0,4 0V23a2,2 0,0 0,-2 -2z" />
+    <group android:pivotX="54" android:pivotY="54" android:scaleX="0.75" android:scaleY="0.75">
+        <path android:fillColor="#FFFFFFFF"
+            android:pathData="M52,28 Q59.5,48.5 80,56 Q59.5,63.5 52,84 Q44.5,63.5 24,56 Q44.5,48.5 52,28Z" />
+        <path android:fillColor="#E6FFFFFF"
+            android:pathData="M77,22 Q80,30 88,33 Q80,36 77,44 Q74,36 66,33 Q74,30 77,22Z" />
+        <path android:fillColor="#D9FFFFFF"
+            android:pathData="M78,74.4a3.6,3.6 0,1 1,0 7.2a3.6,3.6 0,1 1,0 -7.2z" />
     </group>
 </vector>

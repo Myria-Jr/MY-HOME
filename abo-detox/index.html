@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Abo Detox</title>
-<meta name="description" content="Räum dein YouTube auf: Abos, Playlists und Likes in einem Rutsch.">
+<title>Tidy</title>
+<meta name="description" content="Tidy: räum dein YouTube auf und versteh deinen Kanal.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto+Flex:opsz,wdth,wght@8..144,25..151,100..1000&display=swap">
@@ -299,8 +299,9 @@
   .hero { padding: 8px 0 24px; }
   .hero-shape {
     width: 140px; height: 140px; margin: 16px auto 24px; display: grid; place-items: center;
-    background: var(--primary-container); color: var(--on-primary-container);
+    background: linear-gradient(135deg, #FF8FB8, #7B5CFF); color: #fff;
     border-radius: 42% 58% 63% 37% / 41% 44% 56% 59%;
+    box-shadow: 0 12px 32px rgba(123, 92, 255, .3);
     animation: blob 9s ease-in-out infinite;
   }
   .hero-shape .ms { font-size: 64px; }
@@ -550,7 +551,7 @@
   <header class="appbar" id="appbar">
     <div class="appbar-row">
       <button class="icon-btn sl hidden" id="back" aria-label="Zurück"><span class="ms">arrow_back</span></button>
-      <h1 id="title">Abo Detox</h1>
+      <h1 id="title">Tidy</h1>
       <span class="quota hidden" id="quota" title="Geschätzt: Google erlaubt ca. 10.000 API-Einheiten pro Tag, eine Löschung kostet 50."></span>
       <button class="avatar-btn hidden" id="profileBtn" aria-label="Profil und Einstellungen"></button>
     </div>
@@ -559,9 +560,9 @@
 
   <!-- ===== setup / login ===== -->
   <section id="setup" class="hero">
-    <div class="hero-shape"><span class="ms fill">delete</span></div>
+    <div class="hero-shape"><svg viewBox="0 0 108 108" width="96" height="96" aria-hidden="true"><g transform="translate(54 54) scale(.95) translate(-54 -54)"><path fill="#fff" d="M52,28 Q59.5,48.5 80,56 Q59.5,63.5 52,84 Q44.5,63.5 24,56 Q44.5,48.5 52,28Z"/><path fill="#fff" opacity=".9" d="M77,22 Q80,30 88,33 Q80,36 77,44 Q74,36 66,33 Q74,30 77,22Z"/><circle cx="78" cy="78" r="3.6" fill="#fff" opacity=".85"/></g></svg></div>
     <h2>Dein YouTube,<br>endlich aufgeräumt.</h2>
-    <p class="lead">Abos, Playlists und Likes: alles markieren, die Lieblinge abwählen, weg damit.</p>
+    <p class="lead">Abos, Playlists und Likes aufräumen. Und sehen, wie gut dein eigener Kanal läuft.</p>
 
     <div class="card">
       <div id="webLogin">
@@ -1512,6 +1513,7 @@
       ['app', 'nav', 'quota', 'profileBtn'].forEach((id) => $(id).classList.remove('hidden'));
       renderQuota();
       loadProfile();
+      setTimeout(showWhatsNew, 600);
       await show(views[settings.startTab] ? settings.startTab : 'subs');
     } catch (e) {
       $('setup').classList.remove('hidden'); $('content').textContent = ''; $('app').classList.add('hidden');
@@ -1519,6 +1521,31 @@
     }
   }
   $('login').addEventListener('click', () => start(false));
+
+  /* "Neu in Tidy" sheet, once per version */
+  const APP_VERSION = '3.0';
+  function showWhatsNew() {
+    if (DEMO || store.get('aboDetox.seen') === APP_VERSION) return;
+    store.set('aboDetox.seen', APP_VERSION);
+    const s = $('vidSheetBody'); s.textContent = '';
+    const logo = el('div', 'hero-shape'); logo.innerHTML = document.querySelector('#setup .hero-shape').innerHTML;
+    logo.style.cssText = 'width:96px;height:96px;margin:4px auto 16px';
+    logo.querySelector('svg').setAttribute('width', '64'); logo.querySelector('svg').setAttribute('height', '64');
+    const h = el('div', 'pname', 'Abo Detox heißt jetzt Tidy ✨'); h.style.textAlign = 'center';
+    const sub = el('div', 'pmeta', 'Gleiche App, neuer Name, neues Logo.'); sub.style.cssText = 'text-align:center;margin-bottom:14px';
+    s.append(logo, h, sub);
+    const w = el('div', 'tips');
+    [['bar_chart', 'Kanal-Analyse', 'Neuer Tab mit Statistiken und Tipps für deine eigenen Videos.'],
+     ['auto_awesome', 'Smart-Auswahl', 'Inaktive Kanäle, Duplikate und kaputte Videos mit einem Tipp markieren.'],
+     ['history', 'Verlauf & Rückgängig', 'Alles, was du löschst, kannst du zurückholen.'],
+     ['settings', 'Einstellungen', 'Tipp oben rechts auf dein Profilbild: Farben, Hell/Dunkel und mehr.']]
+      .forEach(([i, t, x]) => w.append(tipCard({ icon: i, t, s: x })));
+    s.append(w);
+    const b = el('button', 'btn-filled', 'Los geht’s'); b.style.marginTop = '20px';
+    b.addEventListener('click', () => $('vidScrim').classList.remove('show'));
+    s.append(b);
+    $('vidScrim').classList.add('show');
+  }
 
   /* profile (1 quota unit, cached) */
   let profile = null;
@@ -1567,7 +1594,7 @@
     const n = hist.all().length;
     $('histInfo').textContent = n ? `${fmt(n)} ${n === 1 ? 'Eintrag' : 'Einträge'}, danach kein Rückgängig mehr` : 'Leer';
     const left = Math.max(0, Math.floor((10000 - quotaState().u) / 50));
-    $('verInfo').textContent = `Abo Detox · heute noch ≈ ${left} Aktionen · Reset um ${resetTime()} Uhr`;
+    $('verInfo').textContent = `Tidy · heute noch ≈ ${left} Aktionen · Reset um ${resetTime()} Uhr`;
   }
   const openSheet = () => { renderSettings(); $('sheetScrim').classList.add('show'); haptic(); };
   const closeSheet = () => $('sheetScrim').classList.remove('show');
@@ -1616,7 +1643,7 @@
     token = null; detail = null;
     for (const v of Object.values(views)) { v.items = null; v.sel.clear(); }
     ['app', 'nav', 'quota', 'profileBtn', 'back', 'subline'].forEach((id) => $(id).classList.add('hidden'));
-    $('setup').classList.remove('hidden'); $('title').textContent = 'Abo Detox';
+    $('setup').classList.remove('hidden'); $('title').textContent = 'Tidy';
     $('fab').classList.remove('show');
   });
 
@@ -1669,6 +1696,7 @@
       markWhere(v, (it) => it.date && Date.parse(it.date) < cut.getTime(), ['alte Likes', 'alten Likes']);
     } });
     if (v.key === 'playlists') A.push({ icon: 'auto_awesome', label: 'Leere Playlists markieren', hint: '0 Videos', run: () => markWhere(v, (it) => !it.count, ['leere Playlists', 'leeren Playlists']) });
+    if (!v.restore) A.push({ icon: 'refresh', label: 'Liste neu laden', hint: 'holt den aktuellen Stand von YouTube', run: () => { v.items = null; ensureLoaded(v); } });
     A.push({ icon: 'share', label: 'Liste exportieren', hint: 'als CSV, z. B. als Backup vorm Löschen', run: () => exportList(v) });
     return A;
   }
@@ -1730,7 +1758,7 @@
   function exportList(v) {
     const rows = [['Titel', 'Link', 'Datum', 'Info']].concat(filtered(v).map((it) => [it.title, urlFor(it, v), it.date ? new Date(it.date).toLocaleDateString('de-DE') : '', it.sub || '']));
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(';')).join('\r\n');
-    const name = `abo-detox-${(v.parent ? 'playlist-' + v.title : v.title).toLowerCase().replace(/[^a-z0-9äöüß]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const name = `tidy-${(v.parent ? 'playlist-' + v.title : v.title).toLowerCase().replace(/[^a-z0-9äöüß]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.csv`;
     if (NATIVE?.share) { NATIVE.share('\uFEFF' + csv, name); return; }
     const a = el('a'); a.href = URL.createObjectURL(new Blob(['\uFEFF' + csv], { type: 'text/csv' })); a.download = name;
     document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
