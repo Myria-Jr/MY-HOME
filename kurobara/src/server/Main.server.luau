@@ -104,6 +104,10 @@ Remotes.ClientAction.OnServerEvent:Connect(function(player, action, value)
 		S.GameState.Start(player)
 	elseif action == "Restart" then
 		S.GameState.Restart(player)
+	elseif action == "Dialogue" and type(value) == "string" then
+		S.Interact.Choose(player, value)
+	elseif action == "DialogueClose" then
+		S.Interact.CloseDialogue(player)
 	elseif action == "Attack" then
 		-- touch attack button
 		local tool = S.Items.Equipped(player)

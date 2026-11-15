@@ -127,6 +127,12 @@ function NPC.SpawnAll()
 	for _, d in Story.Students do
 		table.insert(all, newRec(d, "Student"))
 	end
+	for i, d in Story.Extras or {} do
+		if i > (Config.NPC.ExtraStudents or 0) then
+			break
+		end
+		table.insert(all, newRec(d, "Student"))
+	end
 	table.insert(all, newRec(Story.Haru, "Student"))
 	table.insert(all, newRec(Story.Mirei, "Student"))
 	for _, d in Story.Teachers do
@@ -220,6 +226,10 @@ function NPC.Appear(rec)
 	end)
 	rec.state = "Routine"
 	rec.targetKey = nil
+	rec.nextWander = os.clock() + math.random(15, 70)
+	rec.wanderUntil = nil
+	rec.followUntil = nil
+	rec.inDialogue = false
 	S.Net.StopAnim(rec.model, "*")
 	S.Rig.SetExpression(rec.model, rec.isRival and "Smile" or "Neutral")
 	setTalk(rec, true)
@@ -351,6 +361,26 @@ function NPC.Target(rec)
 		end
 		return at("Lounge")
 	end
+	local classTime = period == "Class1" or period == "Class2"
+	if rec.inDialogue then
+		return "Dialogue", { stay = true }
+	end
+	if rec.followUntil then
+		if classTime then
+			rec.followUntil = nil
+			S.Rig.Say(rec.model, Util.pick(Story.Dialogue.FollowClass), nil, 2.5)
+		elseif os.clock() < rec.followUntil then
+			return "FollowNyx", { followPlayer = true }
+		else
+			rec.followUntil = nil
+		end
+	end
+	if rec.wanderUntil and not classTime and period ~= "Leaving" then
+		if os.clock() < rec.wanderUntil and rec.wanderCF then
+			return "Wander" .. math.floor(rec.wanderUntil), { cf = rec.wanderCF }
+		end
+		rec.wanderUntil = nil
+	end
 	-- Ryo tails Nyx between classes once he's suspicious
 	if def.persona == "Detective" and S.GameState.Investigating and period ~= "Class1" and period ~= "Class2" then
 		return "Follow", { follow = true }
@@ -403,6 +433,15 @@ function NPC.GoTo(rec, target)
 	rec.atSpot = false
 	if target.follow then
 		task.spawn(NPC.Follow, rec, token)
+		return
+	elseif target.followPlayer then
+		task.spawn(NPC.FollowNyx, rec, token)
+		return
+	elseif target.stay then
+		if rec.hum and rec.root and not rec.sitting then
+			rec.hum:MoveTo(rec.root.Position)
+		end
+		rec.atSpot = true
 		return
 	end
 	task.spawn(function()
@@ -459,7 +498,11 @@ function NPC.Brain(rec)
 				NPC.GoTo(rec, target)
 			end
 			NPC.Perceive(rec)
-			if rec.state == "Routine" and rec.atSpot and not rec.talking and os.clock() > (rec.nextIdle or 0) then
+			if rec.role == "Student" and rec.state == "Routine" and rec.atSpot and not rec.talking and not rec.inDialogue
+				and not rec.followUntil and not rec.wanderUntil and not rec.isHaru and not rec.isRival
+				and os.clock() > (rec.nextWander or math.huge) then
+				NPC.StartWander(rec)
+			elseif rec.state == "Routine" and rec.atSpot and not rec.talking and not rec.inDialogue and os.clock() > (rec.nextIdle or 0) then
 				NPC.IdleAction(rec)
 			elseif os.clock() > chatter and rec.role == "Student" and rec.atSpot and not rec.talking then
 				chatter = os.clock() + math.random(18, 45)
@@ -470,6 +513,40 @@ function NPC.Brain(rec)
 		end
 		task.wait(Config.Vision.TickRate + math.random() * 0.15)
 	end
+end
+
+-- Short walks to somewhere else on campus, then back to their usual spot
+local WANDER = {
+	Morning = { "Courtyard", "Fountain", "Lobby", "Gate", "Hall", "Field" },
+	Lunch = { "Cafeteria", "Courtyard", "Roof", "Hall", "Fountain", "Lobby" },
+	AfterSchool = { "Hall", "Courtyard", "Field", "Gym", "Garden", "Fountain", "Library" },
+}
+
+function NPC.StartWander(rec)
+	local w = Config.NPC.WanderEvery
+	rec.nextWander = os.clock() + math.random(w[1], w[2])
+	local groups = WANDER[S.Clock.Period().id]
+	if not groups then
+		return
+	end
+	local list = S.World.Spots[Util.pick(groups)]
+	if not list or #list == 0 then
+		return
+	end
+	rec.wanderCF = list[math.random(1, #list)]
+	rec.wanderUntil = os.clock() + math.random(30, 55)
+end
+
+-- "Can you come with me?" — they tag along until told to wait, class starts or 2 minutes pass
+function NPC.StartFollowing(rec)
+	rec.followUntil = os.clock() + 120
+	rec.wanderUntil = nil
+	rec.targetKey = nil
+end
+
+function NPC.StopFollowing(rec)
+	rec.followUntil = nil
+	rec.targetKey = nil
 end
 
 -- Little things people do while waiting around
@@ -1071,6 +1148,52 @@ function NPC.DetectiveReport()
 			end
 			NPC.Flee(rec, "Report")
 		end
+	end
+end
+
+-- Walk a couple of steps behind Nyx
+function NPC.FollowNyx(rec, token: number)
+	local lastPath = 0
+	while rec.token == token and rec.alive and rec.state == "Routine" do
+		if NPC.Paused then
+			task.wait(0.4)
+			continue
+		end
+		local player = S.GameState.MainPlayer()
+		local char = player and player.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
+		if not hrp then
+			task.wait(0.4)
+			continue
+		end
+		local to = Util.flat(hrp.Position - rec.root.Position)
+		local d = to.Magnitude
+		if d > 5 then
+			rec.hum.WalkSpeed = d > 14 and 17 or 11
+			local direct = canSee(rec, hrp.Position, char, true)
+			if direct or d < 12 then
+				rec.hum:MoveTo(hrp.Position - to.Unit * 3.5)
+			elseif os.clock() - lastPath > 1 then
+				lastPath = os.clock()
+				local path = PathfindingService:CreatePath(AGENT)
+				local ok = pcall(function()
+					path:ComputeAsync(rec.root.Position, hrp.Position)
+				end)
+				if ok and path.Status == Enum.PathStatus.Success then
+					local wps = path:GetWaypoints()
+					local wp = wps[math.min(3, #wps)]
+					if wp then
+						rec.hum:MoveTo(wp.Position)
+					end
+				end
+			end
+		else
+			rec.hum:MoveTo(rec.root.Position)
+			if d > 0.1 then
+				faceDir(rec, to)
+			end
+		end
+		task.wait(0.25)
 	end
 end
 

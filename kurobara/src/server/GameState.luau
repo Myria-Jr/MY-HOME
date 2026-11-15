@@ -20,6 +20,7 @@ GameState.Killed = {} :: { string }
 GameState.Suspicion = 0
 GameState.Investigating = false
 GameState.SuspicionReported = false
+GameState.TextsSent = {} :: { [string]: boolean }
 local S
 local states: { [Player]: any } = {}
 
@@ -90,6 +91,7 @@ function GameState.Sync(player: Player)
 	workspace:SetAttribute("Phase", GameState.Phase)
 	workspace:SetAttribute("Suspicion", math.floor(GameState.Suspicion + 0.5))
 	workspace:SetAttribute("Investigating", GameState.Investigating)
+	workspace:SetAttribute("Missing", table.concat(GameState.Killed, ", "))
 	workspace:SetAttribute("Objective", GameState.RivalDown and "Mirei is gone. Don't get caught." or Story.Objectives[GameState.Day])
 end
 
@@ -188,6 +190,34 @@ function GameState.RefreshMood(player: Player)
 	end
 end
 
+-- Phone messages. key = a Story.Texts entry; "Day" uses today's message. One-shot keys only send once.
+local ONCE = { FirstKill = true, RivalDown = true, Suspicion = true, Haru = true }
+function GameState.Text(player: Player?, key: string)
+	if not player then
+		return
+	end
+	if ONCE[key] then
+		if GameState.TextsSent[key] then
+			return
+		end
+		GameState.TextsSent[key] = true
+	end
+	local list = Story.Texts[key]
+	if key == "Day" then
+		list = list[GameState.Day]
+	end
+	if not list then
+		return
+	end
+	local missing = GameState.Killed[#GameState.Killed] or "someone"
+	task.spawn(function()
+		for _, m in list do
+			task.wait(1.8)
+			S.Net.Screen(player, "Message", { thread = m[1], from = m[2], text = (m[3]:gsub("{missing}", missing)) })
+		end
+	end)
+end
+
 -- Nyx's inner voice (shown + whispered on the client). Rate-limited unless forced.
 function GameState.Thought(player: Player?, category: string, index: number?)
 	if not player or GameState.Phase ~= "Playing" then
@@ -219,8 +249,16 @@ function GameState.OnVictimKilled(rec)
 			S.Net.Notify(player, "No more questions.", "love")
 		end
 	else
-		-- someone went missing: Ryo gets curious
+		-- someone went missing: Ryo gets curious, the class chat panics
 		task.delay(20, GameState.StartInvestigation)
+		task.delay(25, function()
+			GameState.Text(player, "FirstKill")
+		end)
+	end
+	if rec.isRival then
+		task.delay(40, function()
+			GameState.Text(player, "RivalDown")
+		end)
 	end
 	if rec.isRival then
 		GameState.RivalDown = true
@@ -257,7 +295,11 @@ function GameState.StartInvestigation()
 end
 
 function GameState.SetSuspicion(v: number)
+	local before = GameState.Suspicion
 	GameState.Suspicion = Util.clamp(v, 0, 100)
+	if before < 60 and GameState.Suspicion >= 60 then
+		GameState.Text(GameState.MainPlayer(), "Suspicion")
+	end
 	if GameState.Suspicion >= 100 and not GameState.SuspicionReported and GameState.Phase == "Playing" then
 		GameState.SuspicionReported = true
 		S.NPC.DetectiveReport()
@@ -282,6 +324,7 @@ function GameState.CallPolice(reason: string)
 	S.Net.Notify(nil, "🚨 The police are on their way.", "warn")
 	task.delay(2.5, function()
 		GameState.Thought(GameState.MainPlayer(), "Police")
+		GameState.Text(GameState.MainPlayer(), "Police")
 	end)
 end
 
@@ -377,6 +420,11 @@ function GameState.StartDay()
 		task.delay(4.5, function()
 			if GameState.Day == day then
 				GameState.Thought(player, "Morning", day)
+			end
+		end)
+		task.delay(9, function()
+			if GameState.Day == day then
+				GameState.Text(player, "Day")
 			end
 		end)
 	end
@@ -497,6 +545,9 @@ function GameState.Restart(player: Player)
 	GameState.Phase = "Transition"
 	S.Net.Screen(player, "Fade", { time = 1.2 })
 	task.wait(0.6)
+	S.Net.Screen(nil, "Reset", {})
+	S.NPC.Chasers = 0
+	workspace:SetAttribute("Chase", false)
 	clearEvidence()
 	S.NPC.ResetAll()
 	S.Items.ResetAll()
@@ -508,6 +559,7 @@ function GameState.Restart(player: Player)
 	GameState.Suspicion = 0
 	GameState.Investigating = false
 	GameState.SuspicionReported = false
+	GameState.TextsSent = {}
 	workspace:SetAttribute("PoliceETA", nil)
 	states[player] = newState()
 	S.SpawnCharacter(player)

@@ -155,6 +155,13 @@ function Audio.Music(name: string?)
 	end
 end
 
+function Audio.RefreshMusic()
+	local name = current
+	if name and tracks[name] then
+		TweenService:Create(tracks[name], TweenInfo.new(0.6), { Volume = Config.Audio.MusicVolume }):Play()
+	end
+end
+
 -- ── Nyx's footsteps + heartbeat ──────────────────────────────────────────────
 function Audio.Init(sfxRemote: RemoteEvent)
 	sfxRemote.OnClientEvent:Connect(function(name: string, target, volume: number?, pitch: number?)

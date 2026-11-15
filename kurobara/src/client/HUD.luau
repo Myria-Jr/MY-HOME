@@ -18,9 +18,6 @@ local UI = Config.UI
 local gui: ScreenGui
 local refs = {}
 local toastHolder: Frame
-local phone: Frame
-local phoneOpen = false
-local phoneBlur: BlurEffect
 
 local function statusFor(bpm: number): (string, Color3)
 	local B = Config.BPM
@@ -174,54 +171,6 @@ local function buildHint()
 	refs.hint = p
 end
 
-local function buildPhone()
-	phone = Glass.Panel(gui, { size = UDim2.new(0, 360, 1, -150), pos = UDim2.new(1, 380, 0, 210), anchor = Vector2.new(1, 0), radius = 34, alpha = 0.18, tint = Color3.fromRGB(16, 14, 22) })
-	phone.Visible = false
-	Glass.pad(phone, 22, 20)
-	local title = Glass.Label(phone, "Notes", 30, Enum.FontWeight.Bold)
-	title.Size = UDim2.new(1, 0, 0, 36)
-	local sub = Glass.Label(phone, "Nyx's phone · private", 13, Enum.FontWeight.Medium, UI.SubInk)
-	sub.Position = UDim2.fromOffset(0, 36)
-	local scroll = Instance.new("ScrollingFrame")
-	scroll.BackgroundTransparency = 1
-	scroll.BorderSizePixel = 0
-	scroll.Position = UDim2.fromOffset(0, 64)
-	scroll.Size = UDim2.new(1, 0, 1, -64)
-	scroll.CanvasSize = UDim2.new()
-	scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-	scroll.ScrollBarThickness = 3
-	scroll.ScrollBarImageColor3 = Color3.new(1, 1, 1)
-	scroll.ZIndex = 2
-	scroll.Parent = phone
-	local list = Instance.new("UIListLayout")
-	list.Padding = UDim.new(0, 12)
-	list.SortOrder = Enum.SortOrder.LayoutOrder
-	list.Parent = scroll
-	for i, note in Story.Notes do
-		local card = Glass.Panel(scroll, { size = UDim2.new(1, -6, 0, 0), radius = 18, alpha = 0.5, tint = Color3.fromRGB(40, 36, 52) })
-		card.AutomaticSize = Enum.AutomaticSize.Y
-		card.LayoutOrder = i
-		Glass.pad(card, 14, 12)
-		local inner = Instance.new("UIListLayout")
-		inner.Padding = UDim.new(0, 6)
-		inner.SortOrder = Enum.SortOrder.LayoutOrder
-		inner.Parent = card
-		local h = Glass.Label(card, note.title, 16, Enum.FontWeight.Bold, i == 1 and UI.Accent or UI.Ink)
-		h.LayoutOrder = 1
-		local b = Glass.Label(card, note.body, 14, Enum.FontWeight.Regular, UI.SubInk)
-		b.LayoutOrder = 2
-		b.TextWrapped = true
-		b.TextYAlignment = Enum.TextYAlignment.Top
-		b.Size = UDim2.new(1, 0, 0, 0)
-		b.AutomaticSize = Enum.AutomaticSize.Y
-		b.LineHeight = 1.15
-	end
-	phoneBlur = Instance.new("BlurEffect")
-	phoneBlur.Size = 0
-	phoneBlur.Name = "PhoneBlur"
-	phoneBlur.Parent = Lighting
-end
-
 -- ── Public ───────────────────────────────────────────────────────────────────
 function HUD.Toast(text: string, kind: string?)
 	if not toastHolder then
@@ -316,19 +265,29 @@ function HUD.Seen(name: string, kind: string)
 	end)
 end
 
+-- the phone lives in its own module (Phone.luau); HUD just forwards
+local phoneHandler: ((boolean?) -> ())? = nil
+function HUD.SetPhone(handler: (boolean?) -> ())
+	phoneHandler = handler
+end
+
 function HUD.TogglePhone(force: boolean?)
-	if not phone then
-		return
+	if phoneHandler then
+		phoneHandler(force)
 	end
-	phoneOpen = if force ~= nil then force else not phoneOpen
-	if phoneOpen then
-		phone.Visible = true
-		Glass.tween(phone, 0.5, { Position = UDim2.new(1, -16, 0, 210) })
-		Glass.tween(phoneBlur, 0.4, { Size = 10 })
-	else
-		Glass.tween(phone, 0.4, { Position = UDim2.new(1, 380, 0, 210) })
-		Glass.tween(phoneBlur, 0.4, { Size = 0 })
+end
+
+function HUD.Reset()
+	for _, c in toastHolder:GetChildren() do
+		if c:IsA("Frame") then
+			c:Destroy()
+		end
 	end
+	local t = gui:FindFirstChild("Thought")
+	if t then
+		t:Destroy()
+	end
+	HUD.TogglePhone(false)
 end
 
 function HUD.Show(on: boolean)
@@ -361,7 +320,6 @@ function HUD.Init()
 	buildSeen()
 	buildToasts()
 	buildHint()
-	buildPhone()
 
 	local samples = table.create(#refs.bars, 0)
 	local t0 = os.clock()

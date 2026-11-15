@@ -362,6 +362,19 @@ function BloodFX.Arterial(d)
 	end)
 end
 
+-- wipe every local splat, drip and clot (new game)
+function BloodFX.Clear()
+	for _, t in splatTweens do
+		t:Cancel()
+	end
+	table.clear(splatTweens)
+	table.clear(drops)
+	table.clear(freeParts)
+	table.clear(splats)
+	splatCursor = 0
+	folder:ClearAllChildren()
+end
+
 function BloodFX.Init(remote: RemoteEvent, mood, animator)
 	Mood = mood
 	Animator = animator

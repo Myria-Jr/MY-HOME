@@ -248,11 +248,29 @@ function Screens.GameOver(d)
 	fadeIn(title, 0.3, 1.2)
 	fadeIn(text, 1.0)
 	fadeIn(extra, 1.5)
-	local again = Glass.Button(gui, "Try again", { pos = UDim2.fromScale(0.5, 0.66) })
-	again.Activated:Connect(function()
+	local again = Glass.Button(gui, "Restart now", { pos = UDim2.fromScale(0.5, 0.66) })
+	local count = centerLabel(gui, "", 15, Enum.FontWeight.Medium, UI.SubInk, 0.73)
+	fadeIn(count, 1.5)
+	local fired = false
+	local function restart()
+		if fired then
+			return
+		end
+		fired = true
 		again.Active = false
 		Glass.tween(blur, 0.6, { Size = 0 })
 		onRestart()
+	end
+	again.Activated:Connect(restart)
+	task.spawn(function()
+		for i = 8, 1, -1 do
+			if fired or not count.Parent then
+				return
+			end
+			count.Text = "Everything starts over in " .. i .. "…"
+			task.wait(1)
+		end
+		restart()
 	end)
 end
 

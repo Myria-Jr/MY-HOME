@@ -232,57 +232,251 @@ function Interact.Desk(player: Player)
 	st.Busy = false
 end
 
--- ── Talking ──────────────────────────────────────────────────────────────────
+-- ── Talking (dialogue with choices) ─────────────────────────────────────────
+local Remotes = ReplicatedStorage:WaitForChild("Remotes")
+
+local function lastMissing(): string?
+	local k = S.GameState.Killed
+	return k[#k]
+end
+
+local function whereIs(rec): string
+	local W = Story.Dialogue.Where
+	if not rec or not rec.alive or not S.NPC.Present(rec) then
+		return W.Away
+	end
+	local key = rec.targetKey or ""
+	local best, bestLen = nil, 0
+	for group, text in W do
+		if key:sub(1, #group) == group and #group > bestLen then
+			best, bestLen = text, #group
+		end
+	end
+	return best or "somewhere around school"
+end
+
+function Interact.Options(player: Player, rec)
+	local opts = {}
+	local function add(id: string, text: string)
+		table.insert(opts, { id = id, text = text })
+	end
+	local missing = lastMissing()
+	if rec.isHaru then
+		add("hi", "Hi, Haru.")
+		add("haruCompliment", "I like the way you read by the fountain.")
+		add("book", "What are you reading?")
+		add("haruMirei", "Are you and Mirei close?")
+	elseif rec.isRival then
+		add("chat", "How are you?")
+		add("friday", "Big plans on Friday?")
+		if rec.followUntil then
+			add("wait", "Wait here.")
+		else
+			add("follow", "Can you help me with something?")
+		end
+	elseif rec.role == "Teacher" then
+		add("chat", "Good day, sensei.")
+		if missing then
+			add("missing", "Any news about " .. missing .. "?")
+		end
+	elseif rec.def.persona == "Detective" then
+		add("chat", "Hey, Ryo.")
+		add("case", "What are you investigating?")
+	else
+		add("chat", "How's it going?")
+		add("compliment", "I like your hair today.")
+		add("haru", "Have you seen Haru?")
+		add("mirei", "What's Mirei up to?")
+		if missing then
+			add("missing", "Did you hear about " .. missing .. "?")
+		end
+		if rec.followUntil then
+			add("wait", "Wait here.")
+		else
+			add("follow", "Can you come with me?")
+		end
+	end
+	add("bye", "Bye.")
+	return opts
+end
+
+function Interact.SendDialogue(player: Player, rec, line: string)
+	S.Net.Anim(rec.model, "Talk", "Action")
+	S.Rig.Say(rec.model, line, nil, 4.5)
+	Remotes.Dialogue:FireClient(player, {
+		name = rec.def.name,
+		line = line,
+		options = Interact.Options(player, rec),
+		love = rec.isHaru == true,
+	})
+end
+
+function Interact.CloseDialogue(player: Player)
+	local st = S.GameState.Get(player)
+	local rec = st and st.Dialogue
+	if st then
+		st.Dialogue = nil
+	end
+	if rec then
+		rec.inDialogue = false
+		rec.talking = false
+		rec.targetKey = nil
+	end
+	Remotes.Dialogue:FireClient(player, nil)
+end
+
 function Interact.Talk(player: Player, rec)
 	local st = ready(player)
 	if not st or rec.state ~= "Routine" or not rec.alive then
 		return
 	end
+	if st.Dialogue and st.Dialogue ~= rec then
+		Interact.CloseDialogue(player)
+	end
+	st.Dialogue = rec
+	rec.inDialogue = true
+	rec.talking = true
+	rec.token += 1
+	rec.targetKey = nil
 	local char = player.Character
 	local hrp = char and char:FindFirstChild("HumanoidRootPart") :: BasePart?
 	if hrp and not rec.sitting then
 		local d = Util.flat(hrp.Position - rec.root.Position)
 		if d.Magnitude > 0.1 then
+			rec.hum:MoveTo(rec.root.Position)
 			rec.root.CFrame = CFrame.lookAt(rec.root.Position, rec.root.Position + d.Unit)
 		end
 	end
-	S.Net.Anim(rec.model, "Talk", "Action")
-	local periodKey = S.GameState.Day .. ":" .. S.Clock.Period().id
-	local first = st.LastTalk[rec.def.id] ~= periodKey
-	st.LastTalk[rec.def.id] = periodKey
-	if rec.isHaru then
-		local lines = Story.Lines.Haru
-		local idx = math.clamp(math.floor(st.Affection / 8) + 1, 1, #lines)
-		S.Rig.Say(rec.model, lines[idx], nil, 4)
-		S.Rig.SetExpression(rec.model, "Smile")
-		task.delay(4, function()
-			if rec.alive then
-				S.Rig.SetExpression(rec.model, "Neutral")
+	local D = Story.Dialogue
+	local greet = rec.isHaru and Util.pick(D.GreetHaru) or rec.isRival and Util.pick(D.GreetMirei)
+		or rec.role == "Teacher" and Util.pick(D.GreetTeacher) or rec.def.persona == "Detective" and Util.pick(D.GreetRyo)
+		or Util.pick(D.Greet)
+	Interact.SendDialogue(player, rec, greet)
+	-- close when she walks off, after a minute, or if anything happens to them
+	task.spawn(function()
+		local t0 = os.clock()
+		while st.Dialogue == rec do
+			task.wait(0.5)
+			local h = player.Character and player.Character:FindFirstChild("HumanoidRootPart") :: BasePart?
+			local far = not h or not rec.root or (h.Position - rec.root.Position).Magnitude > 14
+			if far or os.clock() - t0 > 60 or not rec.alive or rec.state ~= "Routine" or S.GameState.Phase ~= "Playing" then
+				Interact.CloseDialogue(player)
 			end
-		end)
-		if first then
-			st.Affection += 6
-			S.GameState.AddBPM(player, -10)
-			S.Net.Notify(player, "♥ Haru noticed you. (" .. math.floor(st.Affection) .. ")", "love")
 		end
-	elseif rec.isRival then
-		S.Rig.Say(rec.model, Util.pick(Story.Lines.Mirei), nil, 4)
-	elseif rec.def.persona == "Detective" then
-		if S.GameState.Investigating then
-			S.Rig.Say(rec.model, Util.pick(Story.Lines.Detective), nil, 4)
-			S.GameState.AddSuspicion(first and 4 or 1)
+	end)
+end
+
+function Interact.Choose(player: Player, id: string)
+	local st = S.GameState.Get(player)
+	local rec = st and st.Dialogue
+	if not rec or not rec.alive or not S.NPC.Present(rec) then
+		Interact.CloseDialogue(player)
+		return
+	end
+	local D = Story.Dialogue
+	local missing = lastMissing() or "them"
+	local today = S.GameState.Day .. ":" .. id .. ":" .. rec.def.id
+	local first = not st.LastTalk[today]
+	st.LastTalk[today] = true
+	local line
+	local closeAfter = false
+	if id == "bye" then
+		S.Rig.Say(rec.model, Util.pick(D.Bye), nil, 2)
+		Interact.CloseDialogue(player)
+		return
+	elseif id == "chat" then
+		if rec.isRival then
+			line = Util.pick(Story.Lines.Mirei)
+		elseif rec.role == "Teacher" then
+			line = Util.pick(Story.Lines.Teacher)
+		elseif rec.def.persona == "Detective" then
+			line = Util.pick(S.GameState.Investigating and Story.Lines.Detective or Story.Lines.DetectiveTalk)
 		else
-			S.Rig.Say(rec.model, Util.pick(Story.Lines.DetectiveTalk), nil, 4)
+			line = Util.pick(Story.Lines.Talk)
 		end
-	elseif rec.role == "Teacher" then
-		S.Rig.Say(rec.model, Util.pick(Story.Lines.Teacher), nil, 3.5)
-	else
-		S.Rig.Say(rec.model, Util.pick(Story.Lines.Talk), nil, 4)
 		if first then
 			S.GameState.AddRep(player, 1)
 		end
+	elseif id == "compliment" then
+		if st.BPM >= Config.BPM.Unstable or st.Bloodiness >= 20 then
+			line = Util.pick(D.ComplimentCreepy)
+			S.GameState.AddRep(player, -3)
+		else
+			line = Util.pick(D.ComplimentOk)
+			if first then
+				S.GameState.AddRep(player, 2)
+			end
+		end
+	elseif id == "haru" then
+		line = "I think he's " .. whereIs(S.NPC.Get("Haru")) .. "."
+	elseif id == "mirei" then
+		line = "She's " .. whereIs(S.NPC.Get("Mirei")) .. "." .. (S.GameState.RivalDown and "" or " And she won't shut up about Friday.")
+	elseif id == "missing" then
+		line = (Util.pick(rec.role == "Teacher" and D.TeacherMissing or D.AskMissing):gsub("{missing}", missing))
+	elseif id == "follow" then
+		local tool = S.Items.Equipped(player)
+		local scary = st.Reputation < -25 or st.Bloodiness >= 15 or st.BPM >= Config.BPM.Unstable or (tool and (tool:GetAttribute("Suspicion") or 0) > 0.3)
+		if scary then
+			line = Util.pick(D.FollowNo)
+		else
+			line = Util.pick(D.FollowYes)
+			S.NPC.StartFollowing(rec)
+			closeAfter = true
+		end
+	elseif id == "wait" then
+		line = Util.pick(D.Wait)
+		S.NPC.StopFollowing(rec)
+		closeAfter = true
+	elseif id == "hi" then
+		local lines = Story.Lines.Haru
+		line = lines[math.clamp(math.floor(st.Affection / 8) + 1, 1, #lines)]
+		local key = S.GameState.Day .. ":" .. S.Clock.Period().id .. ":haru"
+		if not st.LastTalk[key] then
+			st.LastTalk[key] = true
+			Interact.AddAffection(player, st, 6)
+		end
+	elseif id == "haruCompliment" then
+		line = Util.pick(D.HaruCompliment)
+		S.Rig.SetExpression(rec.model, "Smile")
+		if first then
+			Interact.AddAffection(player, st, 5)
+		end
+		S.GameState.AddBPM(player, -8)
+	elseif id == "book" then
+		line = Util.pick(D.HaruBook)
+	elseif id == "haruMirei" then
+		line = Util.pick(D.HaruMirei)
+		S.GameState.AddBPM(player, 6)
+	elseif id == "friday" then
+		line = Util.pick(D.MireiFriday)
+		S.GameState.AddBPM(player, 5)
+	elseif id == "case" then
+		line = Util.pick(D.RyoCase)
+		if S.GameState.Investigating then
+			S.GameState.AddSuspicion(2)
+		end
+	else
+		return
 	end
 	S.GameState.Sync(player)
+	Interact.SendDialogue(player, rec, line)
+	if closeAfter then
+		task.delay(1.4, function()
+			if st.Dialogue == rec then
+				Interact.CloseDialogue(player)
+			end
+		end)
+	end
+end
+
+function Interact.AddAffection(player: Player, st, n: number)
+	local before = st.Affection
+	st.Affection += n
+	S.GameState.AddBPM(player, -6)
+	S.Net.Notify(player, "♥ Haru noticed you. (" .. math.floor(st.Affection) .. ")", "love")
+	if before < 20 and st.Affection >= 20 then
+		S.GameState.Text(player, "Haru")
+	end
 end
 
 -- ── Wire up the world ────────────────────────────────────────────────────────

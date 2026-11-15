@@ -116,6 +116,14 @@ function Mood.Init()
 	end)
 end
 
+function Mood.Clear()
+	bloodLayer:ClearAllChildren()
+	seenPulse = 0
+	shake.untilT = 0
+	flashCC.Saturation, flashCC.Contrast, flashCC.Brightness = 0, 0, 0
+	flashCC.TintColor = Color3.new(1, 1, 1)
+end
+
 function Mood.Shake(power: number, duration: number)
 	shake.power = math.max(power, shake.power * 0.5)
 	shake.untilT = math.max(shake.untilT, os.clock() + duration)

@@ -110,6 +110,8 @@ Config.NPC = {
 	HeroChaseSpeed = 18.5,
 	CatchDistance = 3.6,
 	ScreamRadius = 34,
+	ExtraStudents = 24, -- background students (lower this if the server struggles)
+	WanderEvery = { 35, 80 }, -- seconds between little walks
 }
 
 Config.Detective = {

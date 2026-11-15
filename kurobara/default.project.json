@@ -28,6 +28,9 @@
         },
         "Sfx": {
           "$className": "RemoteEvent"
+        },
+        "Dialogue": {
+          "$className": "RemoteEvent"
         }
       }
     },

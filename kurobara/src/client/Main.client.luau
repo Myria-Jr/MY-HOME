@@ -18,6 +18,8 @@ local Audio = require(here.Audio)
 local Voice = require(here.Voice)
 local CameraMode = require(here.CameraMode)
 local TouchUI = require(here.TouchUI)
+local Dialogue = require(here.Dialogue)
+local Phone = require(here.Phone)
 
 local player = Players.LocalPlayer
 
@@ -29,6 +31,9 @@ Prompts.Init()
 CameraMode.Init(Mood)
 Controls.Init(Remotes.ClientAction, HUD, CameraMode)
 TouchUI.Init(Remotes.ClientAction, HUD, CameraMode, Prompts)
+Dialogue.Init(Remotes.Dialogue, Remotes.ClientAction)
+Phone.Init(CameraMode, HUD, Audio)
+HUD.SetPhone(Phone.Toggle)
 Audio.Init(Remotes.Sfx)
 Voice.Init(Remotes.Speak, Audio)
 
@@ -84,6 +89,13 @@ Remotes.ScreenFX.OnClientEvent:Connect(function(kind: string, d)
 		Screens.Night(d)
 	elseif kind == "Fade" then
 		Screens.Fade(d)
+	elseif kind == "Reset" then
+		BloodFX.Clear()
+		Mood.Clear()
+		HUD.Reset()
+		Phone.Reset()
+	elseif kind == "Message" then
+		Phone.AddMessage(d.thread, d.from, d.text)
 	elseif kind == "GameOver" then
 		leavePlay()
 		Screens.GameOver(d)

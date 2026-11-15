@@ -57,6 +57,57 @@ Story.Students = {
 	{ id = "Ryo", name = "Ryo Amamiya", gender = "M", hair = "Messy", hairColor = Color3.fromRGB(30, 34, 56), eyeColor = Color3.fromRGB(150, 160, 180), glasses = true, prop = "Notebook", persona = "Detective", class = "2A", morning = "Lobby", lunch = "Cafeteria", club = "Library" },
 }
 
+-- ── Background students (generated, deterministic) ──────────────────────────
+do
+	local FIRST_F = { "Yuki", "Saki", "Mai", "Rika", "Natsu", "Kana", "Momo", "Haruka", "Chika", "Ayame", "Tsubaki", "Hotaru", "Izumi", "Nao", "Fumika", "Shiori" }
+	local FIRST_M = { "Ryota", "Kazuki", "Yuma", "Hayato", "Tomoya", "Naoki", "Kenji", "Taiga", "Akira", "Jun", "Masaki", "Kosuke", "Shota", "Daiki" }
+	local LAST = { "Aoki", "Fukuda", "Goto", "Hirano", "Iwasaki", "Kimura", "Maeda", "Nishida", "Ogura", "Sato", "Tamura", "Ueno", "Watanabe", "Yoshida", "Kondo", "Matsui", "Noguchi", "Shimizu" }
+	local HAIR_F = { "Long", "Ponytail", "Twintails", "Bob", "Bun", "Long" }
+	local HAIR_M = { "Short", "Spiky", "Messy", "Short" }
+	local COLORS = {
+		Color3.fromRGB(22, 18, 20), Color3.fromRGB(40, 28, 22), Color3.fromRGB(70, 46, 30), Color3.fromRGB(96, 64, 40),
+		Color3.fromRGB(30, 26, 34), Color3.fromRGB(120, 80, 50), Color3.fromRGB(200, 170, 120), Color3.fromRGB(60, 40, 70),
+	}
+	local EYES = { Color3.fromRGB(70, 50, 40), Color3.fromRGB(90, 60, 40), Color3.fromRGB(60, 90, 140), Color3.fromRGB(70, 120, 80), Color3.fromRGB(40, 40, 50) }
+	local PERSONAS = { "Coward", "Coward", "Coward", "Coward", "Coward", "Hero", "Phone", "Gossip" }
+	local MORNING = { "Courtyard", "Fountain", "Lobby", "Gate", "Field" }
+	local LUNCH = { "Cafeteria", "Courtyard", "Roof", "Fountain" }
+	local CLUBS = { "Art", "Music", "Science", "Library", "Gym", "Field", "Garden", "Cafeteria" }
+	local seed = 20261114
+	local function rnd(n: number): number
+		seed = (seed * 1103515245 + 12345) % 2147483648
+		return (seed % n) + 1
+	end
+	local used = {}
+	for _, d in Story.Students do
+		used[d.name] = true
+	end
+	Story.Extras = {}
+	for _, class in { "1A", "2B", "3B" } do
+		for k = 1, 8 do
+			local female = (k % 2 == 1)
+			local name
+			repeat
+				name = (female and FIRST_F[rnd(#FIRST_F)] or FIRST_M[rnd(#FIRST_M)]) .. " " .. LAST[rnd(#LAST)]
+			until not used[name]
+			used[name] = true
+			table.insert(Story.Extras, {
+				id = "X" .. class .. k,
+				name = name,
+				gender = female and "F" or "M",
+				hair = female and HAIR_F[rnd(#HAIR_F)] or HAIR_M[rnd(#HAIR_M)],
+				hairColor = COLORS[rnd(#COLORS)],
+				eyeColor = EYES[rnd(#EYES)],
+				persona = PERSONAS[rnd(#PERSONAS)],
+				class = class,
+				morning = MORNING[rnd(#MORNING)],
+				lunch = LUNCH[rnd(#LUNCH)],
+				club = CLUBS[rnd(#CLUBS)],
+			})
+		end
+	end
+end
+
 Story.Haru = {
 	id = "Haru", name = "Haru Seto", gender = "M", hair = "Messy", hairColor = Color3.fromRGB(58, 40, 32),
 	eyeColor = Color3.fromRGB(120, 125, 140), glasses = true, persona = "Crush", class = "3A",
@@ -73,6 +124,9 @@ Story.Teachers = {
 	{ id = "Tachibana", name = "Ms. Tachibana", gender = "F", hair = "Bun", hairColor = Color3.fromRGB(30, 26, 30), eyeColor = Color3.fromRGB(60, 50, 50), persona = "Teacher", class = "2A", height = 1.08 },
 	{ id = "Okada", name = "Mr. Okada", gender = "M", hair = "Short", hairColor = Color3.fromRGB(130, 130, 135), eyeColor = Color3.fromRGB(60, 60, 70), persona = "Teacher", class = "3A", height = 1.1, glasses = true },
 	{ id = "Fujimura", name = "Ms. Fujimura", gender = "F", hair = "Long", hairColor = Color3.fromRGB(90, 55, 35), eyeColor = Color3.fromRGB(100, 70, 50), persona = "Teacher", class = "1B", height = 1.06 },
+	{ id = "Hoshikawa", name = "Ms. Hoshikawa", gender = "F", hair = "Ponytail", hairColor = Color3.fromRGB(60, 40, 30), eyeColor = Color3.fromRGB(80, 60, 50), persona = "Teacher", class = "1A", height = 1.05 },
+	{ id = "Sakaguchi", name = "Mr. Sakaguchi", gender = "M", hair = "Short", hairColor = Color3.fromRGB(40, 36, 36), eyeColor = Color3.fromRGB(50, 50, 55), persona = "Teacher", class = "2B", height = 1.12, glasses = true },
+	{ id = "Nonomura", name = "Ms. Nonomura", gender = "F", hair = "Bob", hairColor = Color3.fromRGB(110, 70, 50), eyeColor = Color3.fromRGB(90, 70, 50), persona = "Teacher", class = "3B", height = 1.04 },
 	{ id = "Kuroda", name = "Mr. Kuroda", gender = "M", hair = "Spiky", hairColor = Color3.fromRGB(15, 15, 18), eyeColor = Color3.fromRGB(40, 40, 45), persona = "Teacher", class = "Hall", height = 1.14, patrol = true },
 }
 
@@ -252,6 +306,68 @@ Story.Thoughts = {
 	Police = { "Stay calm. Clean. Smile. You're just a student.", "Sirens. Don't run. Running is guilty." },
 	Jealous = { "She's standing too close to him.", "She touched his sleeve. She TOUCHED his sleeve.", "That laugh. I want it to stop." },
 	Ryo = { "Ryo is watching. Ryo is always watching.", "He writes everything down. Everything." },
+}
+
+-- ── Talking to people (dialogue choices) ─────────────────────────────────────
+Story.Dialogue = {
+	Greet = { "Oh, hey Nyx.", "Hi!", "What's up?", "Hey. You're Nyx, right?", "Morning!" },
+	GreetTeacher = { "Yes, Amane?", "Can I help you?", "Make it quick, Amane." },
+	GreetHaru = { "Hey, Nyx.", "Oh — hi.", "You again. …That's not a bad thing." },
+	GreetMirei = { "Nyx! Hiii!", "Oh, hey! Love your hair today!" },
+	GreetRyo = { "Amane. Just the person I was thinking about.", "Ah. Nyx." },
+	ComplimentOk = { "Aww, thanks!", "Really? You think so?", "That's sweet of you.", "Stop it, you're making me blush." },
+	ComplimentCreepy = { "Uh… thanks? Why are you smiling like that?", "…Okay. I have to go.", "That was weirdly intense, Nyx." },
+	AskMissing = { "Don't. It's creepy. People don't just vanish.", "I heard the police found nothing.", "I can't sleep since {missing} disappeared.", "My parents want to pull me out of school." },
+	FollowYes = { "Sure, lead the way.", "Okay, but quick.", "Ooh, a secret? Fine." },
+	FollowNo = { "Uh… no thanks.", "I'd rather not.", "You're kinda scaring me, Nyx." },
+	FollowClass = { "Sorry, I have to get to class!", "Class is starting, gotta go!" },
+	Wait = { "Okay, I'll wait here.", "Don't take too long.", "Sure. Waiting." },
+	Bye = { "See you.", "Bye!", "Later, Nyx." },
+	Where = {
+		Fountain = "by the fountain", FountainBench = "on the bench by the fountain", Roof = "up on the roof", RoofHaru = "up on the roof",
+		RoofConfess = "on the roof", Library = "in the library", Seat = "in class", Greenhouse = "in the greenhouse, alone",
+		Garden = "in the garden with the gardening club", Courtyard = "in the courtyard", Cafeteria = "in the cafeteria",
+		Lobby = "near the entrance", Gate = "at the gate", Exit = "on the way home", Away = "not at school right now",
+	},
+	HaruBook = { "It's about a lighthouse keeper who talks to the sea.", "A mystery. I already know who did it. I'm reading it anyway.", "Poetry. Don't tell anyone." },
+	HaruMirei = { "Mirei? She's nice. Really… energetic.", "She keeps asking if I'm free on Friday. I don't know why.", "We grew up on the same street. She's like a little sister." },
+	HaruCompliment = { "…Thanks. Nobody ever says that.", "You're a strange one, Nyx. I mean that nicely.", "Heh. Okay. That made my day." },
+	MireiFriday = { "It's a secret! …Okay, it's about Haru. Don't tell ANYONE!", "Friday at sunset. Rooftop. Wish me luck!" },
+	TeacherMissing = { "We're cooperating with the police. Please go to class.", "That's not something to gossip about, Amane." },
+	RyoCase = { "Disappearances, Amane. Plural, soon, if I'm right.", "Who goes where, when. Patterns. You'd be surprised what patterns say.", "I'm not accusing anyone. Yet." },
+}
+
+-- ── Phone messages ───────────────────────────────────────────────────────────
+Story.Threads = {
+	{ id = "mom", name = "Mom", icon = "🏠", seed = { { "Mom", "Don't forget your bento! Love you ♥" }, { "Nyx", "ok" } } },
+	{ id = "class", name = "2-A Class Chat", icon = "🏫", seed = {
+		{ "Kotone", "who's going to the festival on friday??" },
+		{ "Ren", "me" },
+		{ "Aoi", "Me too!!" },
+		{ "Kotone", "omg did u hear about mirei and haru 👀" },
+	} },
+	{ id = "unknown", name = "Unknown Number", icon = "❔", seed = {} },
+	{ id = "haru", name = "Haru Seto", icon = "📖", seed = {} },
+}
+
+-- server sends these when things happen ({missing} = the latest person who disappeared)
+Story.Texts = {
+	Day = {
+		{ { "mom", "Mom", "Have a good first day this week! Eat something!" } },
+		{ { "mom", "Mom", "You came home late yesterday. Everything ok?" } },
+		{ { "mom", "Mom", "I'm working late tonight. There's curry in the fridge." } },
+		{ { "mom", "Mom", "You seem happier lately. Is it a boy? 👀" } },
+		{ { "mom", "Mom", "Enjoy the festival today! Take pictures!" } },
+	},
+	FirstKill = {
+		{ "class", "Kotone", "has anyone heard from {missing}??" },
+		{ "class", "Aoi", "their phone goes straight to voicemail" },
+		{ "class", "Ren", "probably skipping lol" },
+	},
+	Police = { { "class", "Ren", "why are there cops at school" }, { "class", "Kotone", "SOMETHING HAPPENED. i'm scared" } },
+	RivalDown = { { "class", "Kotone", "MIREI is missing too?? this isn't funny anymore" }, { "class", "Aoi", "please everyone walk home in groups" } },
+	Suspicion = { { "unknown", "Unknown", "I know where you were when it happened, Amane." }, { "unknown", "Unknown", "Every pattern has a center. — R" } },
+	Haru = { { "haru", "Haru", "Hey, it's Haru. Got your number from the class list." }, { "haru", "Haru", "See you by the fountain tomorrow?" } },
 }
 
 Story.Objectives = {
