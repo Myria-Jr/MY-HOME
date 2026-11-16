@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Alltag</string>
+    <color name="bg">#ECEFF5</color>
+    <color name="icon_a">#5AA9FF</color>
+    <color name="icon_b">#0A74F0</color>
+    <style name="Theme.Alltag" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/bg</item>
+    </style>
+</resources>
