@@ -4,7 +4,14 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.content.ContentValues
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
+import android.provider.MediaStore
+import android.util.Base64
+import android.webkit.JavascriptInterface
+import java.io.File
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
 import android.webkit.WebChromeClient
@@ -48,6 +55,8 @@ class MainActivity : ComponentActivity() {
             mediaPlaybackRequiresUserGesture = false
         }
 
+        web.addJavascriptInterface(Bridge(), "SmyckaNative")
+
         web.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
                 loader.shouldInterceptRequest(request.url)
@@ -89,4 +98,26 @@ class MainActivity : ComponentActivity() {
 
     override fun onPause() { super.onPause(); web.onPause() }
     override fun onResume() { super.onResume(); web.onResume() }
+
+    inner class Bridge {
+        @JavascriptInterface
+        fun saveAudio(base64: String, name: String, mime: String): String = try {
+            val bytes = Base64.decode(base64, Base64.DEFAULT)
+            if (Build.VERSION.SDK_INT >= 29) {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+                    put(MediaStore.MediaColumns.MIME_TYPE, mime)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Smycka")
+                }
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: throw IllegalStateException("no uri")
+                contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+            } else {
+                File(getExternalFilesDir(Environment.DIRECTORY_MUSIC), name).writeBytes(bytes)
+            }
+            "ok"
+        } catch (e: Exception) {
+            "fail"
+        }
+    }
 }
