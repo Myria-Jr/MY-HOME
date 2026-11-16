@@ -1,0 +1,422 @@
+<title>Smyčka Studio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one dark glass instrument. Brand + language top, transport pill, segmented tabs, then Pads (grid + sound panel) / Sequencer / Keys */
+:root{
+  --bg:#07060c; --fg:#f5f3fb; --muted:#9b97ad; --rec:#ff4d6a;
+  --glass:rgba(28,24,44,.46); --glass-hi:rgba(60,54,90,.55);
+  --edge:rgba(255,255,255,.22); --edge-dim:rgba(255,255,255,.05);
+  --well:rgba(255,255,255,.05); --line:rgba(255,255,255,.08); --shadow:rgba(0,0,0,.55);
+  --display:"Bricolage Grotesque",ui-rounded,"SF Pro Rounded",system-ui,sans-serif;
+  --body:"Geist",-apple-system,"SF Pro Text",system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+#field{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.app{position:relative;z-index:1;max-width:1100px;margin:0 auto;display:grid;gap:16px;
+  padding-block:24px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+button,select,input{font:inherit;color:inherit}
+.glass{position:relative;background:var(--glass);border-radius:26px;
+  -webkit-backdrop-filter:blur(24px) saturate(180%);backdrop-filter:blur(24px) saturate(180%);
+  box-shadow:inset 0 1px 0 var(--edge),inset 0 -1px 0 var(--edge-dim),0 24px 60px -20px var(--shadow)}
+.glass::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
+  background:linear-gradient(140deg,var(--edge),var(--edge-dim) 35%,var(--edge-dim) 65%,var(--edge));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.brand h1{font-family:var(--display);font-size:clamp(34px,6vw,54px);font-weight:780;letter-spacing:-.035em;line-height:.95;margin:0}
+.brand p{margin:4px 0 0;color:var(--muted)}
+.seg{display:inline-flex;padding:4px;gap:2px;border-radius:999px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line)}
+.seg button{all:unset;cursor:pointer;padding:7px 14px;border-radius:999px;font-weight:500;color:var(--muted);transition:background .2s,color .2s}
+.seg button[aria-pressed="true"]{background:var(--glass-hi);color:var(--fg);box-shadow:inset 0 1px 0 var(--edge),0 4px 12px -4px var(--shadow)}
+.seg button:focus-visible,.btn:focus-visible,.pad:focus-visible,.sc:focus-visible,.key:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+
+.transport{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px;border-radius:999px}
+@media (max-width:640px){.transport{border-radius:26px;padding:12px}.bpm{order:5;flex:1 1 100%}.bpm input{flex:1}.prog{order:6;margin:0}}
+.btn{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border-radius:999px;background:var(--glass-hi);
+  box-shadow:inset 0 1px 0 var(--edge),0 6px 16px -8px var(--shadow);font-weight:600;transition:transform .18s cubic-bezier(.3,1.6,.5,1)}
+.btn:active{transform:scale(.95)}
+.btn.play{background:var(--fg);color:var(--bg)}
+.btn .dot{width:9px;height:9px;border-radius:50%;background:var(--rec);opacity:.45}
+.btn.rec[aria-pressed="true"]{background:var(--rec);color:#fff}
+.btn.rec[aria-pressed="true"] .dot{background:#fff;opacity:1;animation:blink 1s infinite}
+@keyframes blink{50%{opacity:.3}}
+.bpm{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.bpm input{accent-color:var(--fg);width:110px}
+.prog{flex:1 1 120px;height:4px;border-radius:4px;background:var(--line);overflow:hidden;min-width:80px;margin-right:8px}
+.prog i{display:block;height:100%;width:0;background:var(--fg);border-radius:4px}
+
+.hint{color:var(--muted);font-size:13px;margin:0;min-height:1.4em}
+.view[hidden]{display:none!important}
+
+/* Pads */
+.padsview{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+@media (max-width:820px){.padsview{grid-template-columns:minmax(0,1fr)}}
+.padbox{padding:clamp(12px,2vw,20px)}
+.pads{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(8px,1.4vw,14px);max-width:560px;margin:0 auto}
+.pad{all:unset;cursor:pointer;position:relative;aspect-ratio:1;max-width:100%;border-radius:22%;display:flex;flex-direction:column;justify-content:flex-end;padding:10%;overflow:hidden;
+  background:linear-gradient(160deg,hsl(var(--h) 70% 34% / .6),hsl(var(--h) 60% 16% / .45));
+  box-shadow:inset 0 1px 0 hsl(var(--h) 90% 80% / .35),inset 0 0 0 1px hsl(var(--h) 80% 60% / .18);
+  transition:transform .25s cubic-bezier(.3,1.6,.5,1),background .35s,box-shadow .35s;touch-action:manipulation;user-select:none;-webkit-user-select:none}
+.pad b{font-family:var(--display);font-size:clamp(13px,2.3vw,19px);font-weight:700;line-height:1.05;overflow-wrap:anywhere}
+.pad small{font-size:clamp(9px,1.4vw,11px);color:hsl(var(--h) 60% 82%);opacity:.8}
+.pad kbd{position:absolute;top:9%;right:10%;font-family:var(--mono);font-size:10px;opacity:.45;text-transform:uppercase}
+.pad.sel{box-shadow:inset 0 1px 0 hsl(var(--h) 90% 80% / .35),inset 0 0 0 2px hsl(var(--h) 95% 75%)}
+.pad.hit{transition:none;transform:scale(.95);background:linear-gradient(160deg,hsl(var(--h) 100% 78%),hsl(var(--h) 95% 55%));
+  box-shadow:0 0 44px hsl(var(--h) 100% 60% / .75),inset 0 1px 0 #fff}
+.pad.hit small{color:#fff}
+
+.panel{padding:20px;display:grid;gap:14px}
+.panel h2{font-family:var(--display);font-size:22px;font-weight:700;margin:0;display:flex;align-items:center;gap:10px}
+.panel h2 i{width:12px;height:12px;border-radius:50%;background:hsl(var(--h) 90% 62%);box-shadow:0 0 14px hsl(var(--h) 90% 60%)}
+.field{display:grid;gap:6px}
+.field label,.lbl{font-size:11px;font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);display:flex;justify-content:space-between}
+.field select{appearance:none;background:var(--well);border:0;box-shadow:inset 0 0 0 1px var(--line);border-radius:12px;padding:10px 12px;font-weight:500}
+.field input[type=range]{accent-color:hsl(var(--h) 90% 65%);width:100%}
+.row2{display:flex;gap:8px;flex-wrap:wrap}
+.upload{position:relative}
+.upload input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+
+/* Sequencer */
+.seqbox{padding:clamp(12px,2vw,18px)}
+.seqscroll{overflow-x:auto;padding-bottom:6px}
+.seq{display:grid;grid-template-columns:110px repeat(32,22px);gap:3px;align-items:center;width:max-content}
+.sl{font-size:12px;font-weight:500;display:flex;align-items:center;gap:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:6px;position:sticky;left:0;background:var(--bg);border-radius:6px;z-index:1;height:22px}
+.sl i{flex:none;width:8px;height:8px;border-radius:50%;background:hsl(var(--h) 90% 62%)}
+.sc{all:unset;cursor:pointer;width:22px;height:22px;border-radius:6px;background:var(--well);box-shadow:inset 0 0 0 1px var(--line)}
+.sc.b{background:rgba(255,255,255,.09)}
+.sc.on{background:hsl(var(--h) 90% 62%);box-shadow:0 0 10px hsl(var(--h) 90% 60% / .55)}
+.sc.ph{outline:2px solid rgba(255,255,255,.35);outline-offset:-1px}
+.sc.on.ph{background:hsl(var(--h) 100% 80%)}
+
+/* Keys */
+.keysbox{padding:clamp(12px,2vw,20px);display:grid;gap:14px}
+.keytools{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.oct{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:13px}
+.oct .btn{padding:7px 13px}
+.kb{position:relative;display:flex;height:clamp(150px,28vw,230px);user-select:none;-webkit-user-select:none;touch-action:none}
+.key{all:unset;cursor:pointer;flex:1;position:relative;border-radius:0 0 12px 12px;margin:0 1.5px;
+  background:linear-gradient(#f4f2fa,#dcd8e8);box-shadow:inset 0 -6px 0 rgba(0,0,0,.08),0 8px 16px -8px var(--shadow);display:flex;align-items:flex-end;justify-content:center;padding-bottom:10px}
+.key span{font-family:var(--mono);font-size:10px;color:#6c6880;text-transform:uppercase}
+.key.blk{position:absolute;top:0;height:60%;width:4.2%;margin:0;transform:translateX(-50%);z-index:2;border-radius:0 0 8px 8px;
+  background:linear-gradient(#2c2838,#14121c);box-shadow:inset 0 -4px 0 rgba(255,255,255,.08),0 6px 12px var(--shadow)}
+.key.blk span{color:#8f8aa3}
+.key.down{background:linear-gradient(hsl(var(--h) 95% 80%),hsl(var(--h) 90% 62%))}
+.key.blk.down{background:linear-gradient(hsl(var(--h) 90% 55%),hsl(var(--h) 80% 35%))}
+@media (prefers-reduced-motion:reduce){.pad,.btn{transition:none}.btn.rec[aria-pressed="true"] .dot{animation:none}}
+</style>
+
+<canvas id="field" aria-hidden="true"></canvas>
+
+<div class="app">
+  <div class="top">
+    <div class="brand"><h1>Smyčka</h1><p data-t="tag"></p></div>
+    <div class="seg" id="lang" role="group" aria-label="Language">
+      <button data-l="de">DE</button><button data-l="en">EN</button><button data-l="cz">CZ</button>
+    </div>
+  </div>
+
+  <div class="transport glass">
+    <button class="btn play" id="play"></button>
+    <button class="btn rec" id="rec" aria-pressed="false"><span class="dot"></span><span data-t="rec"></span></button>
+    <label class="bpm" for="bpm">BPM <input id="bpm" type="range" min="60" max="170" value="100"><span id="bpmv">100</span></label>
+    <div class="prog" aria-hidden="true"><i id="prog"></i></div>
+    <button class="btn" id="clear" data-t="clear"></button>
+  </div>
+
+  <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <div class="seg" id="tabs" role="group">
+      <button data-v="pads" data-t="pads"></button><button data-v="seq" data-t="seq"></button><button data-v="keys" data-t="keys"></button>
+    </div>
+    <p class="hint" id="hint" role="status"></p>
+  </div>
+
+  <section class="view padsview" id="v-pads">
+    <div class="padbox glass"><div class="pads" id="pads"></div></div>
+    <div class="panel glass" id="panel">
+      <h2><i></i><span id="pt"></span></h2>
+      <div class="field"><label for="snd" data-t="sound"></label><select id="snd"></select></div>
+      <div class="field"><label for="vol"><span data-t="volume"></span><span id="volv"></span></label><input id="vol" type="range" min="0" max="1.2" step=".01"></div>
+      <div class="field"><label for="pit"><span data-t="pitch"></span><span id="pitv"></span></label><input id="pit" type="range" min="-12" max="12" step="1"></div>
+      <div class="field"><label for="ton"><span data-t="tone"></span><span id="tonv"></span></label><input id="ton" type="range" min="0" max="1" step=".01"></div>
+      <div class="field"><label for="ech"><span data-t="echo"></span><span id="echv"></span></label><input id="ech" type="range" min="0" max=".8" step=".01"></div>
+      <div class="row2">
+        <button class="btn" id="prev" data-t="preview"></button>
+        <label class="btn upload" for="file"><span data-t="upload"></span><input id="file" type="file" accept="audio/*"></label>
+      </div>
+    </div>
+  </section>
+
+  <section class="view seqbox glass" id="v-seq" hidden>
+    <div class="seqscroll"><div class="seq" id="seq"></div></div>
+  </section>
+
+  <section class="view keysbox glass" id="v-keys" hidden>
+    <div class="keytools">
+      <div class="seg" id="inst" role="group"></div>
+      <div class="oct"><button class="btn" id="odn" aria-label="Octave down">−</button><span><span data-t="octave"></span> <b id="ov"></b></span><button class="btn" id="oup" aria-label="Octave up">+</button></div>
+    </div>
+    <div class="kb" id="kb"></div>
+  </section>
+</div>
+
+<script>
+(()=>{
+const $=id=>document.getElementById(id);
+// ---------- i18n ----------
+const T={
+ de:{tag:'Dein Musikstudio für die Hosentasche.',play:'Play',stop:'Stop',rec:'Aufnahme',clear:'Loop löschen',pads:'Pads',seq:'Sequencer',keys:'Tasten',
+  sound:'Sound',volume:'Lautstärke',pitch:'Tonhöhe',tone:'Klang',echo:'Echo',preview:'Anhören',upload:'Eigenen Sound laden',octave:'Oktave',pad:'Pad',
+  drums:'Drums',guitar:'Gitarre',piano:'Klavier',synth:'Synth',bass:'Bass',fx:'Effekte',custom:'Deine Sounds',
+  hpads:'Tippe die Pads oder Tasten 1–4, Q–R, A–F, Y/Z–V. Play + Aufnahme = alles landet im Loop.',
+  hseq:'Klick Steps an und bau deinen Beat. Unterste Zeile: Noten von den Tasten (Klick löscht).',
+  hkeys:'Spiel mit Maus, Finger oder A–K. Läuft Play mit Aufnahme, landen die Noten im Loop.',
+  recon:'Aufnahme läuft. Spiel was.',cleared:'Loop gelöscht.',added:'Sound hinzugefügt: ',fail:'Die Datei ging nicht. Probier MP3, WAV oder M4A.'},
+ en:{tag:'Your pocket music studio.',play:'Play',stop:'Stop',rec:'Record',clear:'Clear loop',pads:'Pads',seq:'Sequencer',keys:'Keys',
+  sound:'Sound',volume:'Volume',pitch:'Pitch',tone:'Tone',echo:'Echo',preview:'Preview',upload:'Load your own sound',octave:'Octave',pad:'Pad',
+  drums:'Drums',guitar:'Guitar',piano:'Piano',synth:'Synth',bass:'Bass',fx:'FX',custom:'Your sounds',
+  hpads:'Tap the pads or keys 1–4, Q–R, A–F, Z–V. Play + Record loops everything you hit.',
+  hseq:'Click steps to build your beat. Bottom row: notes from the keys (click clears).',
+  hkeys:'Play with mouse, finger or A–K. With Play and Record on, notes go into the loop.',
+  recon:'Recording. Play something.',cleared:'Loop cleared.',added:'Sound added: ',fail:'Couldn’t read that file. Try MP3, WAV or M4A.'},
+ cz:{tag:'Tvoje kapesní hudební studio.',play:'Hrát',stop:'Stop',rec:'Nahrávat',clear:'Smazat smyčku',pads:'Pady',seq:'Sekvencer',keys:'Klávesy',
+  sound:'Zvuk',volume:'Hlasitost',pitch:'Výška',tone:'Barva',echo:'Ozvěna',preview:'Poslechnout',upload:'Nahrát vlastní zvuk',octave:'Oktáva',pad:'Pad',
+  drums:'Bicí',guitar:'Kytara',piano:'Klavír',synth:'Syntezátor',bass:'Basa',fx:'Efekty',custom:'Tvoje zvuky',
+  hpads:'Ťukej na pady nebo klávesy 1–4, Q–R, A–F, Z–V. Hrát + Nahrávat uloží vše do smyčky.',
+  hseq:'Klikáním na kroky postav beat. Spodní řádek: noty z kláves (klik smaže).',
+  hkeys:'Hraj myší, prstem nebo klávesami A–K. Při nahrávání jdou noty do smyčky.',
+  recon:'Nahrávám. Zahraj něco.',cleared:'Smyčka smazána.',added:'Zvuk přidán: ',fail:'Soubor nejde načíst. Zkus MP3, WAV nebo M4A.'}
+};
+let lang=(navigator.language||'de').startsWith('de')?'de':'en';
+const t=k=>T[lang][k]??k;
+
+// ---------- audio core ----------
+const ac=new (window.AudioContext||window.webkitAudioContext)();
+const sr=ac.sampleRate;
+const comp=ac.createDynamicsCompressor();comp.threshold.value=-14;comp.connect(ac.destination);
+const master=ac.createGain();master.gain.value=.8;master.connect(comp);
+const echoIn=ac.createGain(),dl=ac.createDelay(2),fb=ac.createGain(),elp=ac.createBiquadFilter();
+fb.gain.value=.38;elp.type='lowpass';elp.frequency.value=2600;
+echoIn.connect(dl);dl.connect(elp);elp.connect(fb);fb.connect(dl);elp.connect(master);
+const NB=ac.createBuffer(1,sr,sr);{const d=NB.getChannelData(0);for(let i=0;i<sr;i++)d[i]=Math.random()*2-1}
+const wake=()=>{if(ac.state!=='running')ac.resume()};
+const mtof=m=>440*2**((m-69)/12);
+const O=(type,f)=>{const o=ac.createOscillator();o.type=type;o.frequency.value=f;return o};
+const G=v=>{const g=ac.createGain();g.gain.value=v;return g};
+const F=(type,f,q=.7)=>{const b=ac.createBiquadFilter();b.type=type;b.frequency.value=f;b.Q.value=q;return b};
+const env=(g,t,peak,dec,att=.004)=>{g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(peak,t+att);g.gain.exponentialRampToValueAtTime(.0001,t+dec)};
+const noise=(t,d)=>{const s=ac.createBufferSource();s.buffer=NB;s.start(t,Math.random()*.4);s.stop(t+d+.02);return s};
+const go=(src,t,d)=>{src.start(t);src.stop(t+d+.05)};
+const sweep=(p,a,b,t,d)=>{p.setValueAtTime(a,t);p.exponentialRampToValueAtTime(b,t+d)};
+
+const KS={};
+function ksBuf(f){const key=Math.round(f*4);if(KS[key])return KS[key];
+  const N=Math.max(2,Math.round(sr/f)),len=Math.floor(sr*2),b=ac.createBuffer(1,len,sr),d=b.getChannelData(0);
+  let last=0;for(let i=0;i<N;i++){const r=Math.random()*2-1;d[i]=(r+last)*.5;last=r}
+  for(let i=N;i<len;i++)d[i]=(d[i-N]+d[i-N+1])*.4985;
+  return KS[key]=b}
+function pluck(f,t,o,v){const s=ac.createBufferSource();s.buffer=ksBuf(f);const g=G(v);
+  g.gain.setValueAtTime(v,t);g.gain.setTargetAtTime(0,t+1.1,.25);s.connect(g);g.connect(o);s.start(t);s.stop(t+2)}
+function pianoN(f,t,o,v){const g=G(0),lp=F('lowpass',Math.min(9000,f*7));const d=Math.max(.8,2.4-f/600);
+  [[1,'triangle',1],[2,'sine',.25],[3,'sine',.08]].forEach(([m,ty,a])=>{const x=O(ty,f*m),xg=G(a);x.connect(xg);xg.connect(g);go(x,t,d)});
+  env(g,t,v,d,.003);g.connect(lp);lp.connect(o)}
+function synthN(f,t,o,v){const g=G(0),lp=F('lowpass',3500,5);sweep(lp.frequency,4200,600,t,.35);
+  [-8,8,0].forEach((c,i)=>{const x=O(i<2?'sawtooth':'square',f);x.detune.value=c;x.connect(lp);go(x,t,.9)});
+  env(g,t,v,.85,.008);lp.connect(g);g.connect(o)}
+function bassN(f,t,o,v){const g=G(0),lp=F('lowpass',900,6);sweep(lp.frequency,1200,180,t,.25);
+  const a=O('sawtooth',f),b=O('sine',f/2);a.connect(lp);b.connect(g);go(a,t,.6);go(b,t,.6);
+  env(g,t,v,.55,.005);lp.connect(g);g.connect(o)}
+function bell(f,t,o,v){const g=G(0);[[1,1],[2.76,.2],[5.4,.06]].forEach(([m,a])=>{const x=O('sine',f*m),xg=G(a);x.connect(xg);xg.connect(g);go(x,t,1.2)});env(g,t,v,1.1,.002);g.connect(o)}
+
+// ---------- sound library ----------
+const CATS={drums:335,guitar:38,piano:195,synth:268,bass:158,fx:92,custom:8};
+const LIB={};const add=(id,cat,name,fn)=>LIB[id]={id,cat,name,fn};
+add('kick','drums','Kick',(t,o,k)=>{const x=O('sine',150*k),g=G(0);sweep(x.frequency,160*k,42*k,t,.13);env(g,t,1,.45,.002);x.connect(g);g.connect(o);go(x,t,.5)});
+add('snare','drums','Snare',(t,o,k)=>{const n=noise(t,.2),h=F('highpass',1100*k),g=G(0);env(g,t,.55,.19,.002);n.connect(h);h.connect(g);g.connect(o);
+  const x=O('triangle',190*k),xg=G(0);env(xg,t,.4,.11,.002);x.connect(xg);xg.connect(o);go(x,t,.15)});
+add('clap','drums','Clap',(t,o,k)=>{const n=noise(t,.25),b=F('bandpass',1500*k,.9),g=G(0);n.connect(b);b.connect(g);g.connect(o);
+  [0,.011,.022].forEach(d=>{g.gain.setValueAtTime(.8,t+d);g.gain.setValueAtTime(.12,t+d+.008)});g.gain.setValueAtTime(.8,t+.03);g.gain.exponentialRampToValueAtTime(.0001,t+.24)});
+add('hat','drums','Hi-Hat',(t,o,k)=>{const n=noise(t,.06),h=F('highpass',7500*k),g=G(0);env(g,t,.32,.055,.001);n.connect(h);h.connect(g);g.connect(o)});
+add('ohat','drums','Open Hat',(t,o,k)=>{const n=noise(t,.4),h=F('highpass',7000*k),g=G(0);env(g,t,.28,.36,.002);n.connect(h);h.connect(g);g.connect(o)});
+add('tom','drums','Tom',(t,o,k)=>{const x=O('sine',210*k),g=G(0);sweep(x.frequency,210*k,90*k,t,.25);env(g,t,.75,.42,.002);x.connect(g);g.connect(o);go(x,t,.45)});
+add('rim','drums','Rim',(t,o,k)=>{const x=O('triangle',1700*k),g=G(0);env(g,t,.45,.04,.001);x.connect(g);g.connect(o);go(x,t,.06)});
+add('808','drums','808',(t,o,k)=>{const x=O('sine',58*k),g=G(0);sweep(x.frequency,90*k,55*k,t,.08);env(g,t,.95,1.4,.004);x.connect(g);g.connect(o);go(x,t,1.45)});
+const CH={Am:[57,60,64,69,72],C:[48,52,55,60,64],D:[50,57,62,66],Em:[52,59,64,67,71],F:[53,57,60,65,69],G:[43,47,50,55,59,67]};
+for(const c in CH){
+  add('gtr-'+c,'guitar',c,(t,o,k)=>CH[c].forEach((m,i)=>pluck(mtof(m)*k,t+i*.018,o,.32)));
+  add('pno-'+c,'piano',c,(t,o,k)=>CH[c].forEach(m=>pianoN(mtof(m)*k,t,o,.15)));
+  add('syn-'+c,'synth',c,(t,o,k)=>CH[c].slice(0,4).forEach(m=>synthN(mtof(m)*k,t,o,.06)));
+}
+const BN={A:33,C:36,D:38,E:40,F:41,G:43};
+for(const n in BN)add('bass-'+n,'bass',n,(t,o,k)=>bassN(mtof(BN[n])*k,t,o,.45));
+add('laser','fx','Laser',(t,o,k)=>{const x=O('square',2000*k),lp=F('lowpass',3200),g=G(0);sweep(x.frequency,2000*k,110*k,t,.25);env(g,t,.14,.3,.002);x.connect(lp);lp.connect(g);g.connect(o);go(x,t,.32)});
+add('riser','fx','Riser',(t,o,k)=>{const n=noise(t,1.7),b=F('bandpass',300,4),g=G(0);sweep(b.frequency,300*k,7000*k,t,1.6);
+  g.gain.setValueAtTime(.001,t);g.gain.exponentialRampToValueAtTime(.5,t+1.55);g.gain.linearRampToValueAtTime(0,t+1.65);n.connect(b);b.connect(g);g.connect(o)});
+add('sparkle','fx','Sparkle',(t,o,k)=>[76,79,84,88,91].forEach((m,i)=>bell(mtof(m)*k,t+i*.055,o,.1)));
+add('drop','fx','Drop',(t,o,k)=>{const x=O('sine',500*k),g=G(0);sweep(x.frequency,520*k,38*k,t,.6);env(g,t,.6,.7,.004);x.connect(g);g.connect(o);go(x,t,.75)});
+const customs=[];// {id,name}
+function addCustom(id,name,buf){customs.push({id,name});add(id,'custom',name,(t,o,k)=>{if(!LIB[id].buf)return;const s=ac.createBufferSource();s.buffer=LIB[id].buf;s.playbackRate.value=k;const g=G(.9);s.connect(g);g.connect(o);s.start(t)});LIB[id].buf=buf}
+
+const INST={piano:(m,t,o)=>pianoN(mtof(m),t,o,.3),guitar:(m,t,o)=>pluck(mtof(m),t,o,.5),synth:(m,t,o)=>synthN(mtof(m),t,o,.11),bass:(m,t,o)=>bassN(mtof(m-24),t,o,.5)};
+
+// ---------- state ----------
+const NP=16,NS=32,PADKEYS=['1','2','3','4','q','w','e','r','a','s','d','f','z','x','c','v'];
+const P=(s,e=0)=>({s,v:.85,p:0,tone:1,e});
+let pads=[P('kick'),P('snare'),P('clap'),P('hat'),P('ohat'),P('tom'),P('rim'),P('808'),
+  P('gtr-Am',.15),P('gtr-F',.15),P('gtr-C',.15),P('gtr-G',.15),P('bass-A'),P('bass-F'),P('bass-C'),P('sparkle',.35)];
+let steps=pads.map(()=>Array(NS).fill(false)),notes=Array.from({length:NS},()=>[]);
+let bpm=100,sel=0,inst='piano',oct=1,view='pads',rec=false;
+function demo(){const on=(p,a)=>a.forEach(s=>steps[p][s]=true);
+  on(0,[0,8,16,24,10,26]);on(2,[4,12,20,28]);on(3,[2,6,10,14,18,22,26,30]);on(4,[14,30]);
+  on(8,[0,3]);on(9,[8,11]);on(10,[16,19]);on(11,[24,27,30]);on(12,[0,6]);on(13,[8,14]);on(14,[16,22]);steps[15][31]=true}
+function save(){try{localStorage.setItem('smycka',JSON.stringify({bpm,lang,pads,steps:steps.map(r=>r.map(b=>b?1:0).join('')),notes,customs}))}catch(e){}}
+let saved=null;try{saved=JSON.parse(localStorage.getItem('smycka')||'null')}catch(e){}
+if(saved&&saved.pads){bpm=saved.bpm||100;lang=saved.lang||lang;
+  (saved.customs||[]).forEach(c=>addCustom(c.id,c.name,null));pads=saved.pads.map(p=>({...P('kick'),...p}));
+  steps=saved.steps.map(s=>[...s].map(c=>c==='1'));notes=saved.notes||notes}else demo();
+
+// IndexedDB for uploaded audio
+const idb=()=>new Promise((res,rej)=>{const r=indexedDB.open('smycka',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+const idbPut=(k,v)=>idb().then(db=>new Promise(r=>{const tx=db.transaction('f','readwrite');tx.objectStore('f').put(v,k);tx.oncomplete=r;tx.onerror=r})).catch(()=>{});
+const idbGet=k=>idb().then(db=>new Promise(r=>{const q=db.transaction('f').objectStore('f').get(k);q.onsuccess=()=>r(q.result);q.onerror=()=>r(null)})).catch(()=>null);
+customs.forEach(c=>idbGet(c.id).then(ab=>ab&&ac.decodeAudioData(ab).then(b=>LIB[c.id].buf=b).catch(()=>{})));
+
+// ---------- trigger ----------
+const hue=id=>CATS[(LIB[id]||{}).cat]??0;
+const catOf=id=>(LIB[id]||{}).cat;
+function padName(p){const s=LIB[pads[p].s];if(!s)return'—';return['guitar','piano','synth','bass'].includes(s.cat)?t(s.cat)+' '+s.name:s.name}
+function trigger(p,tm){const pd=pads[p],s=LIB[pd.s];if(!s)return;
+  const g=G(pd.v),f=F('lowpass',250*Math.pow(80,pd.tone));g.connect(f);f.connect(master);
+  if(pd.e>0){const e=G(pd.e);f.connect(e);e.connect(echoIn)}
+  s.fn(tm,g,2**(pd.p/12))}
+function keyOut(){const g=G(.9);g.connect(master);const e=G(.12);g.connect(e);e.connect(echoIn);return g}
+
+// ---------- scheduler ----------
+let playing=false,step=0,nextT=0,loopT0=0,timer=null,ph=-1;const vq=[];
+const sd=()=>60/bpm/4;
+const setEcho=()=>dl.delayTime.setTargetAtTime(60/bpm*.75,ac.currentTime,.05);setEcho();
+function tick(){while(nextT<ac.currentTime+.1){
+  if(step===0)loopT0=nextT;
+  for(let p=0;p<NP;p++)if(steps[p][step])trigger(p,nextT);
+  if(notes[step].length){const o=keyOut();notes[step].forEach(n=>INST[n.i]&&INST[n.i](n.m,nextT,o))}
+  vq.push({s:step,t:nextT});nextT+=sd();step=(step+1)%NS}}
+function start(){wake();playing=true;step=0;nextT=ac.currentTime+.05;tick();timer=setInterval(tick,25);renderPlay()}
+function stop(){playing=false;clearInterval(timer);vq.length=0;setPh(-1);$('prog').style.width='0';renderPlay()}
+const curStep=()=>{let pos=(ac.currentTime-loopT0)/sd();pos=((Math.round(pos)%NS)+NS)%NS;return pos};
+const renderPlay=()=>$('play').textContent=playing?t('stop'):t('play');
+
+// ---------- pads view ----------
+const padEls=[];
+function buildPads(){const box=$('pads');box.innerHTML='';padEls.length=0;
+  pads.forEach((pd,p)=>{const b=document.createElement('button');b.className='pad'+(p===sel?' sel':'');
+    b.style.setProperty('--h',hue(pd.s));b.innerHTML=`<kbd>${PADKEYS[p]}</kbd><b></b><small></small>`;
+    b.querySelector('b').textContent=LIB[pd.s]?LIB[pd.s].name:'—';b.querySelector('small').textContent=t(catOf(pd.s)||'custom');
+    b.addEventListener('pointerdown',e=>{e.preventDefault();hit(p)});
+    b.addEventListener('click',e=>{if(e.detail===0)hit(p)});
+    box.append(b);padEls.push(b)})}
+function hit(p){wake();trigger(p,ac.currentTime);flash(p);
+  if(rec&&playing){const s=curStep();if(!steps[p][s]){steps[p][s]=true;paintSeq(p,s);save()}}
+  if(sel!==p){sel=p;padEls.forEach((e,i)=>e.classList.toggle('sel',i===sel));renderPanel()}}
+const ft=[];
+function flash(p){const e=padEls[p];if(!e)return;e.classList.add('hit');clearTimeout(ft[p]);ft[p]=setTimeout(()=>e.classList.remove('hit'),130);pulse(hue(pads[p].s))}
+
+function buildSelect(){const s=$('snd');s.innerHTML='';
+  Object.keys(CATS).forEach(c=>{const ids=Object.values(LIB).filter(x=>x.cat===c);if(!ids.length)return;
+    const g=document.createElement('optgroup');g.label=t(c);ids.forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.name;g.append(o)});s.append(g)})}
+function renderPanel(){const pd=pads[sel];$('panel').style.setProperty('--h',hue(pd.s));
+  $('pt').textContent=t('pad')+' '+(sel+1)+' · '+PADKEYS[sel].toUpperCase();
+  $('snd').value=pd.s;$('vol').value=pd.v;$('pit').value=pd.p;$('ton').value=pd.tone;$('ech').value=pd.e;
+  $('volv').textContent=Math.round(pd.v*100)+'%';$('pitv').textContent=(pd.p>0?'+':'')+pd.p;$('tonv').textContent=Math.round(pd.tone*100)+'%';$('echv').textContent=Math.round(pd.e*100)+'%'}
+const upd=(k,el,num=true)=>$(el).addEventListener('input',e=>{pads[sel][k]=num?+e.target.value:e.target.value;renderPanel();save();
+  if(k==='s'){buildPads();buildSeq();wake();trigger(sel,ac.currentTime);flash(sel)}});
+upd('s','snd',false);upd('v','vol');upd('p','pit');upd('tone','ton');upd('e','ech');
+['pit','ton','ech'].forEach(id=>$(id).addEventListener('change',()=>{wake();trigger(sel,ac.currentTime);flash(sel)}));
+$('prev').onclick=()=>{wake();trigger(sel,ac.currentTime);flash(sel)};
+$('file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;wake();
+  try{const ab=await f.arrayBuffer(),copy=ab.slice(0),buf=await ac.decodeAudioData(ab);
+    const id='c'+Date.now().toString(36),name=f.name.replace(/\.[^.]+$/,'').slice(0,18);
+    addCustom(id,name,buf);idbPut(id,copy);pads[sel].s=id;save();buildSelect();buildPads();buildSeq();renderPanel();
+    trigger(sel,ac.currentTime);flash(sel);hint(t('added')+name)}catch(err){hint(t('fail'))}};
+
+// ---------- sequencer ----------
+const seqEls=[];let keysRow=[];
+function buildSeq(){const g=$('seq');g.innerHTML='';seqEls.length=0;
+  const row=(label,h,onclick,isOn)=>{const l=document.createElement('div');l.className='sl';l.style.setProperty('--h',h);l.innerHTML='<i></i>';l.append(label);g.append(l);
+    const r=[];for(let s=0;s<NS;s++){const c=document.createElement('button');c.className='sc'+(s%4===0?' b':'')+(isOn(s)?' on':'');c.style.setProperty('--h',h);
+      c.setAttribute('aria-label',label+' '+(s+1));c.onclick=()=>onclick(s,c);g.append(c);r.push(c)}return r};
+  pads.forEach((pd,p)=>seqEls.push(row(padName(p),hue(pd.s),(s)=>{steps[p][s]=!steps[p][s];paintSeq(p,s);save();if(steps[p][s]){wake();trigger(p,ac.currentTime)}},s=>steps[p][s])));
+  keysRow=row('♪ '+t('keys'),0,(s)=>{notes[s]=[];keysRow[s].classList.remove('on');save()},s=>notes[s].length>0);
+  keysRow.forEach(c=>c.style.setProperty('--h','0'));if(ph>=0)setPh(ph)}
+function paintSeq(p,s){seqEls[p]&&seqEls[p][s].classList.toggle('on',steps[p][s])}
+function setPh(s){const all=[...seqEls,keysRow];if(ph>=0)all.forEach(r=>r[ph]&&r[ph].classList.remove('ph'));ph=s;if(s>=0)all.forEach(r=>r[s]&&r[s].classList.add('ph'))}
+
+// ---------- keys ----------
+const KK=['a','w','s','e','d','f','t','g','y','h','u','j','k','o','l','p',';'];const KKz={z:8};
+const keyEls={};
+function buildInst(){const s=$('inst');s.innerHTML='';['piano','guitar','synth','bass'].forEach(i=>{const b=document.createElement('button');b.textContent=t(i);b.setAttribute('aria-pressed',i===inst);b.onclick=()=>{inst=i;buildInst();buildKb()};s.append(b)})}
+function buildKb(){const kb=$('kb');kb.innerHTML='';const base=48+oct*12;$('ov').textContent='C'+(oct+3);
+  kb.style.setProperty('--h',CATS[inst]);let wi=0;const whites=[0,2,4,5,7,9,11];
+  for(let i=0;i<=24;i++){const isW=whites.includes(i%12),b=document.createElement('button');b.className='key'+(isW?'':' blk');
+    const lab=KK[i]?`<span>${KK[i]}</span>`:'';b.innerHTML=lab;b.setAttribute('aria-label','note '+(base+i));
+    if(isW){wi++;kb.append(b)}else{b.style.left=(wi/15*100)+'%';kb.append(b)}
+    const m=()=>base+i;
+    b.addEventListener('pointerdown',e=>{e.preventDefault();b.setPointerCapture&&b.releasePointerCapture&&0;note(m(),b)});
+    b.addEventListener('pointerup',()=>b.classList.remove('down'));b.addEventListener('pointerleave',()=>b.classList.remove('down'));
+    keyEls[i]=b}}
+function note(m,el){wake();INST[inst](m,ac.currentTime,keyOut());pulse(CATS[inst]);
+  if(el){el.classList.add('down')}
+  if(rec&&playing){const s=curStep();if(!notes[s].some(n=>n.m===m&&n.i===inst)){notes[s].push({i:inst,m});keysRow[s]&&keysRow[s].classList.add('on');save()}}}
+$('odn').onclick=()=>{oct=Math.max(0,oct-1);buildKb()};$('oup').onclick=()=>{oct=Math.min(3,oct+1);buildKb()};
+
+// ---------- global ----------
+function hint(s){$('hint').textContent=s}
+function setView(v){view=v;['pads','seq','keys'].forEach(x=>$('v-'+x).hidden=x!==v);
+  [...$('tabs').children].forEach(b=>b.setAttribute('aria-pressed',b.dataset.v===v));hint(t('h'+v))}
+function applyLang(){document.documentElement.lang=lang==='cz'?'cs':lang;
+  document.querySelectorAll('[data-t]').forEach(e=>e.textContent=t(e.dataset.t));
+  [...$('lang').children].forEach(b=>b.setAttribute('aria-pressed',b.dataset.l===lang));
+  renderPlay();buildSelect();buildPads();renderPanel();buildSeq();buildInst();hint(t('h'+view))}
+$('lang').onclick=e=>{const l=e.target.dataset.l;if(l){lang=l;applyLang();save()}};
+$('tabs').onclick=e=>{const v=e.target.dataset.v;if(v)setView(v)};
+$('play').onclick=()=>playing?stop():start();
+$('rec').onclick=()=>{rec=!rec;$('rec').setAttribute('aria-pressed',rec);if(rec){hint(t('recon'));if(!playing)start()}else hint(t('h'+view))};
+$('clear').onclick=()=>{steps=pads.map(()=>Array(NS).fill(false));notes=Array.from({length:NS},()=>[]);buildSeq();save();hint(t('cleared'))};
+const bpmEl=$('bpm');bpmEl.value=bpm;$('bpmv').textContent=bpm;
+bpmEl.oninput=()=>{bpm=+bpmEl.value;$('bpmv').textContent=bpm;setEcho();save()};
+
+const held=new Set();
+addEventListener('keydown',e=>{if(e.metaKey||e.ctrlKey||e.altKey||/INPUT|SELECT/.test(e.target.tagName))return;
+  const k=e.key.toLowerCase();
+  if(e.code==='Space'){e.preventDefault();playing?stop():start();return}
+  if(held.has(k))return;held.add(k);
+  if(view==='keys'){let i=KK.indexOf(k);if(i<0&&k in KKz)i=KKz[k];if(i>=0){note(48+oct*12+i,keyEls[i])}}
+  else{let i=PADKEYS.indexOf(k==='y'?'z':k);if(i>=0)hit(i)}});
+addEventListener('keyup',e=>{const k=e.key.toLowerCase();held.delete(k);let i=KK.indexOf(k);if(i<0&&k in KKz)i=KKz[k];if(i>=0&&keyEls[i])keyEls[i].classList.remove('down')});
+addEventListener('blur',()=>held.clear());
+
+// ---------- color field ----------
+const cv=$('field'),cx=cv.getContext('2d');let W,H;
+const reduce=matchMedia('(prefers-reduced-motion: reduce)');
+function size(){const d=Math.min(2,devicePixelRatio||1);W=innerWidth;H=innerHeight;cv.width=W*d;cv.height=H*d;cx.setTransform(d,0,0,d,0,0)}
+size();addEventListener('resize',size);
+const blobs=Object.values(CATS).map(h=>({h,x:Math.random(),y:Math.random(),vx:(Math.random()-.5)*.0003,vy:(Math.random()-.5)*.0003,r:.28+Math.random()*.16,k:1}));
+let px=.5,py=.4;addEventListener('pointermove',e=>{px=e.clientX/W;py=e.clientY/H});
+function pulse(h){const b=blobs.find(x=>x.h===h)||blobs[0];b.k=1.4}
+function frame(){
+  while(vq.length&&vq[0].t<=ac.currentTime){const {s}=vq.shift();setPh(s);$('prog').style.width=((s+1)/NS*100)+'%';
+    for(let p=0;p<NP;p++)if(steps[p][s])flash(p);if(notes[s].length)pulse(CATS.custom)}
+  const m=Math.max(W,H);cx.clearRect(0,0,W,H);cx.globalCompositeOperation='lighter';
+  for(const b of blobs){if(!reduce.matches){b.x+=b.vx+(px-b.x)*.0003;b.y+=b.vy+(py-b.y)*.0003;if(b.x<-.1||b.x>1.1)b.vx*=-1;if(b.y<-.1||b.y>1.1)b.vy*=-1}
+    b.k+=(1-b.k)*.07;const R=b.r*m*b.k,g=cx.createRadialGradient(b.x*W,b.y*H,0,b.x*W,b.y*H,R);
+    g.addColorStop(0,`hsla(${b.h},85%,45%,.32)`);g.addColorStop(1,`hsla(${b.h},85%,45%,0)`);cx.fillStyle=g;cx.beginPath();cx.arc(b.x*W,b.y*H,R,0,7);cx.fill()}
+  cx.globalCompositeOperation='source-over';requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+
+buildKb();applyLang();setView('pads');
+})();
+</script>
