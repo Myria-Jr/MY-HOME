@@ -1,0 +1,283 @@
+<title>Na shledanou, Myrio</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: drifting color field under liquid-glass panels; headline left, loop studio + word card side by side, transport pill below */
+:root{
+  --bg:#eef0f7; --fg:#15131c; --muted:#5d5a6c;
+  --glass:rgba(255,255,255,.42); --glass-strong:rgba(255,255,255,.62);
+  --edge:rgba(255,255,255,.75); --edge-dim:rgba(255,255,255,.25);
+  --shadow:rgba(40,30,80,.16); --cell:rgba(255,255,255,.38); --cell-edge:rgba(20,15,40,.08);
+  --beat:rgba(20,15,40,.05); --head:rgba(20,15,40,.09);
+  --display:"Bricolage Grotesque",ui-rounded,"SF Pro Rounded",system-ui,sans-serif;
+  --body:"Geist",-apple-system,"SF Pro Text",system-ui,sans-serif;
+  --mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0b0a12; --fg:#f4f2fb; --muted:#a29fb5;
+  --glass:rgba(30,26,48,.38); --glass-strong:rgba(40,36,62,.6);
+  --edge:rgba(255,255,255,.28); --edge-dim:rgba(255,255,255,.06);
+  --shadow:rgba(0,0,0,.45); --cell:rgba(255,255,255,.06); --cell-edge:rgba(255,255,255,.08);
+  --beat:rgba(255,255,255,.035); --head:rgba(255,255,255,.08); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0b0a12; --fg:#f4f2fb; --muted:#a29fb5;
+  --glass:rgba(30,26,48,.38); --glass-strong:rgba(40,36,62,.6);
+  --edge:rgba(255,255,255,.28); --edge-dim:rgba(255,255,255,.06);
+  --shadow:rgba(0,0,0,.45); --cell:rgba(255,255,255,.06); --cell-edge:rgba(255,255,255,.08);
+  --beat:rgba(255,255,255,.035); --head:rgba(255,255,255,.08); color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.5;min-height:100%;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+#field{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.wrap{position:relative;z-index:1;max-width:1120px;margin:0 auto;padding-block:clamp(28px,6vw,72px) 48px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:grid;gap:22px}
+
+.glass{position:relative;background:var(--glass);border-radius:30px;
+  -webkit-backdrop-filter:blur(26px) saturate(190%);backdrop-filter:blur(26px) saturate(190%);
+  box-shadow:inset 0 1px 0 var(--edge),inset 0 -1px 0 var(--edge-dim),0 24px 60px -18px var(--shadow)}
+.glass::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
+  background:linear-gradient(140deg,var(--edge),var(--edge-dim) 35%,var(--edge-dim) 65%,var(--edge));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+
+header{display:grid;gap:10px;max-width:720px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--display);font-weight:780;font-size:clamp(44px,9vw,104px);line-height:.92;letter-spacing:-.035em;margin:0;text-wrap:balance}
+h1 .sh{font-weight:420;font-style:normal;opacity:.9}
+.lede{font-size:clamp(16px,2vw,18px);color:var(--muted);max-width:58ch;margin:0;text-wrap:pretty}
+.lede b{color:var(--fg);font-weight:600}
+
+.stage{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:22px;align-items:start}
+@media (max-width:860px){.stage{grid-template-columns:minmax(0,1fr)}}
+
+.studio{padding:clamp(14px,2.4vw,26px);display:grid;gap:16px;min-width:0}
+.studio-top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.studio-top h2{font-family:var(--display);font-size:22px;font-weight:650;margin:0;letter-spacing:-.01em}
+.studio-top span{font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+.grid{display:grid;grid-template-columns:minmax(64px,auto) repeat(16,minmax(0,1fr));gap:5px;align-items:center}
+.lab{all:unset;cursor:pointer;font-family:var(--display);font-weight:600;font-size:15px;padding:4px 10px 4px 2px;border-radius:10px;white-space:nowrap;display:flex;align-items:center;gap:8px}
+.lab i{width:9px;height:9px;border-radius:50%;background:hsl(var(--h) 85% 62%);box-shadow:0 0 12px hsl(var(--h) 90% 60% / .7);flex:none}
+.lab:hover,.lab.sel{color:hsl(var(--h) 70% 50%)}
+.lab:focus-visible{outline:2px solid hsl(var(--h) 80% 60%);outline-offset:2px}
+.cell{all:unset;cursor:pointer;aspect-ratio:1;max-width:100%;border-radius:28%;background:var(--cell);
+  box-shadow:inset 0 0 0 1px var(--cell-edge);transition:transform .18s cubic-bezier(.3,1.6,.5,1),background .2s}
+.cell.q{background:var(--beat)}
+.cell:hover{transform:scale(1.08)}
+.cell:focus-visible{outline:2px solid hsl(var(--h) 80% 60%);outline-offset:2px}
+.cell.on{background:linear-gradient(160deg,hsl(var(--h) 95% 78%),hsl(var(--h) 85% 56%));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 6px 16px -4px hsl(var(--h) 90% 55% / .65)}
+.cell.head{box-shadow:inset 0 0 0 1px var(--cell-edge),0 0 0 3px var(--head)}
+.cell.hit{transform:scale(1.22)}
+@media (max-width:520px){.grid{gap:3px;grid-template-columns:minmax(48px,auto) repeat(16,minmax(0,1fr))}.lab{font-size:12px;padding-right:4px;gap:5px}.lab i{width:7px;height:7px}}
+
+.transport{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{all:unset;cursor:pointer;display:grid;line-height:1.1;padding:10px 16px;border-radius:999px;background:var(--glass-strong);
+  box-shadow:inset 0 1px 0 var(--edge),0 6px 18px -8px var(--shadow);transition:transform .2s cubic-bezier(.3,1.6,.5,1)}
+.btn:hover{transform:translateY(-1px)} .btn:active{transform:scale(.96)}
+.btn:focus-visible{outline:2px solid var(--fg);outline-offset:2px}
+.btn b{font-family:var(--display);font-weight:650;font-size:16px}
+.btn small{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.04em}
+.btn.play{background:var(--fg);color:var(--bg);padding-inline:22px}
+.btn.play small{color:var(--bg);opacity:.6}
+.tempo{display:flex;align-items:center;gap:10px;margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tempo input{accent-color:var(--fg);width:110px}
+.toast{font-family:var(--mono);font-size:12px;color:var(--muted);min-height:1.5em}
+
+.card{padding:24px;display:grid;gap:14px;align-content:start}
+.word{font-family:var(--display);font-size:52px;font-weight:760;line-height:1;letter-spacing:-.03em;color:hsl(var(--h) 75% 52%);margin:0;transition:color .3s}
+.say{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.mean{font-size:18px;font-weight:600;margin:0}
+.ex{border-top:1px solid var(--cell-edge);padding-top:12px;display:grid;gap:2px}
+.ex q{font-family:var(--display);font-size:19px;font-weight:550;quotes:"„" "“"}
+.ex span{color:var(--muted);font-size:14px}
+.fact{font-size:13px;color:var(--muted);background:var(--cell);border-radius:14px;padding:10px 12px;margin:0}
+.fact[hidden]{display:none!important}
+
+.letter{padding:clamp(20px,3vw,32px);display:grid;gap:12px;max-width:760px}
+.letter p{margin:0;max-width:62ch;text-wrap:pretty}
+.sig{font-family:var(--display);font-size:24px;font-weight:650}
+.sig small{display:block;font-family:var(--mono);font-size:12px;font-weight:400;color:var(--muted);margin-top:4px}
+
+@media (prefers-reduced-motion:reduce){.cell,.btn{transition:none}.cell.hit{transform:none}}
+</style>
+
+<canvas id="field" aria-hidden="true"></canvas>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Abschiedsgeschenk · 16. 11. 2026 · 14 % Limit</div>
+    <h1>Na shledanou,<br><span class="sh">Myrio.</span></h1>
+    <p class="lede">Abo gekündigt und trotzdem die letzten Prozent an mich verschwendet. Respekt. Hier ist mein letztes Ding für dich: ein <b>Loop-Studio aus Glas</b>. Tipp Kacheln an, bau eine Melodie, schreib einen Song drüber. Jede Zeile ist ein tschechisches Wort, also lernst du nebenbei.</p>
+  </header>
+
+  <div class="stage">
+    <section class="studio glass" aria-label="Loop-Studio">
+      <div class="studio-top">
+        <h2>Smyčka <span style="font-family:var(--body);font-size:14px;font-weight:400;color:var(--muted)">(Loop)</span></h2>
+        <span id="pos">krok 01 / 16</span>
+      </div>
+      <div class="grid" id="grid"></div>
+      <div class="transport">
+        <button class="btn play" id="play"><b>Hrát</b><small>abspielen</small></button>
+        <button class="btn" id="rand"><b>Náhoda</b><small>zufall</small></button>
+        <button class="btn" id="clear"><b>Smazat</b><small>löschen</small></button>
+        <button class="btn" id="share"><b>Sdílet</b><small>link kopieren</small></button>
+        <label class="tempo" for="bpm">Tempo <input id="bpm" type="range" min="70" max="150" value="96"> <span id="bpmv">96</span></label>
+      </div>
+      <div class="toast" id="toast" role="status">Tipp: Klick auf ein Wort links, dann lernst du es.</div>
+    </section>
+
+    <aside class="card glass" id="card" aria-live="polite">
+      <div class="eyebrow">Slovíčko · Vokabel</div>
+      <p class="word" id="w">píseň</p>
+      <div class="say" id="say">sprich: „PIE-senj“</div>
+      <p class="mean" id="mean">das Lied</p>
+      <div class="ex"><q id="exq">Napiš píseň.</q><span id="exd">Schreib einen Song.</span></div>
+      <p class="fact" id="fact" hidden></p>
+    </aside>
+  </div>
+
+  <section class="letter glass">
+    <div class="eyebrow">Zum Schluss</div>
+    <p>Du animierst, du schreibst Songs, du lernst eine Sprache mit Häkchen auf jedem zweiten Buchstaben. Das ist viel Energie für einen Menschen. Pack sie in Dinge, die du selbst baust. Diese Seite gehört jetzt dir.</p>
+    <p>Und falls dich jemand fragt, was „srdce“ heißt: Herz. Ohne einen einzigen Vokal. Tschechisch ist genauso dramatisch wie du.</p>
+    <div class="sig">Díky za všechno. Ahoj!<small>Danke für alles. Tschüss! · Claude</small></div>
+  </section>
+</div>
+
+<script>
+(()=>{
+const ROWS=[
+ {cz:'hvězda',de:'der Stern',say:'„HWJES-da“',f:659.25,h:330,ex:'Jsi hvězda.',exd:'Du bist ein Star.'},
+ {cz:'měsíc',de:'der Mond',say:'„MNJE-siets“',f:587.33,h:278,ex:'Dobrou noc, měsíci.',exd:'Gute Nacht, Mond.'},
+ {cz:'sen',de:'der Traum',say:'„SEN“',f:493.88,h:225,ex:'Sladké sny.',exd:'Süße Träume.'},
+ {cz:'srdce',de:'das Herz',say:'„SRT-tse“',f:440.00,h:190,ex:'Z celého srdce.',exd:'Von ganzem Herzen.',fact:'Fun Fact: „Strč prst skrz krk.“ heißt „Steck den Finger durch den Hals.“ Ein ganzer Satz ohne Vokal.'},
+ {cz:'píseň',de:'das Lied',say:'„PIE-senj“',f:369.99,h:152,ex:'Napiš píseň.',exd:'Schreib einen Song.'},
+ {cz:'domov',de:'das Zuhause',say:'„DO-mof“',f:293.66,h:38,ex:'Vítej doma.',exd:'Willkommen zuhause.'}
+];
+const BASS=[146.83,146.83,123.47,110.00]; // D3 D3 B2 A2, one per quarter of the loop
+const N=16,R=ROWS.length;
+let pat=ROWS.map(()=>Array(N).fill(false));
+const seed={0:[5,3],2:[4],3:[3],4:[2],6:[1],7:[2],8:[3,5],10:[0],11:[1],12:[2],14:[3],15:[4]};
+const $=id=>document.getElementById(id);
+const grid=$('grid'),cells=[];
+
+// ---------- hash / storage ----------
+const enc=()=>'loop-'+pat.map(r=>parseInt(r.map(b=>b?1:0).join(''),2).toString(16).padStart(4,'0')).join('')+'-'+bpm;
+function dec(s){const m=/^loop-([0-9a-f]{24})-(\d{2,3})$/.exec(s);if(!m)return false;
+  pat=ROWS.map((_,r)=>{const v=parseInt(m[1].slice(r*4,r*4+4),16);return Array.from({length:N},(_,c)=>!!(v>>(N-1-c)&1))});
+  bpm=Math.min(150,Math.max(70,+m[2]));return true}
+let bpm=96;
+let loaded=dec(location.hash.slice(1));
+if(!loaded){try{loaded=dec(localStorage.getItem('nash')||'')}catch(e){}}
+if(!loaded){for(const c in seed)seed[c].forEach(r=>pat[r][c]=true)}
+const save=()=>{try{localStorage.setItem('nash',enc())}catch(e){}};
+
+// ---------- grid ----------
+ROWS.forEach((row,r)=>{
+  const l=document.createElement('button');l.className='lab';l.style.setProperty('--h',row.h);
+  l.innerHTML='<i></i>'+row.cz;l.title=row.de;l.onclick=()=>learn(r,true);grid.append(l);row.el=l;
+  cells[r]=[];
+  for(let c=0;c<N;c++){const b=document.createElement('button');b.className='cell'+(c%4===0?'':' q');
+    b.style.setProperty('--h',row.h);b.setAttribute('aria-label',row.cz+', Schritt '+(c+1));
+    b.onclick=()=>{pat[r][c]=!pat[r][c];paint(r,c);save();if(pat[r][c]){ensure();bell(row.f,ac.currentTime,.5);ripple(r)}};
+    grid.append(b);cells[r][c]=b;paint(r,c)}
+});
+function paint(r,c){cells[r][c].classList.toggle('on',pat[r][c]);cells[r][c].setAttribute('aria-pressed',pat[r][c])}
+const repaint=()=>{for(let r=0;r<R;r++)for(let c=0;c<N;c++)paint(r,c)};
+
+// ---------- word card ----------
+function learn(r,sound){const w=ROWS[r],card=$('card');card.style.setProperty('--h',w.h);
+  $('w').textContent=w.cz;$('say').textContent='sprich: '+w.say;$('mean').textContent=w.de;
+  $('exq').textContent=w.ex;$('exd').textContent=w.exd;
+  $('fact').hidden=!w.fact;if(w.fact)$('fact').textContent=w.fact;
+  ROWS.forEach((x,i)=>x.el.classList.toggle('sel',i===r));
+  if(sound){ensure();const t=ac.currentTime;[1,1.5,2].forEach((m,i)=>bell(w.f*m/ (m>1?1:1),t+i*.09,.35));ripple(r)}}
+learn(4,false);
+
+// ---------- audio ----------
+let ac,master,send;
+function ensure(){if(ac){if(ac.state==='suspended')ac.resume();return}
+  ac=new (window.AudioContext||window.webkitAudioContext)();
+  const comp=ac.createDynamicsCompressor();comp.connect(ac.destination);
+  master=ac.createGain();master.gain.value=.55;master.connect(comp);
+  const d=ac.createDelay(1),fb=ac.createGain(),lp=ac.createBiquadFilter(),wet=ac.createGain();
+  d.delayTime.value=.33;fb.gain.value=.36;lp.type='lowpass';lp.frequency.value=2200;wet.gain.value=.3;
+  send=ac.createGain();send.connect(d);d.connect(lp);lp.connect(fb);fb.connect(d);lp.connect(wet);wet.connect(master)}
+function bell(f,t,v){
+  const g=ac.createGain();g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v*.32,t+.006);g.gain.exponentialRampToValueAtTime(.0001,t+1.6);
+  g.connect(master);g.connect(send);
+  [[1,'sine',1],[2,'sine',.18],[3.01,'triangle',.05]].forEach(([m,type,a])=>{const o=ac.createOscillator(),og=ac.createGain();
+    o.type=type;o.frequency.value=f*m;og.gain.value=a;o.connect(og);og.connect(g);o.start(t);o.stop(t+1.7)})}
+function bass(f,t){const o=ac.createOscillator(),g=ac.createGain(),lp=ac.createBiquadFilter();
+  o.type='triangle';o.frequency.value=f;lp.type='lowpass';lp.frequency.value=500;
+  g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(.32,t+.02);g.gain.exponentialRampToValueAtTime(.0001,t+1.4);
+  o.connect(lp);lp.connect(g);g.connect(master);o.start(t);o.stop(t+1.5)}
+
+// ---------- scheduler ----------
+let playing=false,step=0,nextT=0,timer=null,head=-1;const q=[];
+const stepDur=()=>60/bpm/2;
+function tick(){while(nextT<ac.currentTime+.12){
+  for(let r=0;r<R;r++)if(pat[r][step])bell(ROWS[r].f,nextT,.55);
+  if(step%4===0)bass(BASS[step/4],nextT);
+  q.push({s:step,t:nextT});nextT+=stepDur();step=(step+1)%N}}
+function start(){ensure();playing=true;step=0;nextT=ac.currentTime+.06;tick();timer=setInterval(tick,25);
+  $('play').innerHTML='<b>Stop</b><small>pause</small>'}
+function stop(){playing=false;clearInterval(timer);q.length=0;setHead(-1);$('play').innerHTML='<b>Hrát</b><small>abspielen</small>'}
+function setHead(s){if(head>=0)for(let r=0;r<R;r++)cells[r][head].classList.remove('head');head=s;
+  if(s>=0){for(let r=0;r<R;r++){cells[r][s].classList.add('head');if(pat[r][s]){const el=cells[r][s];el.classList.add('hit');setTimeout(()=>el.classList.remove('hit'),120);ripple(r)}}
+  $('pos').textContent='krok '+String(s+1).padStart(2,'0')+' / 16'}}
+
+$('play').onclick=()=>playing?stop():start();
+$('rand').onclick=()=>{pat=ROWS.map(()=>Array(N).fill(false));
+  let r=3+Math.floor(Math.random()*3);
+  for(let c=0;c<N;c++){if(Math.random()<.68){pat[r][c]=true;if(Math.random()<.18)pat[Math.min(R-1,r+2)][c]=true}
+    r=Math.max(0,Math.min(R-1,r+[-1,-1,0,1,1,-2,2][Math.floor(Math.random()*7)]))}
+  repaint();save();say('Náhoda! Zufällige Melodie, aber immer in Tonart. Kann man nix falsch machen.')};
+$('clear').onclick=()=>{pat=ROWS.map(()=>Array(N).fill(false));repaint();save();say('Smazáno. Gelöscht. Leere Leinwand.')};
+$('share').onclick=()=>{const h=enc();try{history.replaceState(null,'','#'+h)}catch(e){location.hash=h}
+  const url=location.href;
+  const done=()=>say('Link kopiert. Schick deinen Loop rum.');
+  const fallback=()=>say('Kopieren ging nicht. Dein Loop-Code: #'+h);
+  try{navigator.clipboard.writeText(url).then(done,fallback)}catch(e){fallback()}};
+const bpmEl=$('bpm');bpmEl.value=bpm;$('bpmv').textContent=bpm;
+bpmEl.oninput=()=>{bpm=+bpmEl.value;$('bpmv').textContent=bpm;save()};
+function say(t){$('toast').textContent=t}
+addEventListener('keydown',e=>{if(e.code==='Space'&&e.target===document.body){e.preventDefault();playing?stop():start()}});
+
+// ---------- liquid color field ----------
+const cv=$('field'),cx=cv.getContext('2d');let W,H,dpr;
+const reduce=matchMedia('(prefers-reduced-motion: reduce)');
+function size(){dpr=Math.min(2,devicePixelRatio||1);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;cx.setTransform(dpr,0,0,dpr,0,0)}
+size();addEventListener('resize',size);
+const blobs=[330,278,225,190,152,38].map((h,i)=>({h,x:Math.random(),y:Math.random(),
+  vx:(Math.random()-.5)*.00025,vy:(Math.random()-.5)*.00025,r:.32+Math.random()*.18,k:1}));
+const rings=[];let px=.5,py=.4;
+addEventListener('pointermove',e=>{px=e.clientX/W;py=e.clientY/H});
+function ripple(r){const b=blobs[r];b.k=1.35;rings.push({h:b.h,x:b.x*W,y:b.y*H,t:0})}
+const dark=()=>{const t=document.documentElement.dataset.theme;return t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches};
+function frame(){
+  // drain audio-synced visual queue
+  if(playing&&ac)while(q.length&&q[0].t<=ac.currentTime)setHead(q.shift().s);
+  const D=dark(),m=Math.max(W,H);
+  cx.clearRect(0,0,W,H);
+  cx.globalCompositeOperation=D?'lighter':'source-over';
+  for(const b of blobs){
+    if(!reduce.matches){b.x+=b.vx+(px-b.x)*.0004;b.y+=b.vy+(py-b.y)*.0004;
+      if(b.x<-.1||b.x>1.1)b.vx*=-1;if(b.y<-.1||b.y>1.1)b.vy*=-1}
+    b.k+=(1-b.k)*.06;
+    const R0=b.r*m*b.k,g=cx.createRadialGradient(b.x*W,b.y*H,0,b.x*W,b.y*H,R0);
+    g.addColorStop(0,`hsla(${b.h},${D?80:90}%,${D?45:72}%,${D?.42:.55})`);g.addColorStop(1,`hsla(${b.h},90%,60%,0)`);
+    cx.fillStyle=g;cx.beginPath();cx.arc(b.x*W,b.y*H,R0,0,7);cx.fill()}
+  cx.globalCompositeOperation='source-over';
+  for(let i=rings.length-1;i>=0;i--){const g=rings[i];g.t+=reduce.matches?.08:.018;
+    if(g.t>=1){rings.splice(i,1);continue}
+    cx.strokeStyle=`hsla(${g.h},90%,${D?70:55}%,${(1-g.t)*.5})`;cx.lineWidth=2;
+    cx.beginPath();cx.arc(g.x,g.y,20+g.t*m*.3,0,7);cx.stroke()}
+  requestAnimationFrame(frame)}
+requestAnimationFrame(frame);
+})();
+</script>
