@@ -1,0 +1,11 @@
+{
+  "name": "Alltag",
+  "short_name": "Alltag",
+  "description": "Aufgaben, Notizen, Geld und Fokus – privat und für die Arbeit.",
+  "start_url": "./#heute",
+  "display": "standalone",
+  "background_color": "#eceff5",
+  "theme_color": "#0a74f0",
+  "lang": "de",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
