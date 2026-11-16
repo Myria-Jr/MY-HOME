@@ -3,6 +3,10 @@ package app.smycka.studio
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.view.HapticFeedbackConstants
+import android.view.WindowManager
+import androidx.core.view.WindowInsetsControllerCompat
 import android.net.Uri
 import android.content.ContentValues
 import android.os.Build
@@ -90,7 +94,11 @@ class MainActivity : ComponentActivity() {
         }
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() { if (web.canGoBack()) web.goBack() else finish() }
+            override fun handleOnBackPressed() {
+                web.evaluateJavascript("(window.smyckaBack&&window.smyckaBack())?'1':'0'") { r ->
+                    if (r != "\"1\"") { if (web.canGoBack()) web.goBack() else finish() }
+                }
+            }
         })
 
         web.loadUrl("https://appassets.androidplatform.net/assets/index.html")
@@ -100,6 +108,33 @@ class MainActivity : ComponentActivity() {
     override fun onResume() { super.onResume(); web.onResume() }
 
     inner class Bridge {
+        @JavascriptInterface
+        fun setBars(status: String, nav: String, dark: Boolean) {
+            runOnUiThread {
+                try {
+                    window.statusBarColor = Color.parseColor(status)
+                    window.navigationBarColor = Color.parseColor(nav)
+                    val ctl = WindowInsetsControllerCompat(window, window.decorView)
+                    ctl.isAppearanceLightStatusBars = !dark
+                    ctl.isAppearanceLightNavigationBars = !dark
+                } catch (e: Exception) {
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun keepAwake(on: Boolean) {
+            runOnUiThread {
+                if (on) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+        }
+
+        @JavascriptInterface
+        fun haptic() {
+            runOnUiThread { web.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP) }
+        }
+
         @JavascriptInterface
         fun saveAudio(base64: String, name: String, mime: String): String = try {
             val bytes = Base64.decode(base64, Base64.DEFAULT)
