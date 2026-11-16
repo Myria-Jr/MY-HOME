@@ -1,11 +1,12 @@
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class, ExperimentalLayoutApi::class)
+
 package app.alltag
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,12 +19,28 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.MaterialShapes
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TextField
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -38,28 +55,23 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SheetHost() {
     val s = UiState.sheet ?: return
-    val p = LocalPal.current
     key(s) {
         val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val scope = rememberCoroutineScope()
@@ -69,14 +81,11 @@ fun SheetHost() {
         ModalBottomSheet(
             onDismissRequest = { if (UiState.sheet == s) UiState.sheet = null },
             sheetState = state,
-            containerColor = p.glass2,
-            contentColor = p.fg,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
-            dragHandle = { Box(Modifier.padding(top = 10.dp, bottom = 6.dp).size(38.dp, 5.dp).clip(CircleShape).background(p.hair)) },
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ) {
             Column(
                 Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
                 when (s) {
                     is Sheet.TaskEdit -> TaskSheet(s.id, close)
@@ -90,40 +99,57 @@ fun SheetHost() {
 }
 
 @Composable
-private fun SheetHead(title: String, close: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, style = H2.copy(fontSize = 20.sp), modifier = Modifier.weight(1f))
-        CircleBtn(Ic.close, "Schließen", size = 38.dp, onClick = close)
-    }
+private fun SheetTitle(title: String) {
+    Text(title, style = MaterialTheme.typography.headlineSmallEmphasized)
+}
+
+@Composable
+private fun Label(text: String) {
+    Text(text, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
 }
 
 @Composable
 private fun Actions(onDelete: (() -> Unit)?, primary: String, enabled: Boolean = true, onPrimary: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (onDelete != null) Btn("Löschen", danger = true, onClick = onDelete)
-        Spacer(Modifier.weight(1f))
-        Btn(primary, primary = true, enabled = enabled, onClick = onPrimary)
+    Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (onDelete != null) FilledTonalIconButton(
+            onClick = onDelete, shapes = IconButtonDefaults.shapes(), modifier = Modifier.size(56.dp),
+            colors = IconButtonDefaults.filledTonalIconButtonColors(containerColor = MaterialTheme.colorScheme.errorContainer, contentColor = MaterialTheme.colorScheme.onErrorContainer),
+        ) { Icon(Ic.trash, "Löschen") }
+        Button(onClick = onPrimary, enabled = enabled, shapes = ButtonDefaults.shapes(), modifier = Modifier.weight(1f).height(56.dp)) {
+            Text(primary, style = MaterialTheme.typography.titleMediumEmphasized)
+        }
     }
 }
 
 @Composable
 private fun autoFocus(enabled: Boolean): FocusRequester {
     val fr = remember { FocusRequester() }
-    LaunchedEffect(Unit) { if (enabled) { delay(300); runCatching { fr.requestFocus() } } }
+    LaunchedEffect(Unit) { if (enabled) { delay(350); runCatching { fr.requestFocus() } } }
     return fr
 }
 
+@Composable
+private fun Choice(label: String, selected: Boolean, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected, onClick = onClick, label = { Text(label) }, shape = CircleShape,
+        leadingIcon = if (selected) ({ Icon(Ic.check, null, Modifier.size(FilterChipDefaults.IconSize)) }) else null,
+    )
+}
+
 /* ---------- date picking ---------- */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun DateChips(value: String, allowNone: Boolean, presets: List<Pair<String, LocalDate>>, onChange: (String) -> Unit) {
     var picking by remember { mutableStateOf(false) }
     val presetKeys = presets.map { it.second.toString() }
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        presets.forEach { (label, d) -> Chip(label, value == d.toString()) { onChange(d.toString()) } }
-        if (allowNone) Chip("Ohne Datum", value.isEmpty()) { onChange("") }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        presets.forEach { (label, d) -> Choice(label, value == d.toString()) { onChange(d.toString()) } }
+        if (allowNone) Choice("Ohne Datum", value.isEmpty()) { onChange("") }
         val custom = value.isNotEmpty() && value !in presetKeys
-        Chip(if (custom) relDay(value) else "Datum wählen …", custom) { picking = true }
+        FilterChip(
+            selected = custom, onClick = { picking = true }, shape = CircleShape,
+            label = { Text(if (custom) relDay(value) else "Datum wählen") },
+            leadingIcon = { Icon(Ic.calendar, null, Modifier.size(FilterChipDefaults.IconSize)) },
+        )
     }
     if (picking) {
         val initial = runCatching { LocalDate.parse(value) }.getOrDefault(today())
@@ -142,7 +168,6 @@ private fun DateChips(value: String, allowNone: Boolean, presets: List<Pair<Stri
 }
 
 /* ---------- task ---------- */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TaskSheet(id: String?, close: () -> Unit) {
     val existing = remember(id) { id?.let { i -> Store.tasks.firstOrNull { it.id == i } } }
@@ -150,30 +175,31 @@ private fun TaskSheet(id: String?, close: () -> Unit) {
     var due by remember { mutableStateOf(existing?.due ?: today().toString()) }
     var prio by remember { mutableIntStateOf(existing?.prio ?: 0) }
     val fr = autoFocus(existing == null)
-    val save = {
-        if (title.isNotBlank()) {
-            if (existing != null) Store.putTask(existing.copy(title = title.trim(), due = due, prio = prio, ex = false))
-            else Store.putTask(Task(space = Store.space, title = title.trim(), due = due, prio = prio))
-            close()
-        }
-    }
 
-    SheetHead(if (existing != null) "Aufgabe" else "Neue Aufgabe", close)
+    SheetTitle(if (existing != null) "Aufgabe" else "Neue Aufgabe")
+    OutlinedTextField(
+        title, { title = it }, Modifier.fillMaxWidth().focusRequester(fr),
+        label = { Text("Was ist zu tun?") }, shape = RoundedCornerShape(20.dp),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+    )
     Column {
-        FieldLabel("Was?")
-        Field(
-            title, { title = it }, "z. B. Rechnung bezahlen", Modifier.focusRequester(fr),
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-        )
+        Label("Fällig")
+        DateChips(due, allowNone = true, presets = listOf("Heute" to today(), "Morgen" to today().plusDays(1), "In 1 Woche" to today().plusDays(7))) { due = it }
     }
     Column {
-        FieldLabel("Fällig")
-        DateChips(due, allowNone = true, presets = listOf("Heute" to today(), "Morgen" to today().plusDays(1), "In einer Woche" to today().plusDays(7))) { due = it }
-    }
-    Column {
-        FieldLabel("Wichtigkeit")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf(0 to "Normal", 1 to "Wichtig", 2 to "Dringend").forEach { (v, l) -> Chip(l, prio == v) { prio = v } }
+        Label("Wichtigkeit")
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+            listOf(0 to "Normal", 1 to "Wichtig", 2 to "Dringend").forEachIndexed { i, (v, l) ->
+                ToggleButton(
+                    checked = prio == v, onCheckedChange = { prio = v },
+                    shapes = when (i) {
+                        0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                        2 -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                        else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                    },
+                    modifier = Modifier.weight(1f),
+                ) { Text(l) }
+            }
         }
     }
     Actions(
@@ -185,14 +211,16 @@ private fun TaskSheet(id: String?, close: () -> Unit) {
         },
         primary = if (existing != null) "Sichern" else "Hinzufügen",
         enabled = title.isNotBlank(),
-        onPrimary = save,
-    )
+    ) {
+        if (existing != null) Store.putTask(existing.copy(title = title.trim(), due = due, prio = prio, ex = false))
+        else Store.putTask(Task(space = Store.space, title = title.trim(), due = due, prio = prio))
+        close()
+    }
 }
 
 /* ---------- note ---------- */
 @Composable
 private fun NoteSheet(id: String?, close: () -> Unit) {
-    val p = LocalPal.current
     val start = remember(id) { id?.let { i -> Store.notes.firstOrNull { it.id == i } } }
     var noteId by remember { mutableStateOf(start?.id) }
     var title by remember { mutableStateOf(start?.title ?: "") }
@@ -214,18 +242,24 @@ private fun NoteSheet(id: String?, close: () -> Unit) {
             }
         }
     }
+    val plain = TextFieldDefaults.colors(
+        focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
+        focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+    )
 
-    SheetHead(if (start != null) "Notiz" else "Neue Notiz", close)
-    Field(
-        title, { title = it; sync() }, "Titel", Modifier.focusRequester(fr),
-        textStyle = TextStyle(fontSize = 21.sp, fontWeight = FontWeight.Bold),
+    TextField(
+        title, { title = it; sync() }, Modifier.fillMaxWidth().focusRequester(fr),
+        placeholder = { Text("Titel", style = MaterialTheme.typography.headlineSmallEmphasized) },
+        textStyle = MaterialTheme.typography.headlineSmallEmphasized, colors = plain,
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
     )
-    Field(
-        body, { body = it; sync() }, "Schreib einfach los …", singleLine = false, minLines = 9,
+    TextField(
+        body, { body = it; sync() }, Modifier.fillMaxWidth(),
+        placeholder = { Text("Schreib einfach los …") }, minLines = 8, colors = plain,
+        textStyle = MaterialTheme.typography.bodyLarge,
         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
     )
-    Text("Wird automatisch gespeichert.", style = Small, color = p.muted)
+    Text("Wird automatisch gespeichert.", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp))
     Actions(
         onDelete = if (noteId != null) ({
             val cur = Store.notes.firstOrNull { it.id == noteId }
@@ -241,10 +275,8 @@ private fun NoteSheet(id: String?, close: () -> Unit) {
 }
 
 /* ---------- money ---------- */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun MoneySheet(id: String?, close: () -> Unit) {
-    val p = LocalPal.current
     val existing = remember(id) { id?.let { i -> Store.money.firstOrNull { it.id == i } } }
     val sp = Store.space
     var type by remember { mutableStateOf(existing?.type ?: "out") }
@@ -254,34 +286,40 @@ private fun MoneySheet(id: String?, close: () -> Unit) {
     var date by remember { mutableStateOf(existing?.date ?: today().toString()) }
     var error by remember { mutableStateOf<String?>(null) }
     val fr = autoFocus(existing == null)
-    val cats = CATS.getValue(sp).getValue(type)
 
-    SheetHead(if (existing != null) "Buchung" else "Neue Buchung", close)
-    Segmented(listOf("out" to "Ausgabe", "in" to "Einnahme"), type, {
-        if (it != type) { type = it; cat = CATS.getValue(sp).getValue(it).first() }
-    }, itemWidth = 104.dp)
-    Column {
-        FieldLabel("Betrag in Euro" + if (sp == "arbeit") " (brutto)" else "")
-        Field(
-            amount, { amount = it; error = null }, "0,00", Modifier.focusRequester(fr),
-            textStyle = TextStyle(fontSize = 30.sp, fontWeight = FontWeight.Bold, fontFeatureSettings = "tnum"),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        )
-        if (error != null) Text(error!!, color = p.bad, style = Small, modifier = Modifier.padding(top = 6.dp))
+    SheetTitle(if (existing != null) "Buchung" else "Neue Buchung")
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween)) {
+        listOf(Triple("out", "Ausgabe", Ic.outArrow), Triple("in", "Einnahme", Ic.inArrow)).forEachIndexed { i, (k, l, ic) ->
+            ToggleButton(
+                checked = type == k,
+                onCheckedChange = { if (type != k) { type = k; cat = CATS.getValue(sp).getValue(k).first() } },
+                shapes = if (i == 0) ButtonGroupDefaults.connectedLeadingButtonShapes() else ButtonGroupDefaults.connectedTrailingButtonShapes(),
+                modifier = Modifier.weight(1f).height(48.dp),
+            ) { Icon(ic, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(l) }
+        }
     }
+    OutlinedTextField(
+        amount, { amount = it; error = null }, Modifier.fillMaxWidth().focusRequester(fr),
+        label = { Text("Betrag in Euro" + if (sp == "arbeit") " (brutto)" else "") },
+        textStyle = MaterialTheme.typography.headlineMediumEmphasized, singleLine = true, shape = RoundedCornerShape(20.dp),
+        suffix = { Text("€", style = MaterialTheme.typography.headlineSmall) },
+        isError = error != null, supportingText = error?.let { e -> { Text(e) } },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+    )
+    OutlinedTextField(
+        label, { label = it }, Modifier.fillMaxWidth(),
+        label = { Text("Wofür?") }, placeholder = { Text(if (type == "in") "z. B. Rechnung 2026-115" else "z. B. Wocheneinkauf") },
+        singleLine = true, shape = RoundedCornerShape(20.dp),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+    )
     Column {
-        FieldLabel("Wofür?")
-        Field(label, { label = it }, if (type == "in") "z. B. Rechnung 2026-115" else "z. B. Wocheneinkauf",
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences))
-    }
-    Column {
-        FieldLabel("Kategorie")
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            cats.forEach { c -> Chip(c, cat == c) { cat = c } }
+        Label("Kategorie")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            CATS.getValue(sp).getValue(type).forEach { c -> Choice(c, cat == c) { cat = c } }
         }
     }
     Column {
-        FieldLabel("Datum")
+        Label("Datum")
         DateChips(date, allowNone = false, presets = listOf("Heute" to today(), "Gestern" to today().minusDays(1))) { date = it }
     }
     Actions(
@@ -295,35 +333,39 @@ private fun MoneySheet(id: String?, close: () -> Unit) {
     ) {
         val a = parseAmount(amount)
         if (a == null || a <= 0) { error = "Bitte einen Betrag größer als 0 eingeben, z. B. 12,50."; return@Actions }
-        val data = Entry(id = existing?.id ?: uid(), space = sp, type = type, amount = a, cat = cat, label = label.trim(), date = date)
-        Store.putEntry(data)
+        Store.putEntry(Entry(id = existing?.id ?: uid(), space = sp, type = type, amount = a, cat = cat, label = label.trim(), date = date))
         UiState.month = java.time.YearMonth.from(LocalDate.parse(date))
         close()
     }
 }
 
 /* ---------- settings ---------- */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun SettingsSheet(close: () -> Unit) {
-    val p = LocalPal.current
-    val clipboard = LocalClipboardManager.current
+    val cs = MaterialTheme.colorScheme
+    @Suppress("DEPRECATION") val clipboard = LocalClipboardManager.current
     var name by remember { mutableStateOf(Store.name) }
     var armed by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
 
-    SheetHead("Einstellungen", close)
-    Column {
-        FieldLabel("Dein Name")
-        Field(name, { name = it; Store.rename(it.trim()) }, "Für die Begrüßung",
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        ShapeBadge(MaterialShapes.Cookie9Sided, cs.primaryContainer, 52.dp) {
+            Text(name.trim().take(1).uppercase().ifEmpty { "A" }, style = MaterialTheme.typography.titleLargeEmphasized, color = cs.onPrimaryContainer)
+        }
+        Spacer(Modifier.width(14.dp))
+        SheetTitle("Einstellungen")
     }
+    OutlinedTextField(
+        name, { name = it; Store.rename(it.trim()) }, Modifier.fillMaxWidth(),
+        label = { Text("Dein Name") }, placeholder = { Text("Für die Begrüßung") }, singleLine = true, shape = RoundedCornerShape(20.dp),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
+    )
     Column {
-        FieldLabel("Daten")
-        Text("Alles bleibt auf diesem Handy. Kein Konto, keine Cloud.", style = Small, color = p.muted)
-        Spacer(Modifier.height(10.dp))
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Btn("Zusammenfassung kopieren") {
+        Label("Daten")
+        Text("Alles bleibt auf diesem Handy. Kein Konto, keine Cloud.", style = MaterialTheme.typography.bodyMedium, color = cs.onSurfaceVariant)
+        Spacer(Modifier.height(12.dp))
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            SegItem(Pos.First, color = cs.surfaceContainerHigh, onClick = {
                 val sb = StringBuilder("Alltag – ${today()}\n")
                 listOf("privat" to "Privat", "arbeit" to "Arbeit").forEach { (k, l) ->
                     sb.append("\n== $l ==\nOffene Aufgaben:\n")
@@ -333,15 +375,22 @@ private fun SettingsSheet(close: () -> Unit) {
                 }
                 clipboard.setText(AnnotatedString(sb.toString()))
                 msg = "In die Zwischenablage kopiert."
+            }) { Text("Zusammenfassung kopieren", style = MaterialTheme.typography.bodyLarge) }
+            if (Store.hasExamples()) SegItem(Pos.Middle, color = cs.surfaceContainerHigh, onClick = { Store.clearExamples(); msg = "Beispiele entfernt." }) {
+                Text("Beispiele entfernen", style = MaterialTheme.typography.bodyLarge)
             }
-            if (Store.hasExamples()) Btn("Beispiele entfernen") { Store.clearExamples(); msg = "Beispiele entfernt." }
-            Btn(if (armed) "Wirklich alles löschen?" else "Alles löschen", danger = true) {
+            SegItem(Pos.Last, color = if (armed) cs.errorContainer else cs.surfaceContainerHigh, onClick = {
                 if (armed) { Store.wipe(); close(); UiState.toast("Alles gelöscht. Frischer Start.") } else armed = true
+            }) {
+                Icon(Ic.trash, null, tint = cs.error, modifier = Modifier.size(20.dp))
+                Spacer(Modifier.width(12.dp))
+                Text(if (armed) "Nochmal tippen: wirklich alles löschen" else "Alles löschen", style = MaterialTheme.typography.bodyLarge, color = cs.error)
             }
         }
-        if (msg != null) Text(msg!!, style = Small, color = p.muted, modifier = Modifier.padding(top = 8.dp))
+        if (msg != null) Text(msg!!, style = MaterialTheme.typography.labelMedium, color = cs.primary, modifier = Modifier.padding(top = 10.dp, start = 8.dp))
     }
-    Text("Alltag 1.0", style = Small, color = p.faint, modifier = Modifier.padding(top = 4.dp))
-    Row { Spacer(Modifier.weight(1f)); Btn("Fertig", primary = true, onClick = close) }
-    Spacer(Modifier.width(0.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Alltag 2.0", style = MaterialTheme.typography.labelMedium, color = cs.onSurfaceVariant, modifier = Modifier.weight(1f))
+        FilledTonalButton(onClick = close, shapes = ButtonDefaults.shapes(), contentPadding = PaddingValues(horizontal = 24.dp)) { Text("Fertig") }
+    }
 }
